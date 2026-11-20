@@ -10,8 +10,8 @@ namespace gt::sim {
 // Bump kGeneratorVersion when anything that changes a layout changes (a recipe, the calendar, a hand-made level), and
 // kRulesVersion when anything that changes a bot's run changes (a rule in world.cpp, a tuning default, a bot). The bake
 // writes both into levels_baked.h; a unit test fails while the table's differ from these (VARIETY_TECH 2).
-constexpr int kGeneratorVersion = 5;  // 5: geodes from level 6; hand-made 6, 11, 23; hardness moves fight
-constexpr int kRulesVersion = 3;      // 3: geodes, lanterns, boons; bots value geodes
+constexpr int kGeneratorVersion = 7;  // 7: hoppers, breathing gates, sliding walls, plans, side doors; hand-made 16, 38
+constexpr int kRulesVersion = 4;      // 4: plans, runners, side doors, KINDLE, COMET, HUSH; no default bursts or brutes
 int bakedGeneratorVersion();
 int bakedRulesVersion();
 
@@ -19,11 +19,27 @@ constexpr float kHW = 5.0f;              // lane half-width (GAME_DESIGN 3)
 constexpr float kLauncherRange = 4.4f;   // the launcher's rail: x in [-4.4, 4.4]
 constexpr float kMuzzleZ = 2.55f;        // the barrel's tip: where the lens is (gfx/mesh.cpp's launcher, placed at z 0.2)
 constexpr float kCoreZ = 0.8f;
-constexpr int kMaxGates = 24, kMaxBarriers = 8, kMaxBumpers = 16, kMaxSnuffers = 8, kMaxEmitters = 3, kMaxBursts = 8,
+constexpr int kMaxGates = 24, kMaxBarriers = 16, kMaxBumpers = 16, kMaxSnuffers = 8, kMaxEmitters = 6, kMaxBursts = 8,
               kMaxRows = 6, kMaxGeodes = 16;
 
 enum GateKind : u8 { kGateMul = 0, kGateDiv = 1 };
-enum Pattern : u8 { kPatOpen, kPatChoice, kPatTrap, kPatSlider, kPatWall, kPatPillars, kPatPatrol, kPatCrossing, kPatHand };
+// How a gate moves (Gate::slides): still, sliding on the gates' wave (GAME_DESIGN 5.4), or hopping between two places
+// (VARIETY_DESIGN 4 #1). A breathing gate (Gate::breath, VARIETY_DESIGN 4 #2) is never also a slider or a hopper.
+enum GateMove : u8 { kGateStill = 0, kGateSlide = 1, kGateHop = 2 };
+enum Pattern : u8 {
+    kPatOpen,
+    kPatChoice,
+    kPatTrap,
+    kPatSlider,
+    kPatWall,
+    kPatPillars,
+    kPatPatrol,
+    kPatCrossing,
+    kPatHopper,
+    kPatBreathing,
+    kPatHand,
+    kPatCount = kPatHand
+};
 
 // A level's goal (VARIETY_DESIGN 6), its lane's length class (9.1), the enemy's plan (5.1), the named moments (7) and
 // what geodes give (3). Their names (for reports and pictures) are in calendar.cpp; recipes' names in recipes.cpp.
@@ -53,13 +69,15 @@ const char* recipeName(int recipe);
 
 struct Gate {
     float cx = 0, hw = 1.5f, z = 10;
-    u8 kind = kGateMul, k = 2, row = 0, slides = 0;
-    float amp = 0, period = 4, phase = 0;  // sliding: cx(t) = cx + amp * wave(t / period + phase)
+    u8 kind = kGateMul, k = 2, row = 0, slides = 0;  // slides: a GateMove
+    float amp = 0, period = 4, phase = 0;  // slide: cx(t) = cx + amp * wave(t / period + phase); hop: period = seconds at each place
+    float breath = 0;                      // seconds a breath takes (0: none): the half-width swings 60% to 120%
 };
 
 struct Barrier {
     float x0 = 0, x1 = 0, z = 0;
     i32 health = 0;
+    float amp = 0, period = 4, phase = 0;  // a sliding wall (VARIETY_DESIGN 4 #3): its span shifts by amp * wave(...)
 };
 
 struct Bumper {
@@ -72,6 +90,10 @@ struct Snuffer {
 
 struct Emitter {
     float x = 0, amp = 0, period = 5, phase = 0;
+    float z = 0;     // a side door's height on the lane (side != 0)
+    i8 side = 0;     // 0 at the spire's foot; -1 / +1 a side door on the left / right rail (VARIETY_DESIGN 4 #4)
+    float share = 0; // its share of the flow (0: an equal share with the other emitters)
+    u8 group = 0;    // Twins: which spire it belongs to
 };
 
 // A burst of the enemy flow: time-triggered (t >= 0, seconds after the level starts) or health-triggered (t < 0 and
@@ -144,6 +166,10 @@ float columnMult(const LevelDef& L, float x, float z);
 // How far a stream aimed at x has fanned out to each side below z: each multiply gate it passes throws its clones
 // sideways (GAME_DESIGN 5.4), about (fanBase + fanPerK k) * fanDecay metres.
 float fanSpread(const LevelDef& L, float x, float z);
+// What KINDLE multiplies a straight stream at x by, minus one: each multiply gate it passes counts one more.
+float kindleGain(const LevelDef& L, float x);
+// The first level a plan may come on (VARIETY_DESIGN 5.1), and the plan a generated level gets (calendar.cpp).
+int planFrom(int plan);
 i32 twoSignificant(float v);
 // Whether a level number is laid out by hand (levels_hand.cpp) rather than by a recipe.
 bool isHandMade(int index);
@@ -167,5 +193,11 @@ int levelForPlay(int index);
 
 // An eased triangle wave in [-1, 1] with period 1 (no trigonometry: TECH_SPEC 4.2).
 float easedWave(float p);
+// A gate's centre and half-width at time t (slides, hops, breaths); a wall's sideways shift; the enemy's flow at time t
+// as a multiple of the base flow, by plan (VARIETY_DESIGN 5.1: every plan averages 1 over the level's T).
+float gateXAt(const Gate& g, float t);
+float gateHwAt(const Gate& g, float t);
+float barrierShiftAt(const Barrier& b, float t);
+float planFlow(int plan, float t, float T);
 
 }  // namespace gt::sim

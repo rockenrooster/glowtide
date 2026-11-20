@@ -13,7 +13,6 @@ constexpr float kHandSpeed = 10.0f;    // m/s
 constexpr float kAimNoise = 0.25f;     // m
 constexpr int kDecisionTicks = 12;     // 0.2 s
 constexpr int kDefendTicks = 36;       // 0.6 s
-constexpr int kItems = kMaxGates + kMaxBarriers + kMaxSnuffers + 2 * kMaxGeodes;
 
 // Where the stream fired now meets a geode: its place then (it drifts and slides while the stream climbs).
 void geodeArrival(const World& w, int gi, float& x, float& z) {
@@ -61,6 +60,8 @@ void Bot::init(BotKind k, u64 noiseSeed) {
     commitHealth_ = 0;
     givenUp_ = 0;
     rate_ = 0;
+    orderWorld_ = nullptr;
+    orderTick_ = -1;
 }
 
 int Bot::geodeOnLine(const World& w, float x) const {
@@ -94,19 +95,12 @@ int Bot::nearestGeode(const World& w, float* x) const {
     return best;
 }
 
-float Bot::score(const World& w, float x, bool worth, float bestRate) const {
+void Bot::buildOrder(const World& w) const {
     const LevelDef& d = w.def;
-    // The line is as wide as the row of lanterns (VARIETY_TECH 4).
-    float lo = x - 0.07f - (w.lanterns >= 3 ? tune.lanternGap : 0.0f), hi = x + 0.07f + (w.lanterns >= 2 ? tune.lanternGap : 0.0f);
-    float mult = 1.0f;
-    float budget = 8.0f;
-    float bonus = 0;
-    const float t = w.time();
-    const float base = w.fireRate() * float(w.shotPower()) * float(w.lanterns);
-    // Walk the gates, barriers, snuffers, plates and geodes up the lane in z order.
-    int order[kItems];
-    float zs[kItems];
-    float geoX[kMaxGeodes] = {};
+    int* order = order_;
+    float* zs = zs_;
+    float* geoX = geoX_;
+    for (int gi = 0; gi < kMaxGeodes; ++gi) geoX[gi] = 0;
     int n = 0;
     for (int i = 0; i < d.gateCount; ++i) {
         order[n] = i;
@@ -141,6 +135,36 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
                 order[a] = order[b];
                 order[b] = to;
             }
+    orderN_ = n;
+    orderWorld_ = &w;
+    orderTick_ = w.tickCount;
+}
+
+float Bot::score(const World& w, float x, bool worth, float bestRate) const {
+    const LevelDef& d = w.def;
+    if (orderWorld_ != &w || orderTick_ != w.tickCount) buildOrder(w);
+    // The line is as wide as the row of lanterns (VARIETY_TECH 4).
+    float lo = x - 0.07f - (w.lanterns >= 3 ? tune.lanternGap : 0.0f), hi = x + 0.07f + (w.lanterns >= 2 ? tune.lanternGap : 0.0f);
+    float mult = 1.0f;
+    float budget = 8.0f;
+    float bonus = 0;
+    const float t = w.time();
+    const float base = w.fireRate() * float(w.shotPower()) * float(w.lanterns);
+    // What KINDLE would multiply this line by: each multiply gate on it, as it will be on arrival, counts one more.
+    float kindle = 1.0f;
+    if (worth && !w.kindle)
+        for (int i = 0; i < d.gateCount; ++i) {
+            const Gate& G = d.gates[i];
+            if (G.kind != kGateMul) continue;
+            const float at = t + (G.z - kMuzzleZ) / tune.wispSpeed, gx = gateXAt(G, at), hw = gateHwAt(G, at);
+            if (x < gx - hw || x > gx + hw) continue;
+            kindle *= float(minv(int(tune.kindleMax), int(G.k) + 1)) / float(G.k);
+        }
+    // Walk the gates, barriers, snuffers, plates and geodes up the lane in z order (built once a tick).
+    const int n = orderN_;
+    const int* order = order_;
+    const float* zs = zs_;
+    const float* geoX = geoX_;
     auto overlap = [&](float a0, float a1) {
         const float o = minv(hi, a1) - maxv(lo, a0);
         return o <= 0 ? 0.0f : o / maxv(0.01f, hi - lo);
@@ -164,12 +188,14 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
         const float arrive = t + (zs[k] - kMuzzleZ) / tune.wispSpeed;
         if (id < 100) {
             const Gate& G = d.gates[id];
-            const float gx = G.slides ? G.cx + G.amp * easedWave(arrive / G.period + G.phase) : G.cx;
-            const float f = overlap(gx - G.hw, gx + G.hw);
+            // Sliders, hoppers and breathing gates where (and as wide as) they will be when the stream arrives.
+            const float gx = gateXAt(G, arrive), hw = gateHwAt(G, arrive);
+            const float f = overlap(gx - hw, gx + hw);
             if (f <= 0) continue;
             if (G.kind == kGateMul) {
-                rowGain += f * float(G.k - 1);
-                spread = maxv(spread, f * (tune.fanBase + tune.fanPerK * float(G.k)) * tune.fanDecay);
+                const int k = minv(int(tune.kindleMax), int(G.k) + w.kindle);
+                rowGain += f * float(k - 1);
+                spread = maxv(spread, f * (tune.fanBase + tune.fanPerK * float(k)) * tune.fanDecay);
             } else {
                 rowGain -= f * (1.0f - 1.0f / float(G.k));
             }
@@ -177,7 +203,8 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
             const int b = id - 100;
             if (w.barrierHealth[b] <= 0) continue;
             const Barrier& B = d.barriers[b];
-            const float f = overlap(B.x0, B.x1);
+            const float shift = barrierShiftAt(B, arrive);  // a sliding wall where it will be
+            const float f = overlap(B.x0 + shift, B.x1 + shift);
             if (f <= 0) continue;
             closeRow();
             const float stream = base * mult * f;
@@ -204,12 +231,16 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
                 int near = 0;
                 for (int i = 0; i < w.g.n; ++i) near += w.g.z[i] < tune.wardZ ? 1 : 0;
                 bonus += bestRate * (2.0f * float(maxv(0, d.coreHealth - w.core)) + 0.5f * float(near));
+            } else if (G.boon == kBoonComet) {
+                bonus += bestRate * 0.75f * tune.cometSeconds;  // about that much of the best line's delivery, at once
+            } else if (G.boon == kBoonHush) {
+                bonus += bestRate * 2.0f;  // the stream that the enemy would have cancelled while it is quiet
             } else {
                 // What a lasting boon is worth: the time it saves, in the best plain line's power. With the spire left to
                 // break at rate r, it falls rest = spire / r from now; a stream (1 + g) times as strong takes rest / (1 + g),
                 // so g / (1 + g) of the rest is saved (the time spent opening it is already out of this line's budget).
                 // When the spire cannot fall (the bake's measuring runs) the window's end bounds it instead.
-                const float g = boonGain(G.boon, w.lanterns, w.quicken, w.bright);
+                const float g = G.boon == kBoonKindle ? kindle - 1.0f : boonGain(G.boon, w.lanterns, w.quicken, w.bright);
                 const float rest = w.unbreakableSpire ? maxv(0.0f, d.targetT - t - spentTime) * (1.0f + g)
                                                       : minv(float(w.spire) / maxv(1.0f, bestRate), 2.0f * d.targetT);
                 bonus += bestRate * rest * g / (1.0f + g);

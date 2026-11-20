@@ -23,9 +23,10 @@ void formatThousands(long long v, char* buf, int n) {
 void drawStar(UiBatch& ui, float cx, float cy, float r, Rgba c) { ui.star(cx, cy, r, c); }
 
 Rect hudTrayChip(const Layout& L, int i) {
+    // Two chips a row, the third and fourth above the first two, so a full tray never reaches the tide counter.
     const float w = L.px(66), h = L.px(44);
-    const float y = L.bottom() - L.px(24) - L.px(26) - h * 0.5f;
-    return {L.safe.left + L.px(12) + float(i) * (w + L.px(6)), y, w, h};
+    const float y = L.bottom() - L.px(24) - L.px(26) - h * 0.5f - float(i / 2) * (h + L.px(6));
+    return {L.safe.left + L.px(12) + float(i % 2) * (w + L.px(6)), y, w, h};
 }
 
 Rect hudTideRect(const Layout& L, long long tide) {
@@ -139,6 +140,10 @@ void drawHud(UiBatch& ui, const Layout& L, const HudState& s) {
         const Rect r = hudTrayChip(L, i);
         const float p = 1.0f + 0.25f * s.trayPunch[i];
         ui.rect(r.cx(), r.cy(), r.w * p, r.h * p, r.h * 0.5f * p, ink, rgba(kGold, u8(170 * s.opacity)), L.px(1.5f));
+        if (s.trayDrain[i] > 0) {  // a timed boon drains along the chip's foot
+            const float bw = (r.w - L.px(16)) * s.trayDrain[i];
+            ui.rect(r.x + L.px(8) + bw * 0.5f, r.y + r.h - L.px(7), bw, L.px(4), L.px(2), rgba(kGold, u8(220 * s.opacity)));
+        }
         drawBoonIcon(ui, s.trayBoon[i], r.x + L.px(22), r.cy(), L.px(28) * p, rgba(kGold, u8(255 * s.opacity)));
         std::snprintf(buf, sizeof buf, "\xC3\x97%d", s.trayHeld[i]);
         ui.text(buf, r.x + L.px(38), r.cy(), L.px(18) * p, white, inkStroke, 0, Align::Left);

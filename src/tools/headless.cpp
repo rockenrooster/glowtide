@@ -114,6 +114,8 @@ int cmdRun(const Opt& o) {
                     RunOptions ro;
                     ro.seconds = o.seconds > 0 ? o.seconds : 3.5f * def.targetT + 10.0f;
                     ro.measureTicks = true;
+                    ro.enemyOff = o.noEnemy;  // as the bake's Pa and Pn runs
+                    ro.unbreakable = o.noEnemy || o.unbreakable;
                     printRun(level, bot, o.seed + u64(s), runLevel(def, bot, o.seed + u64(s), ro));
                 }
             return 0;
@@ -164,7 +166,9 @@ int cmdDecisions(const Opt& o) {
     std::printf("level %d: T %.0f s, spire %d, R %.0f, %d geodes\n", def.index, double(def.targetT), def.spireHealth, double(def.ref), def.geodeCount);
     for (int g = 0; g < def.gateCount; ++g)
         std::printf("  gate %d: %s%d at x %.1f (half-width %.1f%s), z %.1f\n", g, def.gates[g].kind == kGateMul ? "x" : "/", def.gates[g].k,
-                    double(def.gates[g].cx), double(def.gates[g].hw), def.gates[g].slides ? ", slides" : "", double(def.gates[g].z));
+                    double(def.gates[g].cx), double(def.gates[g].hw),
+                    def.gates[g].slides == kGateHop ? ", hops" : def.gates[g].slides ? ", slides" : def.gates[g].breath > 0 ? ", breathes" : "",
+                    double(def.gates[g].z));
     for (int b = 0; b < def.barrierCount; ++b)
         std::printf("  wall %d: x %.1f..%.1f, z %.1f, health %d\n", b, double(def.barriers[b].x0), double(def.barriers[b].x1),
                     double(def.barriers[b].z), def.barriers[b].health);

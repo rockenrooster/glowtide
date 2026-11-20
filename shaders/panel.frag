@@ -1,5 +1,6 @@
 in highp vec2 vUV;
 flat in float vKind;
+flat in float vGhost;
 in float vFlash;
 in highp float vHeightPx;
 uniform float uGlowMode;  // 1: only the bright edges, for the glow buffer
@@ -14,6 +15,10 @@ void main() {
     float px = 1.0 / vHeightPx;
     float edge = max(1.0 - smoothstep(bar, bar + px, vUV.y), smoothstep(1.0 - bar - px, 1.0 - bar, vUV.y));
     float flash = vFlash;
+    // A hopper's ghost frame: the edges faint, almost no sheet.
+    float ghost = vGhost > 0.5 ? 1.0 : 0.0;
+    edge *= 1.0 - 0.6 * ghost;
+    fill *= 1.0 - 0.8 * ghost;
     if (uGlowMode > 0.5) {
         float a = edge * (0.55 + flash * 0.45) + fill * 0.05;
         oColor = vec4(col * a, 0.0);

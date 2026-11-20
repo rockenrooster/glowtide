@@ -166,6 +166,7 @@ void Game::enterLevel(int index, bool fade) {
     if (level_ == 2) showHint(2);
     else if (level_ == 4) showHint(3);
     else if (level_ == 5) showHint(4);
+    else if (level_ == 16) showHint(9);
 }
 
 const char* screenName(Screen s) {
@@ -610,16 +611,17 @@ void Game::stripCheck(const StripPre& pre) {
         // Clones are made at the gate, at most one step plus 0.12 m past it, inside its span.
         for (int i = 0; i < W.w.n; ++i)
             if (W.w.born[i] == born && (W.w.bits[i] & bit) && W.w.z[i] >= G.z && W.w.z[i] < G.z + 0.3f &&
-                std::fabs(W.w.x[i] - W.gateX[ev.a]) <= G.hw + 0.15f)
+                std::fabs(W.w.x[i] - W.gateX[ev.a]) <= W.gateHw[ev.a] + 0.15f)
                 ++clones;
         const int out = ev.b + clones;
+        const int kk = minv(int(tune.kindleMax), int(G.k) + W.kindle);  // KINDLE counts one more
         const bool capped = W.w.n >= sim::kMaxWisps - 64;
         // A clone can meet a gloom and go in the same tick: fewer out is only wrong if nothing clashed.
         bool clashed = false;
         for (int c = 0; c < W.eventCount; ++c) clashed = clashed || W.events[c].type == sim::kEvClashCount;
-        const bool ok = capped || out == int(G.k) * ev.b || (clashed && out < int(G.k) * ev.b);
+        const bool ok = capped || out == kk * ev.b || (clashed && out < kk * ev.b);
         bad += ok ? 0 : 1;
-        n += std::snprintf(line + n, sizeof line - size_t(n), " x%d in %d out %d%s;", int(G.k), ev.b, out, ok ? "" : " MISMATCH");
+        n += std::snprintf(line + n, sizeof line - size_t(n), " x%d in %d out %d%s;", kk, ev.b, out, ok ? "" : " MISMATCH");
         if (n > 200) break;
     }
     // Clash and core: glooms lose power only to clashes (one for one with wisps) and at the lantern.

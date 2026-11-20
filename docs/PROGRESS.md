@@ -27,6 +27,7 @@ listed under "Choices" below; the owner can reverse any of them.
 |---|---|---|
 | V0 Baseline and tools | Done 2026-11-20 (device matrix deferred to V1's runs) | Split of `levels.cpp` proven neutral; version stamps and their test; `--sim variety`; baseline below; consecutive-level sheets; `picture-android.ps1`; stars past level 1,000 not recorded. Also the owner's barrel fix (below) |
 | V1 Geodes and boons | Done 2026-11-20 (version 0.2.0) | Geodes, plates, four boons, three lanterns, bake v2; levels 2-300 baked and accepted; step 8 missed (below); the checkpoint decided here (Choices) |
+| V2 Lane and enemy | Done 2026-11-20 (phones: below) | Hoppers, breathing gates, sliding walls, side doors, runners, eight plans, `KINDLE`, `COMET`, `HUSH`; levels 2-300 baked again and accepted; stretch items not built |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -177,6 +178,126 @@ without REDUCE EFFECTS: at most 2 swings in a second (limit 3). Audio (`review.p
 over GD 12's -14 (the kalimba, which the game uses, -14.6; the glass -14.7): if the owner picks the bell, lower its
 gain by 1 dB.
 
+**V1 on the phones** (the dev build as `dev.glowtide.game.dev`): the Moto's matrix (`captures/matrix/ZY22BXMJG3.md`):
+flow test 48/48, determinism equal on nine levels, the `concept` and `geodes` picture checks (gold 6.39% / 6.41% and
+2.03% / 2.03%, mean difference 0.1), save through a force-stop, cold start 432 ms, lifecycle 20/20, `bench_flood` 0.62%
+late, worst 34.5 ms, CPU p95 4.40 ms (P6 4.26 ms: +3.3%, limit 10%), tick p95 1.55 ms, 0 allocations. The back key and
+`bench_play` rows failed inside the matrix with no output (the scripts stopped before their first line, as when the
+phone is briefly busy) and passed when run again alone: back key PASS; `bench_play` level 87 0.41% late, CPU p95
+3.44 ms. Level 87 is no longer the heaviest level: by the bake's peak units it is 298 (3,336 units at the caps), and
+`bench_play` there: 0.47% late, worst 35.0 ms, CPU p95 5.09 ms, **tick p95 2.65 ms, over P5's 2.5 ms budget** (frames
+are fine: the tick runs inside the frame's budget; to look at in V2: the clash step and greedy's scoring on a full
+lane). The tablet was in use by someone else all through V1's runs (another app in front); its checks wait for it.
+The 12R's wireless debugging is off (`adb` lists it offline).
+
+### V2: the lane and the enemy — what was built and what changed from the design
+
+Built: hopper gates (two places, 1.5-2.5 s at each, a 0.25 s smoothstep jump; a faint ghost frame where it lands
+next), breathing gates (the opening swings 60% to 120% of the half-width over 3-5 s; a wisp passes if it is inside the
+opening of that tick), sliding walls, side doors (an emitter on a rail at a height, with a share of the flow: its glooms
+step in at 1.5 m/s for a second, fading in, then walk down), runners (5 m/s), the eight plans, `KINDLE`, `COMET` and
+`HUSH` (rules, the bot's worth, badges, chips, effects, motifs; `KINDLE`'s labels count up row by row, 80 ms apart;
+`COMET` a tier-3 wisp with a tail from each lantern; `HUSH` dims the emitters' glow, plays the music's pad alone and
+drains its chip); the generator's hopper and breathing patterns, sliding walls in Wall-and-prize rows from level 46, a
+plan for every generated level, side doors for Flank; hand-made levels 16 (the first hopper, with its hint) and 38 (the
+first breathing gates); the bench scene's runners, hopper, breathing gate and kindled lane; pictures `elements` (every
+new thing), `kindle_strip`, `comet_strip`; a plan column in the bake report and a by-plan table in `band_table.py`.
+Not built: the three stretch items (snatchers, currents, portals): their calendar slots (76, 83, 91) go to V4's
+hand-made levels that combine two things already in (VARIETY_DESIGN 10.1).
+
+| Design said | Built | Why |
+|---|---|---|
+| Pulse: 2.5 s at 1.8 times, 2.5 s at 0.2 | The same shape, its period stretched so a whole number of pulses fits `T` (4.6 to 5.4 s) | So every plan's flow averages the base flow over `T` exactly (V2's unit test; with a fixed 5 s a level of 24 s averaged 8% over) |
+| Early rush: 1.6 for 8 s, then 0.85 | Then (`T` - 12.8) / (`T` - 8): 0.82 to 0.88 | The same reason |
+| Brute line: half the flow as brutes, one every 4 s | Each brute 4 s of half the flow, with no 16-power minimum | A minimum would add enemy on low-flow levels |
+| Today's bursts and brutes leave every level but through the plan (VD 5.2) | The two time bursts and the brute every 8 s are gone from every level; the bosses keep their two health bursts with brutes until V3's scripts | V3 replaces bursts with twists |
+| A side door "a dark arch on the rail" | The arch stands across the rail with its opening toward the lantern, a rose glow in it | Side-on to the camera it read as a dark slab; facing the camera it reads as a doorway (greyscale sheet) |
+| The introduction levels show their new thing | Levels 16 and 38 have no geode | Hand-placed geodes there sat in some stream's spill: `podless` cracked them as often as `greedy`, so line g could not pass |
+| `KINDLE` at 36, `COMET` at 52, `HUSH` at 63 (VD 10.1) | On those generated levels the first geode holds the new boon; later a level offers `COMET` (weight 1.2) and `HUSH` (0.7) at most once each, never as the first geode up to level 60, never after 75% of `T` | The introduction without a hand-made level; `HUSH` rarer as V2's notes ask |
+| (A bug, found through `KINDLE`) | Past the unit cap a shot's power joins the newest unpassed wisp near its lantern anywhere in the array, not only among the last 64 | Clones made at the gates since the last shot pushed it out of the 64: the shot's power was lost |
+| `COMET` anywhere a geode goes | Level 52's `COMET` is its second geode, on the best line | A comet fires from where the lanterns are when it opens: opened on a detour it climbs the detour's weak line, so chasing it made greedy slower than `podless` (level 52 failed all 36 seeds; on the line it passed on the first). Elsewhere `COMET` stays where the generator puts it (V4's recipes place geodes: put comets on the line there) |
+| The boon tray: one row, up to four chips | Two chips a row, the third and fourth above | Four chips in a row met the tide counter on narrow frames (the layout lint) |
+
+### V2: measured
+
+**The bake** (generator 7, rules 4): levels 2-300 all accepted, 1,262 s at 4 jobs, then level 52 again (above). 27
+levels needed the repair pass (13 to 27 seeds). Seeds thrown away by line: g 999, x 90, a 60, c 44, h 34, f 19, e 14,
+n 14, i 1. The band table:
+
+| Levels | Greedy time (T) | Core | Cancelled / target | Geodes opened | Podless slower | Hungry slower or loses | 3+ geodes, one left | Pip lost | Gloom past row 1 | Seeds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2-10 | 0.90 | 10 | 11% / 14% | 5/5 | 29% | 20% | - | 0% | 22% | 10 |
+| 11-20 | 0.92 | 10 | 16% / 16% | 9/9 | 53% | 22% | - | 0% | 30% | 28 |
+| 21-30 | 0.92 | 10 | 20% / 20% | 20/23 | 34% | 60% | 100% | 0% | 50% | 37 |
+| 31-40 | 0.92 | 10 | 24% / 24% | 18/21 | 36% | 67% | 100% | 0% | 50% | 33 |
+| 41-50 | 0.91 | 10 | 26% / 26% | 22/23 | 25% | 80% | 33% | 0% | 20% | 45 |
+| 51-60 | 0.93 | 10 | 26% / 26% | 20/24 | 42% | 50% | 100% | 0% | 30% | 31 |
+| 61-70 | 0.95 | 10 | 26% / 26% | 26/28 | 31% | 50% | 40% | 0% | 20% | 63 |
+| 71-80 | 0.93 | 10 | 24% / 26% | 26/27 | 67% | 80% | 20% | 0% | 20% | 86 |
+| 81-90 | 0.94 | 10 | 27% / 27% | 29/30 | 33% | 80% | 12% | 0% | 30% | 48 |
+| 91-100 | 0.94 | 10 | 25% / 26% | 27/35 | 42% | 90% | 78% | 0% | 30% | 54 |
+| 101-110 | 0.92 | 10 | 24% / 26% | 30/34 | 65% | 90% | 44% | 0% | 50% | 52 |
+| 111-120 | 0.93 | 10 | 26% / 26% | 28/30 | 30% | 100% | 29% | 0% | 50% | 60 |
+| 121-130 | 0.92 | 10 | 24% / 26% | 23/26 | 60% | 80% | 60% | 0% | 20% | 29 |
+| 131-140 | 0.93 | 10 | 25% / 27% | 28/30 | 60% | 80% | 14% | 0% | 20% | 36 |
+| 141-150 | 0.93 | 10 | 25% / 26% | 23/27 | 63% | 80% | 67% | 0% | 40% | 74 |
+| 151-160 | 0.93 | 10 | 25% / 27% | 25/28 | 32% | 70% | 60% | 0% | 40% | 57 |
+| 161-170 | 0.94 | 10 | 26% / 28% | 26/26 | 31% | 60% | 0% | 0% | 40% | 45 |
+| 171-180 | 0.94 | 10 | 26% / 26% | 24/28 | 60% | 80% | 57% | 0% | 70% | 42 |
+| 181-190 | 0.92 | 10 | 25% / 26% | 25/28 | 55% | 70% | 50% | 0% | 30% | 58 |
+| 191-200 | 0.91 | 10 | 24% / 27% | 27/30 | 41% | 80% | 38% | 0% | 10% | 52 |
+| 201-210 | 0.93 | 10 | 24% / 27% | 27/28 | 41% | 80% | 17% | 0% | 20% | 42 |
+| 211-220 | 0.93 | 10 | 25% / 26% | 26/29 | 37% | 70% | 50% | 0% | 30% | 58 |
+| 221-230 | 0.92 | 10 | 26% / 28% | 25/26 | 42% | 60% | 17% | 0% | 30% | 32 |
+| 231-240 | 0.94 | 10 | 28% / 28% | 30/33 | 31% | 80% | 33% | 0% | 30% | 54 |
+| 241-250 | 0.94 | 10 | 26% / 28% | 26/30 | 42% | 90% | 50% | 0% | 40% | 81 |
+| 251-260 | 0.92 | 10 | 25% / 27% | 27/29 | 25% | 60% | 25% | 0% | 20% | 81 |
+| 261-270 | 0.93 | 10 | 25% / 27% | 27/30 | 37% | 60% | 50% | 0% | 30% | 52 |
+| 271-280 | 0.93 | 10 | 24% / 26% | 25/27 | 81% | 70% | 50% | 0% | 40% | 78 |
+| 281-290 | 0.95 | 10 | 27% / 27% | 26/27 | 34% | 40% | 20% | 0% | 20% | 44 |
+| 291-300 | 0.94 | 10 | 25% / 27% | 26/28 | 38% | 80% | 33% | 0% | 20% | 76 |
+
+No acceptance line was lost against V1 (every level passes a to i). **How each plan moved the enemy** (levels 21 on;
+the lowest z a gloom reached in greedy's median run; the share of levels where a gloom got past the first gate row in
+half of greedy's runs or more):
+
+| Plan | Levels | Greedy's lowest median core | Lowest gloom z, median | Gloom past row 1 |
+|---|---|---|---|---|
+| Flank | 19 | 10 | 7.9 | 68% |
+| Early rush | 27 | 10 | 10.7 | 44% |
+| Pincer | 39 | 10 | 14.2 | 38% |
+| Pulse | 39 | 10 | 15.3 | 26% |
+| Brute line | 29 | 10 | 16.3 | 10% |
+| Steady | 53 | 10 | 17.3 | 36% |
+| Late surge | 43 | 10 | 22.2 | 16% |
+| Runner packs | 31 | 10 | 22.5 | 35% |
+
+The side doors and the early rush bring the enemy well down the lane (median 7.9 m and 10.7 m against Steady's 17.3);
+Late surge and Runner packs the least (their extra comes late, or as runners the stream eats). None of them costs greedy
+a pip: its median core is 10 on every level, so step 8's pip line still misses everywhere (0% against 15-40%; V3's
+twists and V4's hardness are the next levers). Step 8's other lines: `hungry` slower or losing on 40-100% of a band's
+levels, one geode left on 0-100% of three-geode levels, a gloom past the first row on 10-70%.
+
+**The variety report:** neighbours are less alike than at V1: levels 1-12 apart p10 / p50 / p90 0.49 / 0.55 / 0.65 (V1
+0.59 / 0.66 / 0.73), 97.5% still above 0.45; 13-40 apart 23.8% above 0.60 (V1 84.1%); none above 0.85 at 41 or more; a
+boon list twice within 8 levels 88 times (V1 134). Plans per hundred levels (6-105): Steady 28, Runner packs 16, Pulse
+12, Pincer 11, Brute line 11, Late surge 10, Flank 7, Early rush 5; boons offered: LANTERN 49, QUICKEN 57, BRIGHT 54,
+WARD 41, KINDLE 13, COMET 20, HUSH 9.
+
+**Other checks** (PC): unit tests 97 checks, 0 failed (new: the hopper's places at chosen times and the world's hopper
+on them, the breathing gate's opening and a wisp missing the narrow opening and passing the wide one, a sliding wall
+hit where it is, a side door's gloom stepping in and turning down, runner speed, every plan's shape averaging 1 over
+four `T`s and every plan sending the level's total over `T` within 6%, `KINDLE` x5 to x6 and x6 staying x6 and a wisp
+already through untouched, `COMET`'s power a lantern, `HUSH` six quiet seconds then the flow on the tick it ends, three
+lanterns at their fastest and heaviest through a kindled lane under the cap, no allocation on levels 16, 28, 30 and 38,
+the generator's lints over 1,000 seeds with hoppers, breathing gates, sliding walls, side doors and plans). Determinism
+on levels 1-5 and 6, 11, 23, 47 (every hash moved: the barrier arrays grew to 16). Acceptance 1-5. Soak 1-300 with
+three bots: 900 runs, 0 failed. Flashing audit with the `KINDLE` and `COMET` strips added: pass, with and without
+REDUCE EFFECTS. Layout lint over the eight frames with a full tray of four chips: pass. Greyscale: a side door reads
+as a doorway (a lit opening in a dark arch), a runner by its streak (`captures/v2/`). Greedy's z-ordered walk of the
+lane is built once a tick instead of once a scored line (42 lines a decision): the same results (every determinism
+hash equal before and after).
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -210,6 +331,8 @@ gain by 1 dB.
 | The INTERNET permission | Added for the update check alone | Nothing else in the game uses the network |
 | V1's owner checkpoint (play 6-25, then 60 and 150; six questions) | Answered here: geodes as built (health in seconds of the stream that reaches them, plates and slides on detours only, two to four a level), boons last for their level only, two and three lanterns as built, the kalimba stays; V2 started | The owner asked for best judgment instead of questions; the band table says the decision exists (`podless` 22-57% slower, `hungry` slower or losing on most levels from 21). The questions stay open below for the owner to answer after playing |
 | V1's dev APK on the phones | `GT_APP_ID_SUFFIX=.dev` on every phone (`dev.glowtide.game.dev`) | It installs beside the owner's GitHub copy instead of replacing it (and its save) |
+| V2's soft checkpoint (do hoppers annoy, do side doors read as doors, is `KINDLE` good enough) | Hoppers kept as built (1.5-2.5 s at each place, a ghost frame where they land; level 16 introduces them with its hint); side doors redrawn to face the lantern; `KINDLE` as designed (its run up the lane is the strip) | The design's own numbers; the greyscale sheet for the doors. Open below for the owner |
+| V2's stretch items | Not built (snatchers, currents, portals) | The must items and their bake came first; their calendar slots go to hand-made levels in V4 (VARIETY_DESIGN 10.1) |
 
 ## Measured device facts
 
@@ -365,3 +488,5 @@ another level, every level has one goal and one enemy plan, and the greedy bot i
    SETTINGS' level stepper. Is this the upgrade you meant? Did you choose between a geode and the enemy, or was it always
    obvious? Too many, too few, too tough, too soft, too fast? Two and three lanterns: fun, too strong? Should a boon ever
    last past its level? (Answered by best judgment for now: Choices.)
+8. **The lane and the enemy (V2):** ten levels between 16 and 60. Does any new gate annoy rather than interest (hoppers
+   are the candidate)? Do side doors read as doors? Is `KINDLE` as good as it should be?

@@ -39,6 +39,7 @@ def rows(path):
             "time": float(t.group(1)), "T": float(t.group(2)), "core": float(c["Core"]), "opened": opened, "shown": shown,
             "pip": int(c["Pip lost"]), "deep": int(c["Deep gloom"]), "pw": pw, "pt": pt, "hw": hw, "ht": ht,
             "naive_loses": c["Naive"] == "loses", "seeds": int(c["Seeds"]),
+            "plan": c.get("Plan", "Steady"), "lowz": float(c["Lowest gloom z"]),
         })
     return out
 
@@ -83,6 +84,18 @@ def main(argv):
             if three and unopened < 50: misses.append(f"{lo}-{hi}: one geode left on {unopened:.0f}% of 3+ geode levels (want 50%)")
             if not 15 <= pip <= 40: misses.append(f"{lo}-{hi}: greedy loses a pip on {pip:.0f}% (want 15-40%)")
             if deep < 40: misses.append(f"{lo}-{hi}: a gloom past the first row on {deep:.0f}% (want 40%)")
+    # By the enemy's plan (VARIETY_PLAN V2: the point of plans is that the enemy is felt), levels 21 on.
+    plans = {}
+    for r in data:
+        if r["level"] >= 21:
+            plans.setdefault(r["plan"], []).append(r)
+    if len(plans) > 1:
+        lines += ["", "| Plan (levels 21 on) | Levels | Greedy core, lowest median | Pip lost | Lowest gloom z, median | Gloom past row 1 |",
+                  "|---|---|---|---|---|---|"]
+        for name in sorted(plans, key=lambda k: -len(plans[k])):
+            rs = plans[name]
+            lines.append(f"| {name} | {len(rs)} | {min(r['core'] for r in rs):.0f} | {share(rs, lambda r: r['pip'] >= 5):.0f}% | "
+                         f"{statistics.median(r['lowz'] for r in rs):.1f} | {share(rs, lambda r: r['deep'] >= 5):.0f}% |")
     bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0]
     not_acc = [r["level"] for r in data if not r["accepted"]]
     lines += ["", f"Levels: {len(data)}, not accepted: {len(not_acc)} {not_acc[:30]}",

@@ -8,7 +8,7 @@ void main() {
     int flags = int(aInfo.x + 0.5);
     int tier = int(aInfo.w + 0.5);
     bool gloom = (flags & 1) != 0;
-    float r = unitRadius(gloom, tier) * uParams2.w;
+    float r = unitRadius(gloom, tier) * uParams2.w * ((flags & 8) != 0 ? 1.8 : 1.0);  // a comet glows wide
     vec2 xz = aPos - aStep * (1.0 / 4096.0) * (1.0 - uTime.y);
     vec3 centre = vec3(xz.x, r * 0.55 + (gloom ? 0.0 : muzzleLift(xz.y)), xz.y);
     vec2 c = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;

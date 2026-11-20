@@ -4,6 +4,7 @@ in vec2 vLocal;
 flat in int vFlags;
 in float vSeed;
 in float vPx;
+in float vFade;
 layout(location = 0) out vec4 oColor;
 
 float sdUnevenCapsule(vec2 p, float r1, float r2, float h) {
@@ -76,5 +77,20 @@ void main() {
     }
     float fw = clamp(aa * 1.2, 0.02, 0.35);
     float alpha = clamp(0.5 - d / fw, 0.0, 1.0);
-    oColor = vec4(grade(col) * alpha, alpha);
+    // A runner leaves a streak of three fading lines up the lane behind it; a comet a tail down toward the lantern.
+    float extra = 0.0;
+    vec3 extraCol = col;
+    if (gloom && (vFlags & 16) != 0 && p.y > 0.7) {
+        float lines = 1.0 - smoothstep(0.07, 0.07 + aa * 2.0, abs(fract(p.x * 1.6 + 0.5) - 0.5) / 1.6);
+        extra = lines * (1.0 - smoothstep(0.9, 2.5, p.y)) * step(abs(p.x), 0.8) * 0.75;
+        extraCol = uGloom[1].rgb;
+    } else if (!gloom && (vFlags & 8) != 0 && p.y < -0.6) {
+        float u = clamp((-0.6 - p.y) / 3.3, 0.0, 1.0);
+        float halfW = 0.75 * (1.0 - u);
+        extra = (1.0 - smoothstep(halfW * 0.4, halfW + aa, abs(p.x))) * (1.0 - u) * 0.9;
+        extraCol = vec3(1.0, 0.95, 0.8);
+    }
+    vec3 outc = col * alpha + extraCol * extra * (1.0 - alpha);
+    float outa = (alpha + extra * (1.0 - alpha)) * vFade;
+    oColor = vec4(grade(outc / max(alpha + extra * (1.0 - alpha), 0.001)) * outa, outa);
 }

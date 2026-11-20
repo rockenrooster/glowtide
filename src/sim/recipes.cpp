@@ -43,6 +43,8 @@ void placeGeodes(LevelDef& L, Rng& r) {
     const float budget = index <= 20 ? 2.0f : index <= 60 ? 2.5f : 3.0f;
     const float T = L.targetT, best = bestLineX(L);
     int lanterns = 1, quicken = 0, bright = 0, wards = 0, kinds = 0;
+    // The level that introduces a boon offers it first (VARIETY_DESIGN 10.1): KINDLE 36, COMET 52, HUSH 63.
+    const int intro = index == 36 ? kBoonKindle : index == 52 ? kBoonComet : index == 63 ? kBoonHush : -1;
     bool used[kBoonCount] = {};
     float worth = 1, t = r.range(0.08f, 0.25f) * T;
     for (int k = 0; k < n && L.geodeCount < kMaxGeodes; ++k) {
@@ -52,16 +54,29 @@ void placeGeodes(LevelDef& L, Rng& r) {
         // level; the first geode up to level 60 lasts; a WARD at most once, never first, never at 75% of T or later.
         const float late = t > 0.75f * T;
         float wt[kBoonCount] = {};
+        auto gainOf = [&](int b) {
+            return b == kBoonKindle ? (used[kBoonKindle] ? 0.0f : kindleGain(L, best)) : boonGain(b, lanterns, quicken, bright);
+        };
         auto allow = [&](int b, int from, float weight) {
             if (index < from || (!used[b] && kinds >= 3)) return;
-            const float gain = boonGain(b, lanterns, quicken, bright);
+            const float gain = gainOf(b);
             if (gain <= 0 || late || worth * (1.0f + gain) > budget + 1e-3f) return;
             wt[b] = weight;
         };
         allow(kBoonLantern, 6, k == 0 ? 4.0f : 3.0f);  // the first one is a detour: lean it toward a boon worth one
         allow(kBoonQuicken, 7, k == 0 ? 1.5f : 3.0f);
         allow(kBoonBright, 12, k == 0 ? 3.5f : 2.5f);
+        allow(kBoonKindle, 36, 2.0f);
         if (index >= 23 && wards == 0 && (k > 0 || index > 60) && t < 0.85f * T && (used[kBoonWard] || kinds < 3)) wt[kBoonWard] = 1.5f;
+        // The instants: COMET and HUSH at most once a level each; HUSH is rarer (it eases the contest: V2's notes).
+        if (index >= 52 && !used[kBoonComet] && !late && (k > 0 || index > 60) && kinds < 3) wt[kBoonComet] = 1.2f;
+        if (index >= 63 && !used[kBoonHush] && !late && kinds < 3) wt[kBoonHush] = 0.7f;
+        // The introduction: the first geode; a COMET the second, which rides the best line (a comet fires from where the
+        // lantern is when it opens: opened on a detour it climbs the detour's weak line).
+        if (intro >= 0 && k == (intro == kBoonComet ? 1 : 0)) {
+            for (float& x : wt) x = 0;
+            wt[intro] = 1;
+        }
         float total = 0;
         for (float x : wt) total += x;
         if (total <= 0) break;
@@ -70,7 +85,7 @@ void placeGeodes(LevelDef& L, Rng& r) {
         while (boon < kBoonCount - 1 && pick >= wt[boon]) pick -= wt[boon++];
         if (wt[boon] <= 0) break;
         if (!used[boon]) used[boon] = true, ++kinds;
-        worth *= 1.0f + boonGain(boon, lanterns, quicken, bright);
+        worth *= 1.0f + gainOf(boon);
         if (boon == kBoonLantern) ++lanterns;
         if (boon == kBoonQuicken) ++quicken;
         if (boon == kBoonBright) ++bright;
@@ -128,7 +143,7 @@ LevelDef generate(int index, u64 seed) {
 
     const Band band = bandFor(index);
     const int strongest = band.strongest;
-    const float* wt = band.patternWeight;  // Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing
+    const float* wt = band.patternWeight;  // Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing, Hopper, Breathing
     const int rows = r.rangei(band.rowsLo, band.rowsHi);
     float z = r.range(8, 10);
     float stream = tune.fireRate;  // the stream a player has at the current row (for barrier health)
@@ -139,10 +154,10 @@ LevelDef generate(int index, u64 seed) {
         int p = 0;
         for (int tries = 0; tries < 20; ++tries) {
             float total = 0;
-            for (int k = 0; k < 8; ++k) total += wt[k];
+            for (int k = 0; k < kPatCount; ++k) total += wt[k];
             float pick = r.range(0, total);
             p = 0;
-            while (p < 7 && pick >= wt[p]) pick -= wt[p++];
+            while (p < kPatCount - 1 && pick >= wt[p]) pick -= wt[p++];
             if (row == 0 && p != kPatOpen && p != kPatChoice) continue;
             const bool hard = p == kPatTrap || p == kPatPatrol;
             const bool prevHard = prev == kPatTrap || prev == kPatPatrol;
@@ -190,6 +205,14 @@ LevelDef generate(int index, u64 seed) {
                 b.x1 = minv(kHW - 0.1f, cx + 1.6f);
                 b.z = z;
                 b.health = maxv<i32>(10, i32(1.5f * stream));
+                if (index >= 46 && r.f01() < 0.4f) {
+                    // A sliding wall (VARIETY_DESIGN 4 #3): narrower, sliding so a window to the prize opens and closes.
+                    b.x0 = cx - 1.2f;
+                    b.x1 = cx + 1.2f;
+                    b.amp = minv(kHW - 0.1f - std::fabs(cx) - 1.2f, r.range(0.8f, 1.1f));
+                    b.period = r.range(4.0f, 6.0f);
+                    b.phase = r.f01();
+                }
                 if (L.barrierCount < kMaxBarriers) L.barriers[L.barrierCount++] = b;
                 best = special;
                 break;
@@ -219,6 +242,26 @@ LevelDef generate(int index, u64 seed) {
                 best = special;
                 break;
             }
+            case kPatHopper: {  // a gate that jumps between two places (VARIETY_DESIGN 4 #1)
+                Gate h = mulGate(r.range(-0.4f, 0.4f), 1.5f, z, special, row);
+                h.slides = kGateHop;
+                h.amp = minv(kHW - h.hw - 0.3f - std::fabs(h.cx), r.range(1.8f, 2.6f));
+                h.period = r.range(1.5f, 2.5f);
+                h.phase = r.f01();
+                addGate(L, h);
+                best = special;
+                break;
+            }
+            case kPatBreathing: {  // a strong gate whose opening swings 60% to 120% (VARIETY_DESIGN 4 #2), a plain one aside
+                const float cx = s * r.range(1.4f, 2.0f);
+                Gate b = mulGate(cx, 1.6f, z, special, row);
+                b.breath = r.range(3.0f, 5.0f);
+                b.phase = r.f01();
+                addGate(L, b);
+                addGate(L, mulGate(-s * 3.4f, 1.2f, z, plain, row));
+                best = special;
+                break;
+            }
             default: {  // Crossing sliders, 1.6 m apart in z so they pass each other instead of through each other
                 const float period = r.range(3.5f, 5.5f), phase = r.f01();
                 Gate a = mulGate(0, 1.4f, z + 0.8f, plain, row);
@@ -245,9 +288,14 @@ LevelDef generate(int index, u64 seed) {
     const float last = L.rowZ[L.rowCount - 1] + (L.rowPattern[L.rowCount - 1] == kPatWall ? 2.0f : 0.0f);
     L.len = clampv(last + 12.0f, 30.0f, 44.0f);
 
-    // The enemy (GAME_DESIGN 5.9, 7.3 step 3).
+    // The enemy (GAME_DESIGN 5.9, 7.3 step 3) and its plan (VARIETY_DESIGN 5.1).
+    L.plan = u8(planFor(index, r));
     const int emitters = index <= 9 ? 1 : index <= 29 ? 2 : 3;
-    if (emitters == 1) {
+    if (L.plan == kPlanPincer) {  // two emitters far apart, one at a time
+        const float x = r.range(2.8f, 3.4f);
+        addEmitter(L, -x);
+        addEmitter(L, x);
+    } else if (emitters == 1) {
         addEmitter(L, r.range(-2.0f, 2.0f));
     } else if (emitters == 2) {
         const float x = r.range(1.5f, 2.5f);
@@ -258,14 +306,29 @@ LevelDef generate(int index, u64 seed) {
         addEmitter(L, 0);
         addEmitter(L, 2.5f);
     }
-    if (index >= 20 && r.f01() < 0.4f) {
+    if (index >= 20 && L.plan != kPlanPincer && r.f01() < 0.4f) {
         Emitter& e = L.emitters[r.rangei(0, L.emitterCount - 1)];
         e.amp = r.range(1.0f, 1.5f);
         e.period = r.range(4, 7);
         e.x = clampv(e.x, -2.5f + e.amp, 2.5f - e.amp);
     }
-    addBurst(L, 0.35f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
-    addBurst(L, 0.70f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
+    if (L.plan == kPlanFlank) {
+        // A third of the flow through one or two side doors, between z 14 and len - 8, clear of the rows by 1.5 m.
+        const int foot = L.emitterCount, doors = r.f01() < 0.5f ? 1 : 2;
+        for (int e = 0; e < foot; ++e) L.emitters[e].share = (2.0f / 3.0f) / float(foot);
+        const int side = r.f01() < 0.5f ? -1 : 1;
+        for (int d = 0; d < doors; ++d) {
+            float dz = 0;
+            for (int tries = 0; tries < 16 && dz == 0; ++tries) {
+                const float c = r.range(14.0f, maxv(14.5f, L.len - 8.0f));
+                bool clear = true;
+                for (int i = 0; i < L.rowCount; ++i) clear = clear && std::fabs(c - L.rowZ[i]) >= 1.5f;
+                if (clear) dz = c;
+            }
+            if (dz == 0) dz = maxv(14.0f, L.len - 8.0f);
+            addDoor(L, d == 0 ? side : -side, dz, (1.0f / 3.0f) / float(doors));
+        }
+    }
     if (L.boss) {
         addBurst(L, -1, 0.66f, tune.burstMult, 4.0f, 2);
         addBurst(L, -1, 0.33f, tune.burstMult, 4.0f, 2);

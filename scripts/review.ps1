@@ -58,6 +58,13 @@ $sets = @{
         geode_strip = '--picture geode_strip --strip 8 --strip-step 5 --frames 42'
         pan_strip = '--picture pan_strip --strip 8 --strip-step 2 --frames 70'
     }
+    v2 = [ordered]@{
+        elements = '--picture elements'
+        kindle_strip = '--picture kindle_strip --strip 8 --strip-step 4 --frames 34'
+        comet_strip = '--picture comet_strip --strip 8 --strip-step 4 --frames 34'
+        level_16 = '--picture level_top --level 16 --no-hud --frames 4 --res 540x1200'
+        level_38 = '--picture level_top --level 38 --no-hud --frames 4 --res 540x1200'
+    }
     p5 = [ordered]@{
         world_1 = '--picture world_1'
         world_2 = '--picture world_2'

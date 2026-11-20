@@ -27,6 +27,7 @@ const char* kHints[] = {
     "CRACK A GEODE TO GAIN ITS BOON",  // 6: the first geode (VARIETY_DESIGN 14)
     "BREAK ITS SHIELD FIRST",          // 7: the first shielded geode
     "IT GOT AWAY: CATCH THEM EARLY",   // 8: the first geode that slips past
+    "IT JUMPS: WATCH THE GHOST",       // 9: the first hopper (level 16)
 };
 
 Rect centered(const Layout& L, float cy, float wDp, float hDp) {
@@ -326,6 +327,11 @@ void Game::drawScreens(float dt) {
         chip(sim::kBoonLantern, world_.lanterns - 1);
         chip(sim::kBoonQuicken, world_.quicken);
         chip(sim::kBoonBright, world_.bright);
+        chip(sim::kBoonKindle, world_.kindle);
+        if (world_.tickCount < world_.hushUntil && hs.trayCount < 4) {
+            chip(sim::kBoonHush, 1);
+            hs.trayDrain[hs.trayCount - 1] = float(world_.hushUntil - world_.tickCount) / (tune.hushSeconds * 60.0f);
+        }
         for (int i = 0; i < 4; ++i) hs.fly[i] = fly_[i];
         hs.drawPause = false;
         hs.opacity = screen_ == Screen::Pause ? 0.5f : 1.0f;

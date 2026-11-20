@@ -373,6 +373,180 @@ void testGeodes() {
     GT_CHECK_MSG(w.core == 10 && w.g.n == 1 && w.g.power[0] == 2, "WARD: the core whole, the glooms below z 14 gone");
 }
 
+// The lane and the enemy (VARIETY_DESIGN 3's last three boons, 4, 5; VARIETY_TECH 10).
+void testLaneAndEnemy() {
+    static World w;
+    Input in;
+    // A hopper: two seconds at cx - amp, a quarter-second jump, two seconds at cx + amp, and back.
+    Gate h;
+    h.cx = 0;
+    h.hw = 1.5f;
+    h.z = 12;
+    h.slides = kGateHop;
+    h.amp = 2.0f;
+    h.period = 2.0f;
+    GT_CHECK_MSG(std::fabs(gateXAt(h, 0.0f) + 2.0f) < 1e-4f && std::fabs(gateXAt(h, 1.9f) + 2.0f) < 1e-4f &&
+                     std::fabs(gateXAt(h, 2.125f)) < 1e-3f && std::fabs(gateXAt(h, 2.3f) - 2.0f) < 1e-4f &&
+                     std::fabs(gateXAt(h, 4.375f)) < 1e-3f && std::fabs(gateXAt(h, 4.6f) + 2.0f) < 1e-4f,
+                 "a hopper stays, jumps in 0.25 s, stays, jumps back");
+    LevelDef hd = emptyLevel();
+    hd.gates[hd.gateCount++] = h;
+    w.init(hd, 1);
+    for (int t = 0; t < 138; ++t) w.tick(in);  // 2.3 s
+    GT_CHECK_MSG(std::fabs(w.gateX[0] - 2.0f) < 1e-4f, "the world's hopper is where gateXAt says");
+    // A breathing gate: its opening swings 60% to 120% of hw; a wisp passes if it is inside the opening of that tick.
+    Gate b;
+    b.cx = 0;
+    b.hw = 1.5f;
+    b.z = 12;
+    b.breath = 4.0f;
+    GT_CHECK_MSG(std::fabs(gateHwAt(b, 0.0f) - 0.9f) < 1e-4f && std::fabs(gateHwAt(b, 2.0f) - 1.8f) < 1e-4f,
+                 "a breathing gate opens from 60% to 120% of its half-width");
+    LevelDef bd = emptyLevel();
+    bd.gates[bd.gateCount++] = b;
+    w.init(bd, 1);
+    place(w.w, 1.2f, 11.95f, 1);
+    w.tick(in);
+    const int narrow = w.w.n;
+    while (w.tickCount < 120) w.tick(in);
+    w.w.n = 0;
+    place(w.w, 1.2f, 11.95f, 1);
+    w.tick(in);
+    GT_CHECK_MSG(narrow == 1 && w.w.n == 2, "a wisp 1.2 m out misses the narrow gate and passes the wide one");
+    // A sliding wall is crossed where it is, not where it started.
+    LevelDef sw = emptyLevel();
+    Barrier wall;
+    wall.x0 = -1.0f;
+    wall.x1 = 1.0f;
+    wall.z = 15.0f;
+    wall.health = 40;
+    wall.amp = 2.0f;
+    wall.period = 4.0f;  // phase 0: shifted -2 at the start (it spans -3 .. -1)
+    sw.barriers[sw.barrierCount++] = wall;
+    w.init(sw, 1);
+    place(w.w, 0.0f, 14.95f, 5);
+    place(w.w, -2.0f, 14.95f, 5);
+    w.tick(in);
+    GT_CHECK_MSG(w.barrierHealth[0] == 35 && tideOf(w) == 5, "a sliding wall stops the wisp where it is, not where it was built");
+    // A side door: its glooms appear on the rail at its height, step in sideways for a second, then walk down.
+    LevelDef dd = emptyLevel();
+    dd.targetT = 1000;
+    dd.baseFlow = 2;
+    Emitter door;
+    door.side = 1;
+    door.z = 20;
+    door.x = kHW - 0.45f;
+    dd.emitters[dd.emitterCount++] = door;
+    w.init(dd, 1);
+    while (w.g.n == 0 && w.tickCount < 600) w.tick(in);
+    const bool entered = w.g.n == 1 && w.g.x[0] > 4.2f && std::fabs(w.g.z[0] - 20.0f) < 0.5f && (w.g.flags[0] & kStepping);
+    const float z0 = w.g.z[0];
+    for (int t = 0; t < 63; ++t) w.tick(in);
+    const bool stepped = !(w.g.flags[0] & kStepping) && w.g.x[0] < 3.3f && w.g.z[0] > z0 - 0.2f;
+    for (int t = 0; t < 60; ++t) w.tick(in);
+    GT_CHECK_MSG(entered && stepped && w.g.z[0] < z0 - 1.0f, "a side door's gloom steps in, then walks down");
+    // A runner walks at runnerSpeed.
+    LevelDef rd = emptyLevel();
+    w.init(rd, 1);
+    place(w.g, 0.0f, 30.0f, 1);
+    w.g.flags[0] = kRunner;
+    for (int t = 0; t < 60; ++t) w.tick(in);
+    GT_CHECK_MSG(std::fabs(w.g.z[0] - (30.0f - tune.runnerSpeed)) < 0.05f, "a runner walks at runnerSpeed");
+    // Each plan's flow averaged over T is the base flow (VARIETY_DESIGN 5.1), for several T.
+    bool flat = true;
+    for (float T : {24.0f, 30.4f, 36.0f, 50.4f}) {
+        for (int p = 0; p < kPlanCount; ++p) {
+            if (p == kPlanBruteLine) continue;  // half here, half as brutes: in the world check below
+            double sum = 0;
+            const int n = 20000;
+            for (int k = 0; k < n; ++k) sum += double(planFlow(p, (float(k) + 0.5f) * T / float(n), T));
+            if (std::fabs(sum / n - 1.0) > 0.01) {
+                flat = false;
+                std::printf("plan %s over %.1f s averages %.3f\n", planName(p), double(T), sum / n);
+            }
+        }
+    }
+    GT_CHECK_MSG(flat, "every plan's shape averages 1 over T");
+    bool totals = true;
+    for (int p = 0; p < kPlanCount; ++p) {
+        LevelDef pd = emptyLevel();
+        pd.len = 44;
+        pd.targetT = 40;
+        pd.baseFlow = 12;
+        pd.plan = u8(p);
+        pd.emitters[pd.emitterCount++].x = -2.5f;
+        pd.emitters[pd.emitterCount++].x = 2.5f;
+        w.init(pd, 1);
+        w.noDamage = true;  // the glooms reach the lantern; the run must not end
+        while (w.time() < tune.emitterDelay + 40.0f) w.tick(in);
+        const double got = double(w.gloomSpawned), want = 12.0 * 40.0;
+        if (std::fabs(got / want - 1.0) > 0.06) {
+            totals = false;
+            std::printf("plan %s made %.0f power in T, want %.0f\n", planName(p), got, want);
+        }
+    }
+    GT_CHECK_MSG(totals, "every plan sends the level's total enemy over T");
+    // KINDLE: x5 counts as x6 and stops there; a wisp that passed before is not touched again.
+    LevelDef kd = emptyLevel();
+    Gate k5;
+    k5.cx = -2.5f;
+    k5.hw = 1.5f;
+    k5.z = 12;
+    k5.k = 5;
+    Gate k6 = k5;
+    k6.cx = 2.5f;
+    k6.k = 6;
+    kd.gates[kd.gateCount++] = k5;
+    kd.gates[kd.gateCount++] = k6;
+    kd.geodes[kd.geodeCount++] = geodeAt(0, 30, 1, kBoonKindle);
+    w.init(kd, 1);
+    w.tick(in);
+    place(w.w, -2.5f, 12.05f, 1);  // already past the x5
+    w.w.bits[0] = 1u;
+    place(w.w, 0.0f, 30.0f, 1);  // opens KINDLE
+    w.tick(in);
+    const bool kindled = w.kindle == 1 && w.geodeState[0] == kGeodeOpened;
+    w.w.n = 0;
+    place(w.w, -2.5f, 12.05f, 1);
+    w.w.bits[0] = 1u;  // passed the x5 before KINDLE
+    place(w.w, -2.5f, 11.95f, 1);
+    place(w.w, 2.5f, 11.95f, 1);
+    w.tick(in);
+    int left = 0, right = 0;
+    for (int i = 0; i < w.w.n; ++i) (w.w.x[i] < 0 ? left : right) += 1;
+    GT_CHECK_MSG(kindled && left == 1 + 6 && right == 6, "KINDLE: x5 gives x6, x6 stays x6, a wisp already through is not touched");
+    // COMET: each lantern fires one comet, a wisp with 4 s of that lantern's fire.
+    LevelDef cd = emptyLevel();
+    cd.geodes[cd.geodeCount++] = geodeAt(0, 30, 1, kBoonComet);
+    w.init(cd, 1);
+    w.lanterns = 2;
+    w.bright = 1;
+    w.tick(in);
+    place(w.w, 0.0f, 30.0f, 1);
+    w.tick(in);
+    int comets = 0;
+    i32 cometPower = 0;
+    for (int i = 0; i < w.w.n; ++i)
+        if (w.w.flags[i] & kComet) ++comets, cometPower = w.w.power[i];
+    GT_CHECK_MSG(comets == 2 && cometPower == i32(w.fireRate() * tune.cometSeconds * 2.0f), "COMET: a comet a lantern with 4 s of its fire");
+    // HUSH: the emitters stop on the tick it opens and start again on the tick it ends.
+    LevelDef sd = emptyLevel();
+    sd.targetT = 1000;
+    sd.baseFlow = 30;
+    sd.emitters[sd.emitterCount++].x = 0;
+    sd.geodes[sd.geodeCount++] = geodeAt(0, 10, 1, kBoonHush);
+    w.init(sd, 1);
+    while (w.time() < 3.0f) w.tick(in);
+    place(w.w, 0.0f, 10.0f, 1);
+    w.tick(in);
+    const int until = w.hushUntil;
+    const i64 at = w.gloomSpawned;
+    while (w.tickCount < until) w.tick(in);
+    const i64 quiet = w.gloomSpawned - at;
+    for (int t = 0; t < 30; ++t) w.tick(in);
+    GT_CHECK_MSG(until == w.tickCount - 30 && quiet == 0 && w.gloomSpawned - at >= 10, "HUSH: six quiet seconds, then the flow again");
+}
+
 // At the cap three lanterns still feed three columns: the shot's power joins a wisp of its own lantern.
 void testCapThreeLanterns() {
     const float saved = tune.capW;
@@ -389,7 +563,30 @@ void testCapThreeLanterns() {
     for (int i = 0; i < w.w.n; ++i) col[w.w.x[i] < -0.45f ? 2 : w.w.x[i] > 0.45f ? 1 : 0] += w.w.power[i];
     GT_CHECK_MSG(w.w.n <= 90 && col[0] > 0 && col[1] > 0 && col[2] > 0 && col[0] < 2 * col[1] && col[1] < 2 * col[0] && col[2] < 2 * col[0],
                  "at the cap three lanterns keep three columns");
+    // Three lanterns at their fastest and heaviest through a kindled lane of x5 gates (each counts x6): still the cap.
     tune.capW = saved;
+    LevelDef k = emptyLevel();
+    k.len = 44;
+    for (int r = 0; r < 4; ++r) {
+        Gate g;
+        g.cx = 0;
+        g.hw = 1.8f;
+        g.z = 8.0f + 7.0f * float(r);
+        g.k = 5;
+        g.row = u8(r);
+        k.gates[k.gateCount++] = g;
+    }
+    w.init(k, 1);
+    w.lanterns = 3;
+    w.quicken = int(tune.quickenMax);
+    w.bright = int(tune.brightMax);
+    w.kindle = 1;
+    int peak = 0;
+    for (int t = 0; t < 900; ++t) {
+        w.tick(fire);
+        peak = maxv(peak, w.w.n);
+    }
+    GT_CHECK_MSG(peak <= int(tune.capW) && tideOf(w) > 10000, "three lanterns through a kindled lane stay under the cap");
 }
 
 void testNoAllocation() {
@@ -409,6 +606,14 @@ void testNoAllocation() {
     const u64 before2 = allocationCount();
     for (int t = 0; t < 1800; ++t) w.tick(bot.think(w));
     GT_CHECK_MSG(allocationCount() == before2, "no heap allocation on a geode level");
+    // Plans, side doors, runners, hoppers and breathing gates (levels 16, 28, 30, 38).
+    const u64 before3 = allocationCount();
+    for (int level : {16, 28, 30, 38}) {
+        w.init(levelFor(level), 3);
+        bot.init(BotKind::Greedy, 3);
+        for (int t = 0; t < 900; ++t) w.tick(bot.think(w));
+    }
+    GT_CHECK_MSG(allocationCount() == before3, "no heap allocation with plans, doors, runners, hoppers, breaths");
 #endif
 }
 
@@ -432,18 +637,38 @@ void testGenerator() {
             for (int g = 0; g < L.gateCount; ++g) mul = mul || (L.gates[g].row == r && L.gates[g].kind == kGateMul);
             if (!mul) ok = false, std::snprintf(why, sizeof why, "row %d has no multiply gate", r);
         }
-        // Gates of a row never overlap (crossing sliders cross on purpose); openings stay inside the lane.
+        // Gates of a row never overlap (crossing sliders cross on purpose); openings stay inside the lane; a hopper or a
+        // breathing gate is never also a slider (VARIETY_DESIGN 4).
         for (int a = 0; ok && a < L.gateCount; ++a) {
             const Gate& A = L.gates[a];
-            const float reach = A.slides ? A.amp : 0.0f;
+            const float reach = A.slides ? A.amp : A.breath > 0 ? 0.2f * A.hw : 0.0f;
             if (std::fabs(A.cx) + reach + A.hw > kHW + 1e-3f) ok = false, std::snprintf(why, sizeof why, "gate %d leaves the lane", a);
             if (A.hw < 1.2f - 1e-3f || A.hw > 1.8f + 1e-3f) ok = false, std::snprintf(why, sizeof why, "gate %d half-width %.2f", a, double(A.hw));
+            if (A.breath > 0 && A.slides) ok = false, std::snprintf(why, sizeof why, "gate %d breathes and moves", a);
+            if (A.slides == kGateHop && (A.period < 1.5f - 1e-3f || A.period > 2.5f + 1e-3f))
+                ok = false, std::snprintf(why, sizeof why, "hopper %d stays %.2f s", a, double(A.period));
             for (int b = a + 1; ok && b < L.gateCount; ++b) {
                 const Gate& B = L.gates[b];
                 if (std::fabs(A.z - B.z) > 0.01f || A.slides || B.slides) continue;
-                if (std::fabs(A.cx - B.cx) < A.hw + B.hw - 1e-3f) ok = false, std::snprintf(why, sizeof why, "gates %d and %d overlap", a, b);
+                const float wa = A.hw * (A.breath > 0 ? 1.2f : 1.0f), wb = B.hw * (B.breath > 0 ? 1.2f : 1.0f);
+                if (std::fabs(A.cx - B.cx) < wa + wb - 1e-3f) ok = false, std::snprintf(why, sizeof why, "gates %d and %d overlap", a, b);
             }
         }
+        // Sliding walls stay inside the lane; side doors stand on a rail between z 14 and len - 8; shares add up to 1.
+        for (int a = 0; ok && a < L.barrierCount; ++a) {
+            const Barrier& B = L.barriers[a];
+            if (B.x0 - B.amp < -kHW - 1e-3f || B.x1 + B.amp > kHW + 1e-3f) ok = false, std::snprintf(why, sizeof why, "wall %d leaves the lane", a);
+        }
+        float shares = 0;
+        for (int e = 0; ok && e < L.emitterCount; ++e) {
+            const Emitter& E = L.emitters[e];
+            shares += E.share;
+            if (E.side && (E.z < 14.0f - 1e-3f || E.z > maxv(14.0f, L.len - 8.0f) + 1e-3f))
+                ok = false, std::snprintf(why, sizeof why, "side door at z %.1f", double(E.z));
+        }
+        if (ok && shares > 0 && std::fabs(shares - 1.0f) > 1e-3f) ok = false, std::snprintf(why, sizeof why, "shares add to %.3f", double(shares));
+        if (ok && (L.burstCount > (L.boss ? 2 : 0) || L.bruteEvery > 0)) ok = false, std::snprintf(why, sizeof why, "bursts or brutes outside a plan");
+        if (ok && index < planFrom(L.plan)) ok = false, std::snprintf(why, sizeof why, "plan %s before its level", planName(L.plan));
         // Gaps: a bumper to the walls, to other bumpers and to gate posts at least 1.2 m.
         for (int a = 0; ok && a < L.bumperCount; ++a) {
             const Bumper& A = L.bumpers[a];
@@ -473,12 +698,14 @@ void testGenerator() {
         bool seen[kBoonCount] = {};
         for (int g = 0; ok && g < L.geodeCount; ++g) {
             const Geode& G = L.geodes[g];
-            const bool lasting = G.boon != kBoonWard;
+            const bool lasting = G.boon != kBoonWard && G.boon != kBoonComet && G.boon != kBoonHush;
             if (g == 0 && (G.t < 0.08f * L.targetT - 1e-3f || G.t > 0.25f * L.targetT + 1e-3f))
                 ok = false, std::snprintf(why, sizeof why, "first geode at %.1f s of %.0f", double(G.t), double(L.targetT));
             if (g > 0 && G.t < L.geodes[g - 1].t + 5.0f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "geodes under 5 s apart");
-            if (lasting && G.t > 0.75f * L.targetT + 1e-3f) ok = false, std::snprintf(why, sizeof why, "a lasting boon after 75%% of T");
-            if (g == 0 && index <= 60 && !lasting) ok = false, std::snprintf(why, sizeof why, "the first geode is a WARD");
+            if (G.boon != kBoonWard && G.t > 0.75f * L.targetT + 1e-3f) ok = false, std::snprintf(why, sizeof why, "a boon after 75%% of T");
+            if (g == 0 && index <= 60 && !lasting) ok = false, std::snprintf(why, sizeof why, "the first geode is an instant");
+            const int from[kBoonCount] = {6, 7, 12, 23, 36, 52, 63};
+            if (index < from[G.boon]) ok = false, std::snprintf(why, sizeof why, "%s before its level", boonName(G.boon));
             if (std::fabs(G.x) + G.amp > 3.9f + 1e-3f) ok = false, std::snprintf(why, sizeof why, "geode %d outside the reachable lane", g);
             if (G.hp <= 0 || (G.shieldSeconds > 0 && G.shield <= 0)) ok = false, std::snprintf(why, sizeof why, "geode %d has no health", g);
             if (!seen[G.boon]) seen[G.boon] = true, ++kinds;
@@ -567,6 +794,7 @@ void runSimTests() {
     testBumper();
     testGeodes();
     testCapThreeLanterns();
+    testLaneAndEnemy();
     testNoAllocation();
     testGenerator();
     testCameraFit();

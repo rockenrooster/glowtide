@@ -37,13 +37,17 @@ Fingerprint fingerprintOf(const LevelDef& L) {
     Map m{fp, 4.0f, maxv(1.0f, L.len - 8.0f) / float(kFpBands)};
     for (int i = 0; i < L.gateCount; ++i) {
         const Gate& G = L.gates[i];
-        const float reach = G.slides ? G.amp : 0.0f;
+        const float reach = G.slides ? G.amp : G.breath > 0 ? 0.2f * G.hw : 0.0f;  // a breath opens to 120%
         const u8 code = G.kind == kGateMul ? u8(kFpMul + clampv(int(G.k), 2, 6)) : u8(kFpDiv);
-        m.cover(G.cx - reach - G.hw, G.cx + reach + G.hw, G.z, G.z, code, G.slides != 0);
+        m.cover(G.cx - reach - G.hw, G.cx + reach + G.hw, G.z, G.z, code, G.slides != 0 || G.breath > 0);
     }
     for (int i = 0; i < L.barrierCount; ++i) {
         const Barrier& B = L.barriers[i];
-        m.cover(B.x0, B.x1, B.z, B.z, kFpWall, false);
+        m.cover(B.x0 - B.amp, B.x1 + B.amp, B.z, B.z, kFpWall, B.amp > 0);
+    }
+    for (int i = 0; i < L.emitterCount; ++i) {  // side doors, on the rail
+        const Emitter& E = L.emitters[i];
+        if (E.side) m.cover(float(E.side) * (kHW - 0.6f), float(E.side) * (kHW - 0.6f), E.z - 0.6f, E.z + 0.6f, kFpDoor, false);
     }
     for (int i = 0; i < L.bumperCount; ++i) {
         const Bumper& B = L.bumpers[i];

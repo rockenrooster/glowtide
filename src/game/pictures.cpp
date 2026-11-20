@@ -223,6 +223,7 @@ bool Game::setupPicture(const char* name) {
         world_.lanterns = 3;
         world_.quicken = 3;
         world_.bright = 2;
+        world_.kindle = 1;  // V2: through a kindled lane, and a full tray of four chips
         for (int t = 0; t < 60 * 4 && world_.result == sim::Result::None; ++t) {
             world_.tick(bot_.think(world_));
             view_.onTick(world_);
@@ -231,15 +232,20 @@ bool Game::setupPicture(const char* name) {
         worldTicks_ = true;
         return true;
     }
-    if (!std::strcmp(name, "geode_strip") || !std::strcmp(name, "ward_strip")) {
-        // A geode cracking and opening, its icon flying to the tray (level 6's LANTERN), or WARD's ring (level 23's second
-        // geode): played by greedy until the geode is under 40% of its health; the strip's frames run through the rest.
+    if (!std::strcmp(name, "geode_strip") || !std::strcmp(name, "ward_strip") || !std::strcmp(name, "kindle_strip") ||
+        !std::strcmp(name, "comet_strip")) {
+        // A geode cracking and opening, its icon flying to the tray (level 6's LANTERN), WARD's ring (level 23's second
+        // geode), KINDLE's count-up run up the lane (level 36's first) or COMET's tails (level 52's second): played until the
+        // geode is under 40% of its health (greedy; hungry for the later two, which are detours); the frames run the rest.
         std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
-        const bool ward = !std::strcmp(name, "ward_strip");
-        const int gi = ward ? 1 : 0;
-        enterLevel(ward ? 23 : 6, false);
+        const bool ward = !std::strcmp(name, "ward_strip"), kindle = !std::strcmp(name, "kindle_strip"),
+                   comet = !std::strcmp(name, "comet_strip");
+        enterLevel(ward ? 23 : kindle ? 36 : comet ? 52 : 6, false);
+        int gi = ward ? 1 : 0;
+        for (int g = world_.def.geodeCount - 1; g >= 0; --g)  // the level's first geode of the strip's boon
+            if (world_.def.geodes[g].boon == (kindle ? sim::kBoonKindle : comet ? sim::kBoonComet : world_.def.geodes[gi].boon)) gi = g;
         coldStart_ = false;
-        bot_.init(sim::BotKind::Greedy, 1);
+        bot_.init(kindle || comet ? sim::BotKind::Hungry : sim::BotKind::Greedy, 1);
         useBot_ = true;
         startPlaying();
         for (int t = 0; t < 60 * 60 && world_.result == sim::Result::None; ++t) {
@@ -371,12 +377,25 @@ bool Game::setupPicture(const char* name) {
         s.amp = 1.6f;
         s.phase = 0.25f;
         def.gates[def.gateCount++] = s;
-        def.gates[def.gateCount++] = gate(2.6f, 1.5f, 22, 4, true, 2);
+        sim::Gate br = gate(2.6f, 1.5f, 22, 4, true, 2);  // V2: a breathing gate, here at its widest
+        br.breath = 4.0f;
+        br.phase = 0.5f;
+        def.gates[def.gateCount++] = br;
         def.gates[def.gateCount++] = gate(2.7f, 1.2f, 14.8f, 3, false, 1);  // a divide-by-three
-        def.barriers[def.barrierCount++] = {1.0f, 4.2f, 20.0f, 40};
+        sim::Gate h = gate(-0.2f, 1.3f, 30, 2, true, 3);  // a hopper on its left, its ghost frame on the right
+        h.slides = sim::kGateHop;
+        h.amp = 2.2f;
+        h.period = 2.0f;
+        def.gates[def.gateCount++] = h;
+        def.barriers[def.barrierCount++] = {1.0f, 4.2f, 20.0f, 40, 0.6f, 5.0f, 0.0f};  // a sliding wall, shifted left
         def.bumpers[def.bumperCount++] = {-3.1f, 21.0f, 0.7f};
         def.snuffers[def.snufferCount++] = {-3.6f, -0.6f, 26.5f, 3.0f, 0.25f};
         def.emitters[def.emitterCount++] = {0, 0, 5, 0};
+        sim::Emitter door;  // a side door on the left rail
+        door.side = -1;
+        door.z = 17.5f;
+        door.x = -(sim::kHW - 0.45f);
+        def.emitters[def.emitterCount++] = door;
     }
     world_.init(def, 0);
     world_.launcherX = kLX;
@@ -404,6 +423,11 @@ bool Game::setupPicture(const char* name) {
         if (!std::strcmp(name, "elements")) {
             for (int k = 0; k < 40; ++k) addUnit(world_.w, sim::kMaxWisps, kLX + r.range(-0.4f, 0.4f), r.range(sim::kMuzzleZ + 0.1f, 7.5f), 1, 0, r);
             for (int k = 0; k < 30; ++k) addUnit(world_.g, sim::kMaxGlooms, r.range(-3, 3), r.range(31, 35), 1, 0, r);
+            // V2: a pack of runners, two glooms stepping in at the side door, a comet leaving the lantern; a kindled lane.
+            for (int k = 0; k < 9; ++k) addUnit(world_.g, sim::kMaxGlooms, 0.8f + r.range(-0.9f, 0.9f), 11.0f + r.range(-1.2f, 1.2f), 1, sim::kRunner, r);
+            for (int k = 0; k < 2; ++k) addUnit(world_.g, sim::kMaxGlooms, -4.2f + 0.7f * float(k), 17.5f + 0.5f * float(k), 1, sim::kStepping, r);
+            addUnit(world_.w, sim::kMaxWisps, kLX + 0.6f, 9.5f, 96, sim::kComet, r);
+            world_.kindle = 1;
         }
     } else {
         return false;

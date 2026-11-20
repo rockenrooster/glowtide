@@ -36,10 +36,10 @@ int Feedback::takeHaptics(int* out, int max) {
 void Feedback::star(int k) { play(kSndStar0 + clampv(k, 0, 2), 0.7f, 0); }
 void Feedback::uiTap() { play(kSndUiTap, 0.5f, 0); }
 
-void Feedback::setTide(i64 tide) {
+void Feedback::setTide(i64 tide, bool hushed) {
     if (!mixer_) return;
     const float x = tide > 1 ? float(std::log10(double(tide))) / 4.0f : 0.0f;
-    mixer_->setIntensity(clampv(x, 0.0f, 1.0f));
+    mixer_->setIntensity(hushed ? -1.0f : clampv(x, 0.0f, 1.0f));
 }
 
 void Feedback::onTick(const sim::World& w, float t) {
@@ -144,13 +144,18 @@ void Feedback::onTick(const sim::World& w, float t) {
                 break;
             case sim::kEvBoon: {
                 // The boon's motif: three ladder notes, a shape each (lantern rises, quicken hurries, bright leaps, ward is a
-                // soft chord).
-                static const int notes[4][3] = {{5, 7, 9}, {6, 6, 8}, {3, 6, 10}, {2, 4, 7}};
-                static const float gaps[4] = {0.09f, 0.05f, 0.12f, 0.0f};
-                if (ev.a >= 0 && ev.a < 4) {
+                // soft chord, kindle runs up with its labels, comet rises fast after a thump, hush falls).
+                static const int notes[7][3] = {{5, 7, 9}, {6, 6, 8}, {3, 6, 10}, {2, 4, 7}, {2, 5, 8}, {4, 7, 10}, {8, 5, 2}};
+                static const float gaps[7] = {0.09f, 0.05f, 0.12f, 0.0f, 0.08f, 0.06f, 0.14f};
+                if (ev.a >= 0 && ev.a < 7) {
                     for (int k = 0; k < 3; ++k)
                         play(kSndLadder0 + notes[ev.a][k], ev.a == 3 ? 0.4f : 0.55f, 0, 1.0f, 0.18f + gaps[ev.a] * float(k));
-                    if (ev.a == 3) haptic(kHapticMedium, t);
+                    if (ev.a == sim::kBoonWard) haptic(kHapticMedium, t);
+                    if (ev.a == sim::kBoonKindle) haptic(kHapticLight, t);
+                    if (ev.a == sim::kBoonComet) {
+                        play(kSndThump, 0.8f, 0, 1.0f, 0.1f);
+                        haptic(kHapticStrong, t);
+                    }
                 }
                 break;
             }
@@ -170,7 +175,7 @@ void Feedback::onTick(const sim::World& w, float t) {
                 break;
         }
     }
-    setTide(w.tide);
+    setTide(w.tide, w.tickCount < w.hushUntil);
 }
 
 }  // namespace gt

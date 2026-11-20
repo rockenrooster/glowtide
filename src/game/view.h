@@ -82,6 +82,8 @@ private:
     float lanternPop_[3] = {};  // a new lantern pops out of the old one
     float wardRing_ = 0;        // WARD's gold ring spreading up the lane
     float barrelRing_ = 0;      // QUICKEN or BRIGHT: a ring runs up the barrel
+    float kindleT_ = -1;        // KINDLE: seconds since it was taken (-1: not this level); the labels count up row by row
+    int kindleRow_ = 0;         // the rows whose labels have counted up
     float pipsLit_ = 10;        // the pips relight one by one
     float launcherZ_[3] = {0.2f, 0.896f, 0.896f};  // side lanterns stand forward so every lens is at the muzzle
 
@@ -114,6 +116,6 @@ private:
     int propCount_ = 0;
 };
 
-const char* gateLabel(const sim::Gate& g, char* buf, int n);
+const char* gateLabel(const sim::Gate& g, char* buf, int n, int k = 0);  // k: the factor shown (0: the gate's own)
 
 }  // namespace gt

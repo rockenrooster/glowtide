@@ -39,8 +39,8 @@ inline float punchScale(float p) {
 
 }  // namespace
 
-const char* gateLabel(const sim::Gate& g, char* buf, int n) {
-    std::snprintf(buf, size_t(n), "%s%d", g.kind == sim::kGateMul ? "\xC3\x97" : "\xC3\xB7", int(g.k));
+const char* gateLabel(const sim::Gate& g, char* buf, int n, int k) {
+    std::snprintf(buf, size_t(n), "%s%d", g.kind == sim::kGateMul ? "\xC3\x97" : "\xC3\xB7", k > 0 ? k : int(g.k));
     return buf;
 }
 
@@ -76,6 +76,8 @@ void View::setLevel(const sim::LevelDef& d, int worldOverride) {
     }
     for (float& p : lanternPop_) p = 0;
     wardRing_ = barrelRing_ = 0;
+    kindleT_ = -1;
+    kindleRow_ = 0;
     pipsLit_ = float(d.coreHealth);
     for (Flash& f : flashes_) f.life = 0;
     clearParticles();
@@ -198,6 +200,11 @@ void View::onTick(const sim::World& w) {
                 } else if (ev.a == sim::kBoonWard) {
                     wardRing_ = 1.0f;
                     trauma = minv(1.0f, trauma + 0.15f);
+                } else if (ev.a == sim::kBoonKindle) {
+                    kindleT_ = 0;  // the labels count up, row by row up the lane
+                    kindleRow_ = 0;
+                } else if (ev.a == sim::kBoonComet) {
+                    trauma = minv(1.0f, trauma + 0.2f);
                 }
                 break;
             case sim::kEvGateMul: {
@@ -331,6 +338,14 @@ void View::update(float dt, const sim::World& w) {
     }
     for (float& p : lanternPop_) p = maxv(0.0f, p - k / 0.3f);
     wardRing_ = maxv(0.0f, wardRing_ - k / 0.7f);
+    if (kindleT_ >= 0) {  // KINDLE's run: each row's multiply gates count up with a punch, 80 ms apart
+        kindleT_ += k;
+        while (kindleRow_ < sim::kMaxRows && kindleT_ >= 0.08f * float(kindleRow_)) {
+            for (int g = 0; g < def.gateCount; ++g)
+                if (def.gates[g].row == kindleRow_ && def.gates[g].kind == sim::kGateMul) gatePunch_[g] = 1.0f, gateFlash_[g] = 1.0f;
+            ++kindleRow_;
+        }
+    }
     barrelRing_ = maxv(0.0f, barrelRing_ - k / 0.35f);
     // The pips relight one by one (WARD), and go out at once.
     pipsLit_ = float(w.core) < pipsLit_ ? float(w.core) : minv(float(w.core), pipsLit_ + k * 20.0f);
@@ -372,13 +387,18 @@ void View::buildUnits(const sim::World& w) {
         keys_[n] = u16(clampv(int((u.z[i] + 3.0f) * 100.0f), 0, kBuckets - 1));
         ++n;
     };
-    for (int i = 0; i < w.w.n; ++i)
-        put(w.w, i, u8(tick - w.w.born[i] < 12 && w.w.z[i] < sim::kMuzzleZ + 2.0f ? 4 : 0), tierOf(w.w.power[i]));
+    // Unit flags for the shaders: 1 gloom, 2 brute, 4 just fired, 8 a comet (a tail), 16 a runner (a streak), 32 a side
+    // door's gloom stepping in (it fades in).
+    for (int i = 0; i < w.w.n; ++i) {
+        const bool comet = (w.w.flags[i] & sim::kComet) != 0;
+        put(w.w, i, u8((tick - w.w.born[i] < 12 && w.w.z[i] < sim::kMuzzleZ + 2.0f ? 4 : 0) | (comet ? 8 : 0)), comet ? 3 : tierOf(w.w.power[i]));
+    }
     for (int i = 0; i < w.g.n; ++i) {
-        const bool brute = (w.g.flags[i] & sim::kBrute) != 0;
+        const u8 f = w.g.flags[i];
+        const bool brute = (f & sim::kBrute) != 0;
         int t = tierOf(w.g.power[i]);
         if (brute && t < 2) t = 2;
-        put(w.g, i, u8(1 | (brute ? 2 : 0)), t);
+        put(w.g, i, u8(1 | (brute ? 2 : 0) | (f & sim::kRunner ? 16 : 0) | (f & sim::kStepping ? 32 : 0)), t);
     }
     unitCount_ = n;
     // Counting sort on z (centimetres), far to near.
@@ -418,14 +438,24 @@ void View::buildUnits(const sim::World& w) {
             const sim::Gate& G = def.gates[g];
             if (std::fabs(G.z - zs[r]) > 0.01f || panelCount_ >= 32) continue;
             PanelInstance& p = panels_[panelCount_++];
-            p.x0 = w.gateX[g] - G.hw;
-            p.x1 = w.gateX[g] + G.hw;
+            p.x0 = w.gateX[g] - w.gateHw[g];  // a breathing gate's opening as it is now
+            p.x1 = w.gateX[g] + w.gateHw[g];
             p.z = G.z;
             p.flash = gateFlash_[g];
             p.kind = G.kind == sim::kGateMul ? 0.0f : 1.0f;
             p.arrows = G.slides ? 1.0f : 0.0f;
             p.punch = gatePunch_[g];
             p.pad = 0;
+            if (G.slides == sim::kGateHop && panelCount_ < 32) {
+                // A hopper's ghost frame where it will land next (VARIETY_DESIGN 4 #1): faint, edges only.
+                PanelInstance& q = panels_[panelCount_++];
+                q = p;
+                const float other = w.gateX[g] >= G.cx ? G.cx - G.amp : G.cx + G.amp;
+                q.x0 = other - G.hw;
+                q.x1 = other + G.hw;
+                q.flash = 0;
+                q.pad = 1;
+            }
         }
         cut.panelCount = panelCount_ - cut.panelFirst;
     }
@@ -500,15 +530,21 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     const float HW = sim::kHW, len = def.len;
     for (int g = 0; g < def.gateCount; ++g) {
         const sim::Gate& G = def.gates[g];
-        addLight(w.gateX[g], G.z - 0.55f, G.hw, 0.65f, G.kind == sim::kGateMul ? gp->good : gp->bad, 0.32f + gateFlash_[g] * 0.4f, 1);
+        addLight(w.gateX[g], G.z - 0.55f, w.gateHw[g], 0.65f, G.kind == sim::kGateMul ? gp->good : gp->bad, 0.32f + gateFlash_[g] * 0.4f, 1);
     }
     for (float sgn : {-1.0f, 1.0f}) addLight(sgn * (HW - 0.25f), len * 0.5f, 0.45f, len * 0.5f + 2.5f, wp->rail, 0.2f, 1);
-    addLight(0, len + 0.3f, 4.4f, 1.8f, gp->crack, 0.34f + 0.06f * pulse + spireFlash_ * 0.45f, 0);
+    // The emitters' glow at the spire's foot goes out while HUSH holds them (VARIETY_DESIGN 13).
+    const float hush = w.tickCount < w.hushUntil ? 0.3f : 1.0f;
+    addLight(0, len + 0.3f, 4.4f, 1.8f, gp->crack, (0.34f + 0.06f * pulse) * hush + spireFlash_ * 0.45f, 0);
+    for (int e = 0; e < def.emitterCount; ++e) {  // side doors: a rose glow on the lane in front of the arch
+        const sim::Emitter& E = def.emitters[e];
+        if (E.side) addLight(float(E.side) * (HW - 0.8f), E.z, 0.9f, 1.0f, gp->crack, 0.4f * hush, 0);
+    }
     addLight(w.launcherX, 0.4f, 2.2f, 1.5f, gp->wisp, 0.3f, 0);
     for (int b = 0; b < def.barrierCount; ++b) {
         if (w.barrierHealth[b] <= 0) continue;
         const sim::Barrier& B = def.barriers[b];
-        addLight((B.x0 + B.x1) * 0.5f, B.z - 0.45f, (B.x1 - B.x0) * 0.5f, 0.55f, gp->crack, 0.22f + barrierShake_[b] * 0.3f, 1);
+        addLight((B.x0 + B.x1) * 0.5f + w.barrierShift[b], B.z - 0.45f, (B.x1 - B.x0) * 0.5f, 0.55f, gp->crack, 0.22f + barrierShake_[b] * 0.3f, 1);
     }
     for (int i = 0; i < def.snufferCount; ++i) {
         const sim::Snuffer& S = def.snuffers[i];
@@ -573,13 +609,13 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
             p.glow = on ? 0.45f : 0.0f;
         }
     }
-    for (int g = 0; g < def.gateCount && propCount_ < kMaxProps - 2; ++g) {
+    for (int g = 0; g < def.gateCount && propCount_ < kMaxProps - 2; ++g) {  // posts that move: sliders, hoppers, breaths
         const sim::Gate& G = def.gates[g];
-        if (!G.slides) continue;
+        if (!G.slides && G.breath <= 0) continue;
         for (float sgn : {-1.0f, 1.0f}) {
             PropDraw& p = nextProp();
             p.mesh = G.kind == sim::kGateMul ? kMeshPostGood : kMeshPostBad;
-            p.model = translation(V3(w.gateX[g] + sgn * G.hw, 0, G.z));
+            p.model = translation(V3(w.gateX[g] + sgn * w.gateHw[g], 0, G.z));
             p.glow = 1;
         }
     }
@@ -625,7 +661,8 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     for (int b = 0; b < sim::kMaxBarriers; ++b) {
         s.barrierAlive[b] = b < def.barrierCount && w.barrierHealth[b] > 0;
         const float sh = barrierShake_[b] * 0.06f;
-        s.barrierOffset[b] = V3(std::sin(tt * 90.0f + float(b)) * sh, 0, 0);
+        // A sliding wall is drawn where it is (VARIETY_TECH 7: the offset the hit shake already uses).
+        s.barrierOffset[b] = V3((b < def.barrierCount ? w.barrierShift[b] : 0.0f) + std::sin(tt * 90.0f + float(b)) * sh, 0, 0);
     }
     s.emissiveGain = 1.0f;
 
@@ -637,13 +674,16 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
         for (int g = 0; g < def.gateCount; ++g) {
             const sim::Gate& G = def.gates[g];
             const V3 col = G.kind == sim::kGateMul ? gp->good : gp->bad;
-            label(gateLabel(G, buf, sizeof buf), V3(w.gateX[g], 1.95f, G.z - 0.05f), 1.45f, col * 0.2f, gatePunch_[g], labels);
+            // KINDLE: a multiply gate shows its new factor once the run up the lane has reached its row.
+            const bool kindled = w.kindle && G.kind == sim::kGateMul && (kindleT_ < 0 || G.row < kindleRow_);
+            const int k = kindled ? minv(int(tune.kindleMax), int(G.k) + 1) : int(G.k);
+            label(gateLabel(G, buf, sizeof buf, k), V3(w.gateX[g], 1.95f, G.z - 0.05f), 1.45f, col * 0.2f, gatePunch_[g], labels);
         }
         for (int b = 0; b < def.barrierCount; ++b) {
             if (w.barrierHealth[b] <= 0) continue;
             const sim::Barrier& B = def.barriers[b];
             std::snprintf(buf, sizeof buf, "%d", int(w.barrierHealth[b]));
-            label(buf, V3((B.x0 + B.x1) * 0.5f, 0.85f, B.z - 0.3f), 1.1f, gp->spireDark, barrierPunch_[b], labels);
+            label(buf, V3((B.x0 + B.x1) * 0.5f + w.barrierShift[b], 0.85f, B.z - 0.3f), 1.1f, gp->spireDark, barrierPunch_[b], labels);
         }
         for (int i = 0; i < w.g.n; ++i) {
             if (!(w.g.flags[i] & sim::kBrute)) continue;

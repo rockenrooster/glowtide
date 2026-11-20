@@ -38,7 +38,26 @@ inline void addRow(LevelDef& L, float z, Pattern p) {
 }
 
 inline void addEmitter(LevelDef& L, float x, float amp = 0, float period = 5, float phase = 0) {
-    if (L.emitterCount < kMaxEmitters) L.emitters[L.emitterCount++] = {x, amp, period, phase};
+    if (L.emitterCount < kMaxEmitters) {
+        Emitter& e = L.emitters[L.emitterCount++];
+        e = Emitter{};
+        e.x = x;
+        e.amp = amp;
+        e.period = period;
+        e.phase = phase;
+    }
+}
+
+// A side door (VARIETY_DESIGN 4 #4): an emitter on the rail at height z, with its share of the flow.
+inline void addDoor(LevelDef& L, int side, float z, float share) {
+    if (L.emitterCount < kMaxEmitters) {
+        Emitter& e = L.emitters[L.emitterCount++];
+        e = Emitter{};
+        e.side = i8(side);
+        e.z = z;
+        e.x = float(side) * (kHW - 0.45f);
+        e.share = share;
+    }
 }
 
 inline void addBurst(LevelDef& L, float t, float frac, float mult, float dur, int brutes) {
@@ -46,13 +65,14 @@ inline void addBurst(LevelDef& L, float t, float frac, float mult, float dur, in
 }
 
 // The generator's band for a level number (GAME_DESIGN 7.3): rows, the strongest multiply gate, pattern weights in
-// the order Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing.
+// the order Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing, Hopper, Breathing.
 struct Band {
     int rowsLo = 2, rowsHi = 3, strongest = 3;
-    float patternWeight[8] = {};
+    float patternWeight[kPatCount] = {};
 };
 Band bandFor(int index);           // calendar.cpp
-void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core and the level's brutes
+void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core
+int planFor(int index, Rng& r);        // calendar.cpp: the enemy's plan for a generated level
 void placeGeodes(LevelDef& L, Rng& r);  // recipes.cpp: VARIETY_DESIGN 9.3
 
 }  // namespace gt::sim

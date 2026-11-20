@@ -120,7 +120,10 @@ void Mixer::start(const Command& c) {
 
 void Mixer::musicStep(int frames) {
     const float dt = float(frames) / float(rate_);
-    intensityNow_ += (intensity_.load() - intensityNow_) * minv(1.0f, dt * 2.0f);
+    // Below zero: HUSH (VARIETY_DESIGN 13): the pad alone, no pulse and no plucks.
+    const float want = intensity_.load();
+    const bool padOnly = want < 0;
+    intensityNow_ += (maxv(0.0f, want) - intensityNow_) * minv(1.0f, dt * 2.0f);
     if (duckHold_ > 0) {
         duckHold_ -= dt;
         if (duckHold_ <= 0) duckTarget_ = 1.0f;
@@ -132,7 +135,7 @@ void Mixer::musicStep(int frames) {
     while (musicClock_ >= double(nextStep_) * double(kStep)) {
         const int step = nextStep_ % 32;
         const int bar = step / 8;
-        if (step % 4 == 0) {
+        if (step % 4 == 0 && !padOnly) {
             Command c;
             c.sound = kSndPulse;
             c.gain = 0.55f * duck_;
@@ -140,7 +143,7 @@ void Mixer::musicStep(int frames) {
         }
         pluckRng_ = pluckRng_ * 1664525u + 1013904223u;
         const float roll = float(pluckRng_ >> 8) / 16777216.0f;
-        if (roll < 0.10f + 0.45f * intensityNow_ && step % 2 == (bar & 1)) {
+        if (!padOnly && roll < 0.10f + 0.45f * intensityNow_ && step % 2 == (bar & 1)) {
             static const int cNotes[6] = {0, 2, 3, 5, 7, 8};   // C E G C' E' G'
             static const int aNotes[6] = {4, 0, 2, 9, 5, 7};   // A C E A' C' E'
             pluckRng_ = pluckRng_ * 1664525u + 1013904223u;

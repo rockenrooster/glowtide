@@ -6,6 +6,7 @@ out vec2 vLocal;
 flat out int vFlags;
 out float vSeed;
 out float vPx;      // pixels per unit radius (edge antialiasing)
+out float vFade;    // a side door's gloom fades in over its first second
 void main() {
     int flags = int(aInfo.x + 0.5);
     float seed = aInfo.y / 255.0;
@@ -31,12 +32,16 @@ void main() {
     float rr = r * pop;
     vec3 centre = vec3(xz.x, rr * 1.02 + hop + (gloom ? 0.0 : muzzleLift(xz.y)), xz.y);
     vec2 c = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
-    vec2 local = vec2(mix(-1.3, 1.3, c.x), mix(-1.25, gloom ? 1.7 : 2.15, c.y));
+    // Room for a runner's streak above it and a comet's tail below it.
+    float top = gloom ? ((flags & 16) != 0 ? 2.6 : 1.7) : 2.15;
+    float bottom = (flags & 8) != 0 ? -4.0 : -1.25;
+    vec2 local = vec2(mix(-1.3, 1.3, c.x), mix(bottom, top, c.y));
     float sx = 1.0 + (1.0 - sy) * 0.6;
     vec3 wp = centre + uCamRight.xyz * (local.x * rr * sx) + uCamUp.xyz * (local.y * rr * sy);
     gl_Position = uViewProj * vec4(wp, 1.0);
     vLocal = local;
     vFlags = flags;
+    vFade = (flags & 32) != 0 ? clamp(age, 0.15, 1.0) : 1.0;
     vSeed = seed;
     // Projected size of one radius in pixels (for the edge width).
     vec4 a = uViewProj * vec4(centre, 1.0);

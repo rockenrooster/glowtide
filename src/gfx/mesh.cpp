@@ -170,10 +170,10 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
             mb.octa(V3(x + (float(k) - 0.5f) * size * 0.6f, y + 0.1f, z + r.range(-0.3f, 0.3f)), 0.08f, hexColor(0xFFD7A0), true);
     }
 
-    // Gate posts of the fixed gates.
+    // Gate posts of the fixed gates (the view draws the posts that move: sliders, hoppers, breathing gates).
     for (int i = 0; i < def.gateCount; ++i) {
         const sim::Gate& G = def.gates[i];
-        if (G.slides) continue;
+        if (G.slides || G.breath > 0) continue;
         const V3 col = G.kind == sim::kGateMul ? gp.good : gp.bad;
         for (float s : {-1.0f, 1.0f}) {
             const float x = G.cx + s * G.hw;
@@ -189,6 +189,20 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
         const sim::Bumper& B = def.bumpers[i];
         mb.prism(V3(B.x, 0, B.z), B.r, B.r, 1.3f, 10, prop, true);
         mb.discE(V3(B.x, 1.31f, B.z), B.r * 0.5f, gp.good);
+    }
+
+    // Side doors (VARIETY_DESIGN 4 #4, 13): a dark arch standing across the rail, its opening toward the lantern so the
+    // rose glow inside reads as a doorway from the camera; its glooms step out of the opening's inner edge.
+    for (int i = 0; i < def.emitterCount; ++i) {
+        const sim::Emitter& E = def.emitters[i];
+        if (!E.side) continue;
+        const float s = float(E.side), cx = s * (HW + 0.25f), z = E.z;
+        const Ramp arch{hexColor(0x2A1646), hexColor(0x4C2A78), hexColor(0x120A22)};
+        mb.box(V3(cx - 1.05f, 0, z - 0.25f), V3(cx - 0.72f, 2.4f, z + 0.25f), arch, false);
+        mb.box(V3(cx + 0.72f, 0, z - 0.25f), V3(cx + 1.05f, 2.4f, z + 0.25f), arch, false);
+        mb.box(V3(cx - 1.15f, 2.4f, z - 0.3f), V3(cx + 1.15f, 2.85f, z + 0.3f), arch, false);
+        mb.quadE(V3(cx - 0.72f, 0.02f, z - 0.05f), V3(cx + 0.72f, 0.02f, z - 0.05f), V3(cx + 0.72f, 2.4f, z - 0.05f),
+                 V3(cx - 0.72f, 2.4f, z - 0.05f), gp.crack * 0.75f);
     }
 
     // The spire: its own range, so the win can take it away when it shatters.

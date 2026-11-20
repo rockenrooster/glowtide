@@ -26,6 +26,15 @@ public:
     int geodeOnLine(const World& w, float x) const;    // the first alive geode a stream from x meets, or -1
 
 private:
+    // The gates, walls, snuffers, plates and geodes up the lane in z order, as score() walks them: built once a tick.
+    static constexpr int kItems = kMaxGates + kMaxBarriers + kMaxSnuffers + 2 * kMaxGeodes;
+    void buildOrder(const World& w) const;
+    mutable const World* orderWorld_ = nullptr;
+    mutable int orderTick_ = -1, orderN_ = 0;
+    mutable int order_[kItems] = {};
+    mutable float zs_[kItems] = {};
+    mutable float geoX_[kMaxGeodes] = {};
+
     Rng rng_;
     float hand_ = 0;       // where the thumb has the launcher go
     float aim_ = 0;        // the decided position (applied after the reaction delay)

@@ -28,6 +28,7 @@ struct HudState {
     u8 trayBoon[4] = {};
     int trayHeld[4] = {};
     float trayPunch[4] = {};
+    float trayDrain[4] = {};  // a timed boon (HUSH): the share of its time left, drawn as a bar draining along the chip
     // Icons flying from an opened geode to its chip (0.4 s): where they started on screen and how far they are (0..1).
     struct Fly {
         u8 boon = 0;

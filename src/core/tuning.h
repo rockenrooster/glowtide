@@ -46,6 +46,19 @@
     X(quickenMax, 3.0f)                                                                                              \
     X(brightMax, 2.0f)          /* extra power per wisp at most */                                                   \
     X(wardZ, 14.0f)             /* WARD pops every gloom below this */                                               \
+    X(kindleMax, 6.0f)          /* KINDLE: a multiply gate counts one more, up to this */                            \
+    X(cometSeconds, 4.0f)       /* COMET: a wisp with this many seconds of its lantern's fire */                     \
+    X(hushSeconds, 6.0f)        /* HUSH: the emitters send nothing this long */                                      \
+    /* ---- the lane and the enemy (VARIETY_DESIGN 4, 5) ---- */                                                     \
+    X(hopCross, 0.25f)          /* s a hopper takes to jump */                                                       \
+    X(runnerSpeed, 5.0f)                                                                                             \
+    X(doorStep, 1.5f)           /* m/s a side door's glooms step in */                                               \
+    X(doorStepSeconds, 1.0f)                                                                                         \
+    X(pulsePeriod, 5.0f)        /* Pulse: half at 1.8 times the flow, half at 0.2 */                                 \
+    X(pincerSeconds, 4.0f)      /* Pincer: the two emitters swap this often */                                       \
+    X(rushSeconds, 8.0f)        /* Early rush: 1.6 times the flow this long */                                       \
+    X(bruteLineEvery, 4.0f)     /* Brute line: a brute this often, with half the flow */                             \
+    X(packEvery, 6.0f)          /* Runner packs: a pack this often */                                                \
     /* ---- art and feel ---- */                                                                                     \
     X(glowStrength, 1.0f)                                                                                            \
     X(glowUnit, 0.34f)          /* alpha of a unit's disc in the glow buffer */                                      \

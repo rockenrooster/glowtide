@@ -20,7 +20,7 @@ public:
     void onTick(const sim::World& w, float time);
     void star(int k);  // a star lands on the result screen (0..2)
     void uiTap();
-    void setTide(i64 tide);
+    void setTide(i64 tide, bool hushed = false);  // HUSH: the music's pad alone
 
     // Haptic requests since the last call (the platform plays them).
     int takeHaptics(int* out, int max);

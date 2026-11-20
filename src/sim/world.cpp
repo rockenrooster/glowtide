@@ -75,6 +75,50 @@ float easedWave(float p) {
     return 2.0f * e - 1.0f;
 }
 
+float gateXAt(const Gate& g, float t) {
+    if (g.slides == kGateSlide) return g.cx + g.amp * easedWave(t / g.period + g.phase);
+    if (g.slides == kGateHop) {
+        // A hop: `period` seconds at one place, tune.hopCross to cross (smoothstep), `period` at the other, back.
+        const float cross = tune.hopCross, cycle = 2.0f * (g.period + cross);
+        float p = t / cycle + g.phase;
+        p = (p - std::floor(p)) * cycle;
+        float s;
+        if (p < g.period) {
+            s = -1.0f;
+        } else if (p < g.period + cross) {
+            const float u = (p - g.period) / cross;
+            s = -1.0f + 2.0f * u * u * (3.0f - 2.0f * u);
+        } else if (p < 2.0f * g.period + cross) {
+            s = 1.0f;
+        } else {
+            const float u = (p - 2.0f * g.period - cross) / cross;
+            s = 1.0f - 2.0f * u * u * (3.0f - 2.0f * u);
+        }
+        return g.cx + g.amp * s;
+    }
+    return g.cx;
+}
+
+float gateHwAt(const Gate& g, float t) { return g.breath > 0 ? g.hw * (0.9f + 0.3f * easedWave(t / g.breath + g.phase)) : g.hw; }
+
+float barrierShiftAt(const Barrier& b, float t) { return b.amp > 0 ? b.amp * easedWave(t / b.period + b.phase) : 0.0f; }
+
+float planFlow(int plan, float t, float T) {
+    switch (plan) {
+        case kPlanPulse: {  // a whole number of pulses in T, so the average over T is the base flow exactly
+            const float P = T / maxv(1.0f, std::floor(T / tune.pulsePeriod + 0.5f));
+            float p = t / P;
+            p -= std::floor(p);
+            return p < 0.5f ? 1.8f : 0.2f;
+        }
+        case kPlanLateSurge: return t < 0.5f * T ? 0.6f : 1.4f;
+        case kPlanEarlyRush:  // 1.6 for the rush, then what keeps the average over T at 1
+            return t < tune.rushSeconds ? 1.6f : (T > tune.rushSeconds + 1.0f ? (T - 1.6f * tune.rushSeconds) / (T - tune.rushSeconds) : 1.0f);
+        case kPlanBruteLine: return 0.5f;  // the other half comes as brutes
+        default: return 1.0f;
+    }
+}
+
 World::~World() {
     if (!allocated_) return;
     freeUnits(w);
@@ -128,10 +172,14 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
     w.n = g.n = 0;
     for (int i = 0; i < def.gateCount; ++i) {
         const Gate& G = def.gates[i];
-        gateX[i] = G.slides ? G.cx + G.amp * easedWave(G.phase) : G.cx;
+        gateX[i] = gateXAt(G, 0);
+        gateHw[i] = gateHwAt(G, 0);
         gateCarry[i] = 0;
     }
-    for (int i = 0; i < def.barrierCount; ++i) barrierHealth[i] = def.barriers[i].health;
+    for (int i = 0; i < def.barrierCount; ++i) {
+        barrierHealth[i] = def.barriers[i].health;
+        barrierShift[i] = barrierShiftAt(def.barriers[i], 0);
+    }
     for (int i = 0; i < def.snufferCount; ++i) {
         const Snuffer& S = def.snuffers[i];
         snufferX[i] = (S.xa + S.xb) * 0.5f + (S.xb - S.xa) * 0.5f * easedWave(S.phase);
@@ -144,7 +192,15 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
         geodeShield[i] = i < def.geodeCount ? maxv<i32>(0, def.geodes[i].shield) : 0;
     }
     lanterns = 1;
-    quicken = bright = 0;
+    quicken = bright = kindle = 0;
+    hushUntil = 0;
+    weighted_ = false;
+    for (int e = 0; e < kMaxEmitters; ++e) {
+        credit_[e] = 0;
+        weighted_ = weighted_ || (e < def.emitterCount && def.emitters[e].share > 0);
+    }
+    nextPack_ = tune.emitterDelay + tune.packEvery * 0.5f;
+    nextLineBrute_ = tune.emitterDelay + tune.bruteLineEvery * 0.5f;
     geodesShown = geodesOpened = 0;
     spent = 0;
     spire = spireStart = maxv<i32>(1, def.spireHealth);
@@ -181,9 +237,12 @@ void World::addEvent(u8 type, float x, float z, i32 a, i32 b) {
 void World::emitWisp(float x, float z, i32 power, float lanternAt) {
     if (w.n >= capW_) {
         // Past the cap the shot's power joins the most recently fired wisp still near the launcher (GAME_DESIGN 5.3); with
-        // more than one lantern, one fired by the same lantern, so each column keeps its stream.
-        for (int i = w.n - 1; i >= 0 && i >= w.n - 64; --i) {
-            if (w.power[i] > 0 && w.bits[i] == 0 && (lanterns == 1 || std::fabs(w.x[i] - lanternAt) < 0.5f * tune.lanternGap)) {
+        // more than one lantern, one fired by the same lantern, so each column keeps its stream. The whole array is searched
+        // from its end: clones made at the gates since the last shot come after it (a 64-wisp window lost most shots on a
+        // kindled lane, VARIETY_PLAN V2).
+        for (int i = w.n - 1; i >= 0; --i) {
+            if (w.power[i] > 0 && w.bits[i] == 0 && w.z[i] < kMuzzleZ + 4.0f &&
+                (lanterns == 1 || std::fabs(w.x[i] - lanternAt) < 0.5f * tune.lanternGap)) {
                 w.power[i] += power;
                 produced += power;
                 return;
@@ -220,6 +279,39 @@ void World::emitGloom(float x, i32 power, bool brute) {
     g.seed[i] = u8(rng_.next());
     g.clashed[i] = 0;
     gloomSpawned += power;
+}
+
+// The emitter the next gloom comes from: Pincer's active one of its pair, the shares' weighted round robin, or in turn.
+int World::nextEmitter(float t) {
+    if (def.plan == kPlanPincer && def.emitterCount >= 2) return int(t / tune.pincerSeconds) % 2;
+    if (!weighted_) {
+        const int e = emitterNext_;
+        emitterNext_ = (emitterNext_ + 1) % def.emitterCount;
+        return e;
+    }
+    int best = 0;
+    for (int e = 0; e < def.emitterCount; ++e) {
+        credit_[e] += def.emitters[e].share;
+        if (credit_[e] > credit_[best]) best = e;
+    }
+    credit_[best] -= 1.0f;
+    return best;
+}
+
+// A gloom from emitter e: at the spire's foot, or stepping in from a side door on the rail.
+void World::emitGloomAt(int e, i32 power, u8 flags) {
+    const Emitter& E = def.emitters[e];
+    const float x = emitterX[e] + rng_.range(-0.4f, 0.4f);
+    if (E.side == 0) {
+        emitGloom(x, power, (flags & kBrute) != 0);
+        g.flags[g.n - 1] |= flags;
+        return;
+    }
+    emitGloom(float(E.side) * (kHW - 0.45f), power, (flags & kBrute) != 0);
+    const int i = g.n - 1;
+    g.z[i] = g.zp[i] = E.z + (x - emitterX[e]);
+    g.vx[i] = -float(E.side) * tune.doorStep;
+    g.flags[i] |= flags | kStepping;
 }
 
 int World::cellOf(float x, float z) const {
@@ -368,24 +460,37 @@ void World::tick(const Input& in) {
         float ramp = 1.0f;
         const float rampT = tune.rampStart * def.targetT;
         if (t > rampT) ramp += (t - rampT) / tune.rampSlope;
-        owed_ += def.baseFlow * flowScale * mult * ramp * dt;
+        const bool hushed = tickCount < hushUntil;  // HUSH: nothing comes, nothing is owed
+        if (!hushed) owed_ += def.baseFlow * flowScale * mult * ramp * planFlow(def.plan, t, def.targetT) * dt;
         if (def.bruteEvery > 0 && t >= nextBrute_) {
-            ++brutesNow;
+            if (!hushed) ++brutesNow;
             nextBrute_ += def.bruteEvery;
         }
         for (int b = 0; b < brutesNow && g.n < capG_; ++b) {
-            const float x = emitterX[emitterNext_] + rng_.range(-0.4f, 0.4f);
-            emitterNext_ = (emitterNext_ + 1) % def.emitterCount;
-            emitGloom(x, maxv<i32>(def.brutePower, 16), true);
+            emitGloomAt(nextEmitter(t), maxv<i32>(def.brutePower, 16), kBrute);
             owed_ -= float(maxv<i32>(def.brutePower, 16));
+        }
+        // Brute line: the other half of the flow as a brute every bruteLineEvery seconds (VARIETY_DESIGN 5.1).
+        if (def.plan == kPlanBruteLine && t >= nextLineBrute_) {
+            nextLineBrute_ += tune.bruteLineEvery;
+            const i32 p = maxv<i32>(1, i32(0.5f * def.baseFlow * flowScale * ramp * tune.bruteLineEvery + 0.5f));
+            if (!hushed && g.n < capG_) emitGloomAt(nextEmitter(t), p, kBrute);
+        }
+        // Runner packs: 8 to 14 runners at once, out of the flow (VARIETY_DESIGN 5.1).
+        if (def.plan == kPlanRunnerPacks && t >= nextPack_) {
+            nextPack_ += tune.packEvery;
+            const int pack = 8 + int(rng_.next() % 7u);
+            const int e = nextEmitter(t);
+            for (int k = 0; k < pack && !hushed && g.n < capG_; ++k) {
+                emitGloomAt(e, 1, kRunner);
+                owed_ -= 1.0f;
+            }
         }
         int spawned = 0;
         while (owed_ >= 1.0f && spawned < 30 && g.n < capG_) {
-            const float x = emitterX[emitterNext_] + rng_.range(-0.4f, 0.4f);
-            emitterNext_ = (emitterNext_ + 1) % def.emitterCount;
             // At the cap the owed power waits and joins the next gloom that fits (GAME_DESIGN 5.3).
             const i32 p = spawned == 0 && owed_ >= 2.0f && g.n >= capG_ - 1 ? i32(owed_) : 1;
-            emitGloom(x, p, false);
+            emitGloomAt(nextEmitter(t), p, 0);
             owed_ -= float(p);
             ++spawned;
         }
@@ -426,9 +531,17 @@ void World::tick(const Input& in) {
         g.xp[i] = g.x[i];
         g.zp[i] = g.z[i];
         g.clashed[i] = 0;
-        const float speed = (g.flags[i] & kBrute) ? tune.bruteSpeed : tune.gloomSpeed;
-        const float x = g.x[i] + clampv(launcherX - g.x[i], -homeStep, homeStep);
         const float r = radius(1, i);
+        if (g.flags[i] & kStepping) {  // a side door's gloom steps in sideways, then walks down like the others
+            g.x[i] = clampv(g.x[i] + g.vx[i] * dt, -kHW + r, kHW - r);
+            if (float(tickCount - g.born[i]) * dt >= tune.doorStepSeconds) {
+                g.flags[i] = u8(g.flags[i] & ~kStepping);
+                g.vx[i] = 0;
+            }
+            continue;
+        }
+        const float speed = (g.flags[i] & kBrute) ? tune.bruteSpeed : (g.flags[i] & kRunner) ? tune.runnerSpeed : tune.gloomSpeed;
+        const float x = g.x[i] + clampv(launcherX - g.x[i], -homeStep, homeStep);
         g.x[i] = clampv(x, -kHW + r, kHW - r);
         g.z[i] -= speed * dt;
     }
@@ -437,8 +550,11 @@ void World::tick(const Input& in) {
     const float t1 = t + dt;
     for (int i = 0; i < def.gateCount; ++i) {
         const Gate& G = def.gates[i];
-        if (G.slides) gateX[i] = G.cx + G.amp * easedWave(t1 / G.period + G.phase);
+        if (G.slides) gateX[i] = gateXAt(G, t1);
+        if (G.breath > 0) gateHw[i] = gateHwAt(G, t1);
     }
+    for (int i = 0; i < def.barrierCount; ++i)
+        if (def.barriers[i].amp > 0) barrierShift[i] = barrierShiftAt(def.barriers[i], t1);
     for (int i = 0; i < def.snufferCount; ++i) {
         const Snuffer& S = def.snuffers[i];
         const float span = maxv(0.1f, S.xb - S.xa);
@@ -492,11 +608,12 @@ void World::tick(const Input& in) {
         for (int gi = 0; gi < def.gateCount; ++gi) {
             const Gate& G = def.gates[gi];
             if (!(w.zp[i] < G.z && w.z[i] >= G.z)) continue;
-            if (std::fabs(w.x[i] - gateX[gi]) > G.hw) continue;
+            if (std::fabs(w.x[i] - gateX[gi]) > gateHw[gi]) continue;  // a breathing gate's opening as it is this tick
             const u32 bit = 1u << gi;
             if (w.bits[i] & bit) continue;
             w.bits[i] |= bit;
-            const int k = G.k;
+            // KINDLE: a multiply gate counts one more (at most kindleMax); a wisp that passed before is not touched again.
+            const int k = G.kind == kGateMul ? minv(int(tune.kindleMax), int(G.k) + kindle) : int(G.k);
             if (G.kind == kGateMul) {
                 const i32 p = w.power[i];
                 const int room = maxv(0, capW_ - reserve_ - w.n);
@@ -548,16 +665,17 @@ void World::tick(const Input& in) {
     for (int b = 0; b < def.barrierCount; ++b) {
         if (barrierHealth[b] <= 0) continue;
         const Barrier& B = def.barriers[b];
+        const float bx0 = B.x0 + barrierShift[b], bx1 = B.x1 + barrierShift[b];  // a sliding wall's span as it is this tick
         i32 dmg = 0;
         for (int i = 0; i < w.n && barrierHealth[b] > 0; ++i) {
-            if (w.power[i] <= 0 || !(w.zp[i] < B.z && w.z[i] >= B.z) || w.x[i] < B.x0 || w.x[i] > B.x1) continue;
+            if (w.power[i] <= 0 || !(w.zp[i] < B.z && w.z[i] >= B.z) || w.x[i] < bx0 || w.x[i] > bx1) continue;
             const i32 give = minv(w.power[i], barrierHealth[b]);
             barrierHealth[b] -= give;
             w.power[i] -= give;
             dmg += give;
         }
-        if (dmg) addEvent(kEvBarrierHit, (B.x0 + B.x1) * 0.5f, B.z, b, dmg);
-        if (barrierHealth[b] <= 0) addEvent(kEvBarrierBreak, (B.x0 + B.x1) * 0.5f, B.z, b, 0);
+        if (dmg) addEvent(kEvBarrierHit, (bx0 + bx1) * 0.5f, B.z, b, dmg);
+        if (barrierHealth[b] <= 0) addEvent(kEvBarrierBreak, (bx0 + bx1) * 0.5f, B.z, b, 0);
     }
 
     // Plates, then geodes: each takes up to the power of every wisp that touches it, like a barrier (VARIETY_DESIGN 2.1).
@@ -741,6 +859,19 @@ void World::openGeode(int gi) {
         case kBoonLantern: held = lanterns = minv(int(tune.lanternMax), lanterns + 1); break;
         case kBoonQuicken: held = quicken = minv(int(tune.quickenMax), quicken + 1); break;
         case kBoonBright: held = bright = minv(int(tune.brightMax), bright + 1); break;
+        case kBoonKindle: held = kindle = 1; break;
+        case kBoonComet: {
+            // One comet from each lantern: a wisp with cometSeconds of that lantern's fire.
+            const i32 p = maxv<i32>(1, i32(fireRate() * tune.cometSeconds * float(shotPower())));
+            for (int k = 0; k < lanterns; ++k) {
+                const int before = w.n;
+                emitWisp(lanternX(k), kMuzzleZ, p, lanternX(k));
+                if (w.n > before) w.flags[w.n - 1] |= kComet;
+            }
+            held = lanterns;
+            break;
+        }
+        case kBoonHush: held = 1, hushUntil = tickCount + int(tune.hushSeconds * 60.0f); break;
         case kBoonWard:
             core = maxv(core, def.coreHealth);
             for (int i = 0; i < g.n; ++i) {
@@ -792,7 +923,10 @@ u64 World::hash() const {
         h = fnv(h, &quicken, sizeof quicken);
         h = fnv(h, &bright, sizeof bright);
         h = fnv(h, &spent, sizeof spent);
+        h = fnv(h, &kindle, sizeof kindle);
+        h = fnv(h, &hushUntil, sizeof hushUntil);
     }
+    if (weighted_) h = fnv(h, credit_, sizeof credit_);
     h = fnv(h, &rng_.state, sizeof rng_.state);
     return h;
 }

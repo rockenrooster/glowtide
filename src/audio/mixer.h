@@ -25,7 +25,7 @@ public:
     void play(int sound, float gain, float pan, float pitch = 1.0f, float delay = 0.0f);
     void duck(float seconds);
     void setEnabled(bool effects, bool music);
-    void setIntensity(float x) { intensity_.store(x); }
+    void setIntensity(float x) { intensity_.store(x); }  // 0..1 from the tide; below 0 the pad alone (HUSH)
     void setTone(bool on) { tone_.store(on); }
     int dropped() const { return dropped_.load(); }
     int pushed() const { return int(head_.load()); }  // commands accepted since init (tests)

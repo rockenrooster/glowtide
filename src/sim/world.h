@@ -12,7 +12,8 @@ constexpr int kMaxGlooms = 2048;
 constexpr int kMaxEvents = 256;
 constexpr float kTick = 1.0f / 60.0f;
 
-enum UnitFlag : u8 { kBrute = 1 };
+// kStepping: a side door's gloom still stepping in (sideways, not yet walking down); kComet: COMET's wisp.
+enum UnitFlag : u8 { kBrute = 1, kRunner = 2, kStepping = 4, kComet = 8 };
 
 struct Units {
     int n = 0;
@@ -104,6 +105,8 @@ public:
     bool firing = false;
     Units w, g;
     float gateX[kMaxGates] = {};
+    float gateHw[kMaxGates] = {};           // a breathing gate's opening this tick
+    float barrierShift[kMaxBarriers] = {};  // a sliding wall's shift this tick
     i32 gateCarry[kMaxGates] = {};
     i32 barrierHealth[kMaxBarriers] = {};
     float snufferX[kMaxSnuffers] = {};
@@ -113,7 +116,8 @@ public:
     u8 geodeState[kMaxGeodes] = {};
     float geodeX[kMaxGeodes] = {}, geodeZ[kMaxGeodes] = {};
     i32 geodeHp[kMaxGeodes] = {}, geodeShield[kMaxGeodes] = {};
-    int lanterns = 1, quicken = 0, bright = 0;
+    int lanterns = 1, quicken = 0, bright = 0, kindle = 0;
+    int hushUntil = 0;  // HUSH: the tick the emitters send again
     int geodesShown = 0, geodesOpened = 0;
     i64 spent = 0;  // power given to geodes and plates: neither delivered nor cancelled
     int spireStage = 0;
@@ -136,6 +140,8 @@ private:
     void emitWisp(float x, float z, i32 power, float lanternAt);
     void openGeode(int g);
     void emitGloom(float x, i32 power, bool brute);
+    void emitGloomAt(int emitter, i32 power, u8 flags);
+    int nextEmitter(float t);
     void addEvent(u8 type, float x, float z, i32 a, i32 b);
     void buildGrid(const Units& u, int* start, int* order);
     void separate(Units& u, const int* start, const int* order, int team);
@@ -145,6 +151,9 @@ private:
     Rng rng_;
     float owed_ = 0, nextBrute_ = 0;
     int emitterNext_ = 0;
+    float credit_[kMaxEmitters] = {};  // shares: a weighted round robin
+    bool weighted_ = false;
+    float nextPack_ = 0, nextLineBrute_ = 0;
     int burstStart_[kMaxBursts] = {};
     int tideMark_ = 0;
     float geodePrevZ_[kMaxGeodes] = {};

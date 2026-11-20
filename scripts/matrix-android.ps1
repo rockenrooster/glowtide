@@ -7,7 +7,7 @@
 param(
     [Parameter(Mandatory)][string]$Serial,
     [switch]$NoInstall,
-    [string[]]$Pictures = @('concept')  # device picture checks (scripts\picture-android.ps1)
+    [string[]]$Pictures = @('concept', 'elements')  # device picture checks (scripts\picture-android.ps1); elements has runners and a kindled lane
 )
 . "$PSScriptRoot\env.ps1"
 

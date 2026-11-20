@@ -96,6 +96,52 @@ LevelDef introLevel(int index) {
             L.geodes[L.geodeCount++] = g;
             break;
         }
+        case 16: {
+            // The first hopper: a x4 jumping across the middle row, its ghost frame where it will land; plain gates below
+            // and above it, and nothing else new. Hint: IT JUMPS: WATCH THE GHOST.
+            L.len = 34;
+            addRow(L, 9, kPatHand);
+            addRow(L, 17, kPatHand);
+            addRow(L, 25, kPatHand);
+            addGate(L, mulGate(-2.6f, 1.6f, 9, 2, 0));
+            addGate(L, mulGate(2.6f, 1.4f, 9, 3, 0));
+            Gate h = mulGate(0, 1.5f, 17, 4, 1);
+            h.slides = kGateHop;
+            h.amp = 2.3f;
+            h.period = 2.0f;
+            addGate(L, h);
+            addGate(L, mulGate(-2.4f, 1.5f, 25, 2, 2));
+            addGate(L, mulGate(2.4f, 1.5f, 25, 2, 2));
+            addEmitter(L, -2.0f);
+            addEmitter(L, 2.0f);
+            break;  // no geode: one new thing (a geode here sat in some stream's spill, so it was no choice)
+        }
+        case 38: {
+            // The first breathing gates: a x3 in the middle that breathes, a trap, then a breathing x4 beside a plain x2;
+            // the enemy pulses.
+            L.len = 38;
+            L.plan = kPlanPulse;
+            addRow(L, 9, kPatHand);
+            addRow(L, 16, kPatHand);
+            addRow(L, 23, kPatHand);
+            addRow(L, 30, kPatHand);
+            Gate a = mulGate(0, 1.6f, 9, 3, 0);
+            a.breath = 4.0f;
+            addGate(L, a);
+            addGate(L, mulGate(-2.6f, 1.5f, 16, 3, 1));
+            addGate(L, divGate(2.6f, 1.5f, 16, 2, 1));
+            Gate b = mulGate(-1.8f, 1.5f, 23, 4, 2);
+            b.breath = 3.5f;
+            b.phase = 0.5f;
+            addGate(L, b);
+            addGate(L, mulGate(3.4f, 1.2f, 23, 2, 2));
+            addGate(L, mulGate(-2.4f, 1.5f, 30, 2, 3));
+            addGate(L, mulGate(2.4f, 1.4f, 30, 3, 3));
+            addEmitter(L, -2.5f);
+            addEmitter(L, 0);
+            addEmitter(L, 2.5f);
+            break;  // no geode: one new thing (a KINDLE down the right was cracked by the flood's spill as often as not)
+        }
         case 23: {
             // The first WARD: the enemy comes close down the middle. The right holds a x5 behind a wall but halves at the
             // top, so the best line is on the left; a BRIGHT comes down the right (a detour), then a WARD down the middle

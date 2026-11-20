@@ -64,6 +64,18 @@ float fanSpread(const LevelDef& L, float x, float z) {
     return s;
 }
 
+float kindleGain(const LevelDef& L, float x) {
+    float m = 1;
+    for (int i = 0; i < L.gateCount; ++i) {
+        const Gate& G = L.gates[i];
+        if (G.kind != kGateMul || std::fabs(x - G.cx) > G.hw + (G.slides ? G.amp : 0.0f)) continue;
+        const float share = G.slides ? G.hw / (G.hw + G.amp) : 1.0f;
+        const float k = float(G.k), k1 = float(minv(int(tune.kindleMax), int(G.k) + 1));
+        m *= (1.0f + share * (k1 - 1.0f)) / (1.0f + share * (k - 1.0f));
+    }
+    return m - 1.0f;
+}
+
 void sizeGeodes(LevelDef& L) {
     for (int i = 0; i < L.geodeCount; ++i) {
         Geode& G = L.geodes[i];
