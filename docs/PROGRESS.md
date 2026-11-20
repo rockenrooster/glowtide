@@ -14,7 +14,7 @@ just do what you think is best and let me know your choices."
 | P3 Game loop and UI | Done 2026-11-20 | Flow test on PC, Moto and tablet, lint over 43 renders, save, lifecycle, cold start 0.43 s (1.1 s before the P4 synthesis fix), back key on the Moto and the tablet |
 | P4 Audio | Done 2026-11-20 | Renders in `captures/p4/` (three ladder timbres through the flood); 10 min of `bench_flood` with sound on the Moto and on the tablet: no late callback on either |
 | P5 Content | Done 2026-11-20 | Levels 2-300 baked and accepted (4 min, 4 jobs); band tables in `captures/levels/bands.md`; 60 thumbnails reviewed; heaviest level (87) inside the contract on the Moto |
-| P6 Polish and release | Done 2026-11-20 | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; device matrix on the Moto and the tablet (all checks pass); the OnePlus 12R's row waits for its Wireless debugging |
+| P6 Polish and release | Done 2026-11-20 | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; device matrix on the Moto and the tablet (all checks pass); the OnePlus 12R skipped at the owner's word |
 
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
@@ -102,7 +102,7 @@ Other measurements (Moto unless named):
 |---|---|---|
 | Moto One 5G Ace (`ZY22BXMJG3`, the floor phone) | Yes, over Wi-Fi | Inside the contract everywhere: `bench_flood` 0.90% late / 35.4 ms worst on the final build (and 600 s with sound: 0.54%, 0 late audio callbacks); `bench_play` level 5 0.90%, level 87 (the heaviest) 0.79%; the 20-minute soak; flow test 45/45; lifecycle 20/20 back on PAUSE; cold start 0.43 s; back key; save through a force-stop; determinism equal to the PC; the release APK |
 | Galaxy Tab A11+ SM-X230 (`R5GL362BEHX`), Android 16, 1200x1920 at 240 dpi | Yes, over Wi-Fi (the owner switched Wireless debugging on) | All ten checks pass (`captures/matrix/R5GL362BEHX.md`): flow test 45/45, back key, save through a force-stop, cold start 0.52 s, lifecycle 20/20 back on PAUSE, `bench_flood` 0.00% late / 16.7 ms worst, `bench_play` level 87 0.00% late / 16.9 ms worst, CPU p95 5.3 ms. It ran at 60 Hz: the panel has a 90 Hz mode, but the tablet's Motion smoothness is set to Standard (`refresh_rate_mode` 0), which offers apps 60 Hz only; the game asked for the highest rate offered. 90 Hz needs that setting on Adaptive (the owner's to change), then `matrix-android.ps1 -Serial tablet` again |
-| OnePlus 12R (`a0e622a5`) | No: on the network at .112 and still paired, but Wireless debugging is off (see below) | Open: the 120 Hz panel and the fallback, the matrix row |
+| OnePlus 12R (`a0e622a5`) | Skipped by the owner on 2026-11-20 (its Wireless debugging was off) | Not run. Its screen (1264x2780 at 450 dpi) is in the layout matrix and passes the lint on the PC; the 120 Hz panel and the fallback are untested on a device. `matrix-android.ps1 -Serial op12r` runs it all |
 | Fire 7 (`GN41WE04450600BJ`) | No | Open: a report only (TECH_SPEC 5.10) |
 
 How the tablet and the 12R were looked for (2026-11-20, at the end of P6):
