@@ -208,7 +208,7 @@ bool Game::setupPicture(const char* name) {
         int level;
         sim::BotKind bot;
         int ticks;
-    } moments[] = {{"gate_strip", 3, sim::BotKind::Greedy, 150},   {"clash_strip", 5, sim::BotKind::Greedy, 60 * 12},
+    } moments[] = {{"gate_strip", 3, sim::BotKind::Greedy, 150},   {"clash_strip", 25, sim::BotKind::Greedy, 60 * 13},
                    {"core_hit_strip", 2, sim::BotKind::Idle, 0},   {"win_strip", 3, sim::BotKind::Greedy, 0},
                    {"boss_win_strip", 10, sim::BotKind::Greedy, 0}, {"lose_strip", 2, sim::BotKind::Idle, 0},
                    {"next_strip", 3, sim::BotKind::Greedy, 0}};

@@ -37,9 +37,8 @@ void main() {
         vec2 q = vec2(p.x - lean * clamp(p.y, 0.0, 2.0) / 1.85, p.y);
         d = sdUnevenCapsule(q, 1.0, 0.12, 1.75);
         float inner = -d;
-        bool white = (vFlags & 8) != 0;
-        vec3 body = white ? vec3(1.0, 0.96, 0.85) : uWisp[0].rgb;
-        vec3 rim = white ? vec3(1.0, 0.8, 0.45) : uWisp[2].rgb;
+        vec3 body = uWisp[0].rgb;
+        vec3 rim = uWisp[2].rgb;
         col = mix(rim, body, smoothstep(0.0, 0.16, inner));
         float lightD = length((p - vec2(-0.12, 0.18)) / vec2(0.5, 0.48));
         col = mix(col, uWisp[1].rgb, (1.0 - smoothstep(0.7, 1.0, lightD)) * 0.8);

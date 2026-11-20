@@ -1,5 +1,6 @@
 // The screens (GAME_DESIGN 11) and the flow test (TECH_SPEC 8.4).
 #include <cmath>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -259,6 +260,7 @@ void Game::drawSettings(float dt) {
 #endif
     char ver[64];
     std::snprintf(ver, sizeof ver, "VERSION %s (%s)", GT_VERSION, GT_COMMIT);
+    for (char* c = ver; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));  // the font is capitals only
     ui_.text(ver, float(L.w) * 0.5f, y + L.px(4), 14, 0xA0A0C8);
     y += L.px(24);
     ui_.text("FONT: ROBOTO, APACHE 2.0", float(L.w) * 0.5f, y, 13, 0xA0A0C8);

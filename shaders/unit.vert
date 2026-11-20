@@ -15,17 +15,19 @@ void main() {
     bool gloom = (flags & 1) != 0;
     float r = gloom ? kGloomR[tier] : kWispR[tier];
     float age = (aInfo.z + uTime.y) / 60.0;
-    float pop = age < 0.09 ? mix(0.3, 1.15, age / 0.09) : (age < 0.18 ? mix(1.15, 1.0, (age - 0.09) / 0.09) : 1.0);
+    // A clone pops 0.3 -> 1.15 -> 1 in 180 ms; a fired wisp (flag 4) grows 0.5 -> 1 in 90 ms (GAME_DESIGN 10).
+    float pop = (flags & 4) != 0 ? (age < 0.09 ? mix(0.5, 1.0, age / 0.09) : 1.0)
+                                 : (age < 0.09 ? mix(0.3, 1.15, age / 0.09) : (age < 0.18 ? mix(1.15, 1.0, (age - 0.09) / 0.09) : 1.0));
     float t = uTime.x;
     float hop;
     float sy = 1.0;
     if (!gloom) {
         float ph = fract(t * uParams2.x + seed);
         float s = sin(ph * 3.14159);
-        hop = uParams.w * s * (r / 0.26) * 0.7 + uTime.z * 0.35 * abs(sin(t * 7.0 + seed * 6.0));
+        hop = uParams.w * s * (r / 0.26) * 0.7 + max(uTime.z, 0.0) * 0.35 * abs(sin(t * 7.0 + seed * 6.0));
         sy = 1.0 - 0.16 * (1.0 - smoothstep(0.0, 0.3, s));
     } else {
-        hop = 0.06 * sin(t * 4.0 + seed * 6.28);
+        hop = 0.06 * sin(t * 4.0 + seed * 6.28) + max(-uTime.z, 0.0) * 0.3 * abs(sin(t * 6.0 + seed * 6.0));  // the lose
     }
     vec2 xz = aPos - aStep * (1.0 / 4096.0) * (1.0 - uTime.y);
     float rr = r * pop;

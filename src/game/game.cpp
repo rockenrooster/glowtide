@@ -482,6 +482,7 @@ void Game::update(float dt, float alpha) {
     } else if (screen_ == Screen::Lose) {
         resultTime_ += dt;
         view_.desaturate = minv(0.6f, resultTime_ / 0.6f * 0.6f);
+        view_.gloomCheer = minv(1.0f, resultTime_ / 0.5f);  // the glooms bounce
     }
     // bench_play keeps playing: 3 s after the result the same level starts again, so the measured window is play,
     // win sequences and level loads rather than a still result screen.
@@ -491,7 +492,7 @@ void Game::update(float dt, float alpha) {
         bot_.init(sim::BotKind::Greedy, 1);
         startPlaying();
     } else if (screen_ == Screen::Home || screen_ == Screen::Play) {
-        view_.cheer = view_.brighten = view_.desaturate = 0;
+        view_.cheer = view_.brighten = view_.desaturate = view_.gloomCheer = 0;
     }
     view_.update(viewDt * view_.timeScale, world_);
     // Haptics the feedback asked for.

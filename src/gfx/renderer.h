@@ -13,7 +13,7 @@ namespace gt {
 struct UnitInstance {
     float x, z;
     i16 dx, dz;  // last tick's displacement x 4096
-    u8 flags;    // 1 gloom, 2 brute, 8 white (frenzy)
+    u8 flags;    // 1 gloom, 2 brute, 4 a fired wisp (it pops in from the muzzle)
     u8 seed, age, tier;
 };
 static_assert(sizeof(UnitInstance) == 16, "unit instance");

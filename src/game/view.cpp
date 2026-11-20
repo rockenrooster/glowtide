@@ -65,7 +65,7 @@ void View::setLevel(const sim::LevelDef& d, int worldOverride) {
     bannerTime = 0;
     bannerMark = 0;
     spireFlash_ = spirePunch_ = 0;
-    cheer = brighten = desaturate = 0;
+    cheer = brighten = desaturate = gloomCheer = 0;
     timeScale = 1;
     for (int i = 0; i < sim::kMaxGates; ++i) gateFlash_[i] = gatePunch_[i] = 0;
     for (int i = 0; i < sim::kMaxBarriers; ++i) barrierShake_[i] = barrierPunch_[i] = 0;
@@ -122,17 +122,20 @@ void View::onTick(const sim::World& w) {
         h ^= h << 5;
         return float(h & 0xFFFF) / 65535.0f;
     };
+    int clashFx = 0;
     for (int e = 0; e < w.eventCount; ++e) {
         const sim::Event& ev = w.events[e];
         switch (ev.type) {
             case sim::kEvFire:
+                lastShot_ = time;
+                spawn(V3(w.launcherX, 1.55f, 2.45f), V3(0, 0, 0), gp->wispLight, 0.75f, 0.42f, 0.12f, 4);
                 break;
             case sim::kEvGateMul: {
                 const int g = ev.a;
                 gateFlash_[g] = 1.0f;
                 if (gatePunch_[g] < 0.5f) gatePunch_[g] = 1.0f;
                 const sim::Gate& G = def.gates[g];
-                const int sparks = minv(6, 2 + ev.b);
+                const int sparks = minv(6, 3 + ev.b);  // 4 to 6
                 for (int k = 0; k < sparks; ++k)
                     spawn(V3(ev.x + (rnd() - 0.5f) * 0.8f, 0.5f + rnd() * 0.8f, G.z), V3((rnd() - 0.5f) * 3, 1.5f + rnd() * 2, (rnd() - 0.3f) * 2),
                           k & 1 ? gp->good : gp->wispLight, 0.9f, 0.16f, 0.45f, 0);
@@ -147,9 +150,10 @@ void View::onTick(const sim::World& w) {
                 break;
             }
             case sim::kEvClash: {
-                for (int k = 0; k < 3; ++k)
+                if (++clashFx > 6) break;
+                for (int k = 0; k < 6; ++k)
                     spawn(V3(ev.x, 0.45f, ev.z), V3((rnd() - 0.5f) * 4, 1.2f + rnd() * 2.5f, (rnd() - 0.5f) * 3),
-                          k == 0 ? gp->wispLight : (k == 1 ? gp->gloomEye : V3(1, 1, 1)), 0.95f, 0.16f + rnd() * 0.1f, 0.4f, 0);
+                          k % 2 == 0 ? gp->wispLight : gp->gloomEye, 0.95f, 0.16f + rnd() * 0.1f, 0.4f, 0);  // gold and rose
                 Flash& f = flashes_[flashHead_];
                 flashHead_ = (flashHead_ + 1) % kFlashes;
                 f = {ev.x, ev.z, 1.1f, t, 0.25f, V3(1.0f, 0.85f, 0.75f), 0.3f};
@@ -171,9 +175,17 @@ void View::onTick(const sim::World& w) {
                 trauma = minv(1.0f, trauma + 0.15f);
                 break;
             }
-            case sim::kEvSnuffed:
+            case sim::kEvSnuffed: {
                 spawn(V3(ev.x, 0.45f, ev.z), V3(0, 0.6f, 0), V3(0.55f, 0.5f, 0.6f), 0.5f, 0.3f, 0.45f, 1);
+                int best = -1;
+                float bd = 1e9f;
+                for (int s = 0; s < def.snufferCount; ++s) {
+                    const float dx = w.snufferX[s] - ev.x, dz = def.snuffers[s].z - ev.z, d = dx * dx + dz * dz;
+                    if (d < bd) bd = d, best = s;
+                }
+                if (best >= 0) snufferFlare_[best] = 1.0f;
                 break;
+            }
             case sim::kEvBruteDown:
                 for (int k = 0; k < 16; ++k)
                     spawn(V3(ev.x, 0.7f, ev.z), V3((rnd() - 0.5f) * 7, 1 + rnd() * 4, (rnd() - 0.5f) * 6), k & 1 ? gp->gloomEye : gp->gloomLight,
@@ -211,7 +223,7 @@ void View::onTick(const sim::World& w) {
                     spawn(V3((rnd() - 0.5f) * 4.5f, 0.3f + rnd() * 6.0f, zc - 0.5f), V3((rnd() - 0.5f) * 9, 2 + rnd() * 7, -2 - rnd() * 6),
                           k % 3 == 0 ? gp->crack : (k % 3 == 1 ? gp->spireLight : V3(1, 0.85f, 0.95f)), 1.0f, 0.25f + rnd() * 0.25f,
                           1.6f, 2, (rnd() - 0.5f) * 14);
-                trauma = minv(1.0f, trauma + (def.boss ? 0.6f : 0.35f));
+                trauma = minv(1.0f, trauma + (def.boss ? 0.5f : 0.35f));
                 break;
             }
             case sim::kEvLose:
@@ -238,6 +250,7 @@ void View::update(float dt, const sim::World& w) {
     spirePunch_ = maxv(0.0f, spirePunch_ - k / 0.16f);
     trauma = maxv(0.0f, trauma - tune.traumaDecay * k);
     coreFlash = maxv(0.0f, coreFlash - k / 0.25f);
+    for (float& f : snufferFlare_) f = maxv(0.0f, f - k / 0.25f);
     tidePunch = maxv(0.0f, tidePunch - k / 0.2f);
     bannerTime = maxv(0.0f, bannerTime - k);
     // Camera follow: a critically damped spring toward 12% of the launcher's x.
@@ -278,7 +291,8 @@ void View::buildUnits(const sim::World& w) {
         keys_[n] = u16(clampv(int((u.z[i] + 3.0f) * 100.0f), 0, kBuckets - 1));
         ++n;
     };
-    for (int i = 0; i < w.w.n; ++i) put(w.w, i, 0, tierOf(w.w.power[i]));
+    for (int i = 0; i < w.w.n; ++i)
+        put(w.w, i, u8(tick - w.w.born[i] < 12 && w.w.z[i] < sim::kMuzzleZ + 2.0f ? 4 : 0), tierOf(w.w.power[i]));
     for (int i = 0; i < w.g.n; ++i) {
         const bool brute = (w.g.flags[i] & sim::kBrute) != 0;
         int t = tierOf(w.g.power[i]);
@@ -365,7 +379,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     fu.camRight = V4(cam.right, 0);
     fu.camUp = V4(cam.up, 0);
     fu.camPos = V4(cam.eyeNow, def.len);
-    fu.time = V4(tt, alpha, cheer, float(std::fmod(time, 60.0)));
+    fu.time = V4(tt, alpha, cheer > 0.0f ? cheer : -gloomCheer, float(std::fmod(time, 60.0)));
     fu.grade = V4(brighten, desaturate, fade, 0.42f);
     fu.screen = V4(float(env_.w), float(env_.h), 1.0f / float(env_.w), 1.0f / float(env_.h));
     fu.lane = V4(sim::kHW, def.len, 1.0f / (2.0f * sim::kHW + 2.0f), 1.0f / (def.len + 6.0f));
@@ -434,7 +448,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     propCount_ = 0;
     {
         const float lx = w.launcherX;
-        const float kick = w.firing ? 0.06f * (0.5f + 0.5f * std::sin(tt * 75.0f)) : 0.0f;
+        const float kick = lastShot_ >= 0 ? 0.10f * clampv(1.0f - float(time - lastShot_) / 0.07f, 0.0f, 1.0f) : 0.0f;
         PropDraw& d = props_[propCount_++];
         d.mesh = kMeshLauncher;
         d.model = translation(V3(lx, 0, 0.2f)) * scaling(V3(1.0f + kick * 0.5f, 1.0f - kick, 1.0f));
@@ -468,7 +482,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
         PropDraw& p = props_[propCount_++];
         p.mesh = kMeshSnuffer;
         p.model = translation(V3(w.snufferX[i], 0.08f * std::sin(tt * 3.0f + float(i)), def.snuffers[i].z));
-        p.glow = 1;
+        p.glow = 1.0f + 1.5f * snufferFlare_[i];
     }
     s.props = props_;
     s.propCount = propCount_;

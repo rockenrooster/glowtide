@@ -36,8 +36,6 @@
     X(emitterDelay, 1.5f)                                                                                            \
     X(rampStart, 1.5f)          /* times the target time */                                                         \
     X(rampSlope, 20.0f)                                                                                              \
-    X(engage, 0.0f)             /* GAME_DESIGN 5.12, off */                                                          \
-    X(frenzy, 0.0f)             /* GAME_DESIGN 5.12, off */                                                          \
     /* ---- art and feel ---- */                                                                                     \
     X(glowStrength, 1.0f)                                                                                            \
     X(glowUnit, 0.34f)          /* alpha of a unit's disc in the glow buffer */                                      \

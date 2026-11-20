@@ -30,6 +30,7 @@ public:
 
     // Effects that the screens drive (P3/P6).
     float cheer = 0;          // wisps turn round
+    float gloomCheer = 0;     // glooms bounce (the lose)
     float brighten = 0;       // the dawn
     float desaturate = 0;     // the lose
     float fade = 1;           // 0 black .. 1 visible
@@ -68,6 +69,8 @@ private:
     float followX_ = 0, followV_ = 0;
     float gateFlash_[sim::kMaxGates] = {}, gatePunch_[sim::kMaxGates] = {};
     float spireFlash_ = 0, spirePunch_ = 0;
+    double lastShot_ = -1;    // the shot's barrel squash and lens ring (GAME_DESIGN 10)
+    float snufferFlare_[sim::kMaxSnuffers] = {};
     float barrierShake_[sim::kMaxBarriers] = {};
     float barrierPunch_[sim::kMaxBarriers] = {};
 
