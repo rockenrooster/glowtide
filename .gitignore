@@ -9,3 +9,10 @@
 *.apk
 *.aab
 __pycache__/
+# The release key (scripts/release-key.ps1): never committed, the repository is public.
+/keys/
+*.keystore
+*.jks
+*.p12
+*.pfx
+/out/

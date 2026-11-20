@@ -21,6 +21,11 @@ void haptic(int kind);
 float refreshRateHz(SDL_Window* window);
 // Asks the display for the mode nearest `hz` (Android; the one-way 60 Hz fallback of TECH_SPEC 5.10).
 void requestRefreshRate(float hz);
+// The updater (docs/RELEASE_PIPELINE.md): asks GitHub for the latest release's build number on a thread of its own
+// (Android; a no-op on the desktop); latestBuild() is 0 until an answer arrives.
+void checkForUpdate();
+int latestBuild();
+constexpr const char* kReleasesUrl = "https://github.com/rockenrooster/glowtide/releases/latest";
 
 // A path for an output file: absolute paths stay; relative ones go to the app's external files directory on
 // Android and stay relative (to the working directory) on the desktop.

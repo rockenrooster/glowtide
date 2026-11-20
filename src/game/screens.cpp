@@ -8,6 +8,10 @@
 #include "core/log.h"
 #include "core/tuning.h"
 #include "game/game.h"
+#include "platform/platform.h"
+
+#include <SDL3/SDL_misc.h>
+#include <SDL3/SDL_error.h>
 
 namespace gt {
 
@@ -87,6 +91,22 @@ void Game::drawHome(float dt) {
         return;
     }
     cogGlyph(uiBatch_, cog, L);
+    // The updater (docs/RELEASE_PIPELINE.md): a GitHub build asks once a launch; while the latest release is newer, a gold pill
+    // under the top row opens its page in the browser, where the APK is.
+    if (!updateAsked_ && GT_BUILD_NUMBER > 0) {
+        updateAsked_ = true;
+        platform::checkForUpdate();
+    }
+    const int latest = updateOverride_ > 0 ? updateOverride_ : platform::latestBuild();
+    if (latest > GT_BUILD_NUMBER && (GT_BUILD_NUMBER > 0 || updateOverride_ > 0)) {
+        std::snprintf(buf, sizeof buf, "UPDATE: BUILD %d", latest);
+        const float w = UiBatch::textWidth(buf, L.px(19)) + L.px(48);
+        const Rect r{float(L.w) * 0.5f - w * 0.5f, top + L.px(60), w, L.px(48)};
+        if (ui_.button(buf, r, Ui::kPrimary, 0.8f)) {
+            feedback_.uiTap();
+            if (!SDL_OpenURL(platform::kReleasesUrl)) GT_WARN("update: %s", SDL_GetError());
+        }
+    }
     // The hint: HOLD AND DRAG, pulsing, with a thumb sweeping an arc.
     const float pulse = 0.75f + 0.25f * std::sin(screenTime_ * 4.0f);
     const float hy = float(L.h) * 0.66f;
@@ -259,7 +279,8 @@ void Game::drawSettings(float dt) {
     }
 #endif
     char ver[64];
-    std::snprintf(ver, sizeof ver, "VERSION %s (%s)", GT_VERSION, GT_COMMIT);
+    if (GT_BUILD_NUMBER > 0) std::snprintf(ver, sizeof ver, "VERSION %s BUILD %d (%s)", GT_VERSION, GT_BUILD_NUMBER, GT_COMMIT);
+    else std::snprintf(ver, sizeof ver, "VERSION %s (%s)", GT_VERSION, GT_COMMIT);
     for (char* c = ver; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));  // the font is capitals only
     ui_.text(ver, float(L.w) * 0.5f, y + L.px(4), 14, 0xA0A0C8);
     y += L.px(24);

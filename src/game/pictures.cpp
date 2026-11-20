@@ -160,6 +160,14 @@ bool Game::setupPicture(const char* name) {
             if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
         }
     };
+    if (!std::strcmp(name, "home_update")) {
+        // HOME with the updater's pill, as if GitHub had build 999 (the desktop never asks).
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        enterLevel(3, false);
+        coldStart_ = true;
+        updateOverride_ = 999;
+        return true;
+    }
     if (!std::strcmp(name, "level_top")) {
         // A level from straight above with its labels (P5 level sheets); --level picks it.
         std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);

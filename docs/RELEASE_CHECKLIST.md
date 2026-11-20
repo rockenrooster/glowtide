@@ -16,9 +16,9 @@ What the release build is, what was checked, and the steps only the owner can ta
 | 16 KB pages | Shared libraries stored uncompressed and 16 KB aligned in the APK; every `LOAD` segment aligned to 0x4000 | `zipalign -c -P 16 -v 4` (build-tools 36), `llvm-readelf -l` |
 | Debuggable | No | `aapt2 dump badging` (no `application-debuggable`) |
 | App arguments | Ignored: `getArguments()` returns nothing unless the build is debuggable | `GlowtideActivity.java`; launch with `--es args` on the Moto (see PROGRESS.md) |
-| Permissions | One: `android.permission.VIBRATE` (haptics) | `aapt2 dump badging` |
-| Network | None: no INTERNET permission, no analytics, no ads, no accounts | Manifest; there is no network code |
-| Data collected | None. The only file written is the save (`save.txt`: level, stars, settings) in the app's private storage | `src/game/save.cpp` |
+| Permissions | Two: `android.permission.VIBRATE` (haptics) and `android.permission.INTERNET` (the update check) | `aapt2 dump badging` |
+| Network | One request a launch, from GitHub builds only: the latest release's number from GitHub's API (docs/RELEASE_PIPELINE.md). No analytics, no ads, no accounts | `GlowtideActivity.checkForUpdate` |
+| Data collected | None. The only file written is the save (`save.txt`: level, stars, settings) in the app's private storage; the update request sends nothing but itself | `src/game/save.cpp` |
 | Orientation | Portrait | Manifest and `SDL_HINT_ORIENTATIONS` |
 | Name and icon | "GLOWTIDE"; adaptive icon (a gold wisp on the twilight gradient) from `tools/make_icon.py` | `aapt2 dump badging` (`application-label`) |
 
@@ -35,13 +35,20 @@ What the release build is, what was checked, and the steps only the owner can ta
 - **Credits** (in SETTINGS): Roboto (Apache 2.0), SDL 3 (zlib). Everything else, the sound and the music included,
   is made in code. See `docs/LICENSES.md`.
 
+## GitHub releases (done 2026-11-20)
+
+Every push to `main` of the public repository `rockenrooster/glowtide` builds and publishes a release APK
+(`docs/RELEASE_PIPELINE.md`); the game's UPDATE button points at it. Until the owner runs `scripts\release-key.ps1`, those
+builds are signed with a key made by each run, so one does not install over another (uninstall first).
+
 ## The owner's own steps (not done for you)
 
-1. **A release key.** The release build is signed with the debug key so it installs for testing. Create your upload
-   key (Android Studio, *Generate Signed Bundle*, or `keytool`), keep it and its passwords out of this repository,
-   and add a `signingConfigs.release` block to `android/app/build.gradle` that reads them from your own
-   `keystore.properties` (not committed).
-2. **An App Bundle** for Google Play: `gradlew bundleRelease` with your key (Play wants an `.aab`, not an `.apk`).
+1. **A release key.** `scripts\release-key.ps1` makes it (keytool asks you for its password), gives it to the GitHub
+   workflow as secrets and starts a build; from then on every GitHub build updates the one before it. Back the
+   keystore and its password up. A local release build signs with it when `GT_KEYSTORE` and its three companions are
+   set (`android/app/build.gradle`).
+2. **An App Bundle** for Google Play: `gradlew bundleRelease` with your key (Play wants an `.aab`, not an `.apk`), built
+   without `GT_BUILD_NUMBER` so it has no updater (Play's policy: apps update through Play).
 3. **The store listing:** the name, a short and a long description, the icon at 512 px (`tools/make_icon.py` can
    render it larger), a feature graphic, and phone screenshots (`scripts\capture-android.ps1` takes them from a
    device; `scripts\review.ps1` renders them on the PC).

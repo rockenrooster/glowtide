@@ -9,8 +9,10 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
-    <!-- Haptics (GAME_DESIGN 13): the only permission. -->
+    <!-- Haptics (GAME_DESIGN 13). -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- The update check: one request to GitHub's API for the latest release's number (docs/RELEASE_PIPELINE.md). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- appCategory="game" keeps the portrait lock on large screens; the back callback attribute lets the back key
          reach the game on Android 16 (TECH_SPEC 2.4). -->

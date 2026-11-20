@@ -65,8 +65,10 @@ endif()
 add_subdirectory(${GT_TP}/SDL ${CMAKE_CURRENT_BINARY_DIR}/SDL)
 
 # ---- Build stamp ---------------------------------------------------------------------------------------------
+set(GT_BUILD_NUMBER 0 CACHE STRING "The GitHub release's build number (docs/RELEASE_PIPELINE.md); 0 for a local build")
 add_custom_target(gt_stamp
   COMMAND ${CMAKE_COMMAND} -DOUT=${GT_GEN}/build_stamp.h -DVERSION=${PROJECT_VERSION} -DROOT=${GT_ROOT}
+          -DBUILD_NUMBER=${GT_BUILD_NUMBER}
           -P ${GT_ROOT}/cmake/BuildStamp.cmake
   BYPRODUCTS ${GT_GEN}/build_stamp.h
   COMMENT "build stamp")

@@ -129,6 +129,67 @@ public class GlowtideActivity extends SDLActivity {
                 + best.getRefreshRate() + " Hz (wanted " + (wanted > 0 ? wanted + " Hz" : "the highest") + ")");
     }
 
+    // The updater (docs/RELEASE_PIPELINE.md): a build with a number reads the latest GitHub release's tag (build-<n>) once a
+    // launch, on a thread of its own, and hands n to native code; HOME shows UPDATE while it is higher than its own. Nothing is
+    // sent but the request (no account: GitHub allows an address 60 such requests an hour); no answer means no button.
+    private static final String LATEST_RELEASE = "https://api.github.com/repos/rockenrooster/glowtide/releases/latest";
+    private static final long UPDATE_GAP_MS = 60000;
+    private static volatile boolean sUpdateBusy;
+    private static volatile long sUpdateAskedAt;
+
+    static void checkForUpdate() {
+        final long now = android.os.SystemClock.elapsedRealtime();
+        if (sUpdateBusy || (sUpdateAskedAt != 0 && now - sUpdateAskedAt < UPDATE_GAP_MS)) {
+            return;
+        }
+        sUpdateBusy = true;
+        sUpdateAskedAt = now;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int build = 0;
+                java.net.HttpURLConnection connection = null;
+                try {
+                    connection = (java.net.HttpURLConnection) new java.net.URL(LATEST_RELEASE).openConnection();
+                    connection.setConnectTimeout(8000);
+                    connection.setReadTimeout(8000);
+                    connection.setRequestProperty("Accept", "application/vnd.github+json");
+                    connection.setRequestProperty("User-Agent", "glowtide-updater");
+                    if (connection.getResponseCode() == 200) {
+                        java.io.InputStream in = connection.getInputStream();
+                        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+                        byte[] chunk = new byte[8192];
+                        for (int n; (n = in.read(chunk)) > 0 && body.size() < (1 << 20);) {
+                            body.write(chunk, 0, n);
+                        }
+                        in.close();
+                        String tag = new org.json.JSONObject(body.toString("UTF-8")).optString("tag_name", "");
+                        if (tag.startsWith("build-")) {
+                            build = Integer.parseInt(tag.substring(6));
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "update: the latest release could not be read: " + e);
+                } finally {
+                    if (connection != null) {
+                        connection.disconnect();
+                    }
+                }
+                Log.i(TAG, "update: the latest release is build " + build);
+                if (build > 0) {
+                    try {
+                        nativeUpdateFound(build);
+                    } catch (Throwable t) {  // (never let the updater take the game down)
+                        Log.w(TAG, "update: " + t);
+                    }
+                }
+                sUpdateBusy = false;
+            }
+        }, "glowtide-update").start();
+    }
+
+    static native void nativeUpdateFound(int build);
+
     /** Native code asks for the mode of the current size nearest `hz` (the 60 Hz fallback); on the UI thread. */
     static void requestRefreshRate(final float hz) {
         final Activity activity = mSingleton;

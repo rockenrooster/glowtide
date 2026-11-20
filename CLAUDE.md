@@ -17,7 +17,7 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | Screenshot of a device's panel (GLOWTIDE in front only) | `scripts\capture-android.ps1 -Serial moto [-Out x.png] [-Small]` |
 | 20 background/foreground cycles | `scripts\lifecycle-android.ps1 -Serial moto [-Cycles 20] [-AppArgs '...']` |
 | Picture sets with contact sheets (`levels`: 60 top-down level thumbnails; `p4`: audio renders and their table) | `scripts\review.ps1 -Set p1\|p2\|p3\|p4\|p5\|p6\|levels [-Only a,b] [-Lint]` |
-| Connect a phone on wireless debugging when mDNS finds nothing (scans its address, `adb connect`s the adbd port) | `scripts\find-wireless-adb.ps1 [-Ip 192.168.137.112,192.168.137.169]` |
+| Connect a phone on wireless debugging when mDNS finds nothing (scans its address, `adb connect`s the adbd port) | `scripts\find-wireless-adb.ps1 -Ip <address>[,<address>]` |
 | Every device check on one device (install, flow, back key, save, cold start, lifecycle, both benches, refresh rate) -> `captures\matrix\<serial>.md` | `scripts\matrix-android.ps1 -Serial tablet\|op12r\|moto [-NoInstall]` |
 | Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
 | Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |
@@ -30,6 +30,7 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | GAME_DESIGN 5.9's findings with the real simulation | `glowtide_headless --sim flux` |
 | Review copy of a PNG (at most 1600 x 1000) | `python -I -B tools\shrink_png.py x.png` |
 | App icon layers | `python -I -B tools\make_icon.py` |
+| The release APK on GitHub (`.github/workflows/release.yml`, `docs/RELEASE_PIPELINE.md`): each push to `main` publishes release `build-<commit count>`; by hand, watch, download; the release key (the owner runs it: it asks for the password) | `gh workflow run release.yml -R rockenrooster/glowtide`, `gh run watch -R rockenrooster/glowtide`, `gh release download -R rockenrooster/glowtide -p glowtide.apk`; `scripts\release-key.ps1 [-SecretsOnly] [-NoBuild]` |
 
 Desktop exit codes: 0 ok, 1 start-up failed, 2 bad arguments, 3 GL errors or debug messages, 4 benchmark invalid,
 5 capture failed, 6 flow test failed, 7 a lint failed.
@@ -51,7 +52,8 @@ external files directory on Android), `GTSIM`, `GTLIFE`, `FLOW`.
 - **Shared devices** (PLAN 3.3): every adb command with `-s <serial>`; nothing device-wide (no kill-server, reboot,
   `logcat -c`, settings); check the foreground app before launching or capturing; take the lock file in
   `D:\Stuff\DevFolder\Android_Games\Raveform\captures\locks\` (the scripts do); force-stop only `dev.glowtide.game`.
-- Downloads need the owner's yes. No destructive git or shell commands. Short chat replies.
+- Downloads need the owner's yes. No destructive git or shell commands. Short chat replies. The repository is public:
+  nothing secret in it (keys, tokens, passwords, personal addresses).
 - Never edit, build or commit inside `..\Raveform\` (only its lock folder is shared).
 
 ## Conventions
@@ -61,4 +63,6 @@ external files directory on Android), `GTSIM`, `GTLIFE`, `FLOW`.
 - OpenGL ES 3.0 core only; shaders are `#version 300 es` with the prelude (`shaders/prelude*.glsl`), validated by
   glslangValidator at build time and embedded. Fragment shaders are `mediump` unless a value needs `highp`.
 - No heap allocation in the steady-state frame (global `operator new` is counted; benchmarks report `heap_allocs`).
-- Git: local repository only; commit at working checkpoints; never push or add a remote.
+- Git: commit at working checkpoints. `origin` is the public GitHub repository `rockenrooster/glowtide` (since
+  2026-11-20): push only when the owner asks; every push to `main` builds and publishes a release APK
+  (`docs/RELEASE_PIPELINE.md`). `keys/` holds the release key: gitignored; never commit it, copy it or print it.

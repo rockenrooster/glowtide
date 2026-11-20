@@ -1,6 +1,6 @@
 """find_adb_port.py ip [ip ...]: TCP-scan 30000-61000 (where Android's wireless debugging listens) on the owner's own
 devices and print each open port as ip:port, for scripts\\find-wireless-adb.ps1 to try with `adb connect`. Used when
-mDNS discovery does not work from this PC (it gets no answers on the 192.168.137.x network)."""
+mDNS discovery does not work from this PC (it got no answers here on 2026-11-20)."""
 import asyncio
 import sys
 

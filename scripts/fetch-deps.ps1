@@ -1,5 +1,5 @@
-# Puts the pinned third-party sources into third_party/ without downloading anything (TECH_SPEC 1):
-# SDL is cloned from RAVEFORM's local checkout and checked against the pinned commit; the Khronos headers for the
+# Puts the pinned third-party sources into third_party/ (TECH_SPEC 1): SDL is cloned from RAVEFORM's local checkout when
+# it is beside this one (no download), else from GitHub, and checked against the pinned commit; the Khronos headers for the
 # desktop build are copied from the NDK. Safe to re-run: existing trees are kept and verified.
 
 . "$PSScriptRoot\env.ps1"
@@ -14,9 +14,14 @@ $sdl = Join-Path $tp 'SDL'
 if (Test-Path (Join-Path $sdl 'CMakeLists.txt')) {
     Write-Host "[deps] SDL already present"
 } else {
-    if (-not (Test-Path (Join-Path $sdlSource '.git'))) { throw "[deps] $sdlSource is missing: ask the owner before cloning SDL from GitHub" }
-    Write-Host "[deps] cloning SDL $sdlTag from $sdlSource"
-    $url = 'file:///' + ($sdlSource -replace '\\', '/')
+    if (Test-Path (Join-Path $sdlSource '.git')) {
+        Write-Host "[deps] cloning SDL $sdlTag from $sdlSource"
+        $url = 'file:///' + ($sdlSource -replace '\\', '/')
+    } else {
+        # (a checkout without RAVEFORM beside it: the same tag from GitHub, checked against the pinned commit below)
+        Write-Host "[deps] cloning SDL $sdlTag from GitHub"
+        $url = 'https://github.com/libsdl-org/SDL.git'
+    }
     & $GT_GIT -c advice.detachedHead=false clone --quiet --depth 1 --branch $sdlTag $url $sdl
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[deps] clone failed; copying the tree instead"

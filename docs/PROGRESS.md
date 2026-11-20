@@ -24,7 +24,7 @@ just do what you think is best and let me know your choices."
 | `git init` | Yes, local only; commits at phase checkpoints, no remote, no push | Backups before breaking changes (owner's CLAUDE.md) |
 | SDL source | Cloned from RAVEFORM's local checkout, verified at the pinned commit | No download |
 | Font | **Roboto Black from the Android SDK** (Apache 2.0), corners rounded at bake time, instead of downloading Fredoka | Avoids a download that needed the owner's yes; same rounded, heavy look |
-| Test devices | Moto `ZY22BXMJG3` (over Wi-Fi, 192.168.137.193); tablet and 12R when they are reachable | Only the Moto was attached on 2026-11-20 |
+| Test devices | Moto `ZY22BXMJG3` (over Wi-Fi); tablet and 12R when they are reachable | Only the Moto was attached on 2026-11-20 |
 | Glow when the flood is dense (P1) | Bloom samples three levels with bounded weights; labels drawn after the bloom; glowUnit 0.34, warmer glow colour | The additive chain burnt 12.8% of a 2,400-wisp frame to white; now 1.1% |
 | Emerald Aurora's backdrop | Top colour 0x48B48A | The palette lint (backdrop at most 45% luminance) failed at 0.51 |
 | Gold button pressed state (P3) | Deep amber #8A4E0C with white text, not white | White on gold is 1.6:1; the exit check (and the owner's CLAUDE.md) want a high-contrast pressed state: now 4.2:1 |
@@ -45,6 +45,8 @@ just do what you think is best and let me know your choices."
 | FRENZY and the other levers of GAME_DESIGN 5.12 | Not built; the unused `engage` and `frenzy` tweakables were removed | The design builds them only if the owner asks after playing |
 | Release signing | The release APK is signed with the debug key | The release key is the owner's (docs/RELEASE_CHECKLIST.md) |
 | `.gitattributes` | `* text=auto` kept | Windows tools here write CRLF; the repository stays LF |
+| Public repository and releases (the owner, 2026-11-20: "public repo with the release, with an updater like raveform") | `rockenrooster/glowtide`, RAVEFORM's pipeline point for point: each push to `main` builds `build-<n>` with the APK; HOME's gold UPDATE pill opens the latest release when it is newer (`docs/RELEASE_PIPELINE.md`) | The device serials stay in the scripts (RAVEFORM's public repository lists the same ones); home-network addresses were taken out of the files; no licence file was added (RAVEFORM has none either: the owner's choice) |
+| The INTERNET permission | Added for the update check alone | Nothing else in the game uses the network |
 
 ## Measured device facts
 
@@ -110,17 +112,17 @@ How the tablet and the 12R were looked for (2026-11-20, at the end of P6):
 - **USB:** nothing but the Moto in `adb devices` all session.
 - **Wireless debugging by mDNS** (how RAVEFORM finds the OnePlus): `adb mdns services` and a plain mDNS query from
   this PC got no answer from any device, the Moto included, so discovery does not work from here today.
-- **Legacy `adb tcpip` (port 5555)** on the ten hosts of 192.168.137.x with phone-style (randomized) MAC addresses:
+- **Legacy `adb tcpip` (port 5555)** on the ten hosts of the local network with phone-style (randomized) MAC addresses:
   every one refused.
-- **Where they were last:** RAVEFORM's logs put the 12R at 192.168.137.112 and the tablet R5GL362BEHX at .169; adb's
+- **Where they were last:** RAVEFORM's logs gave the 12R's and the tablet R5GL362BEHX's addresses; adb's
   own log shows both connected to this PC over wireless debugging on 2026-11-19 (12R port 39437, with a TLS handshake
   that succeeded, so it still trusts this PC; tablet port 37505). Both hosts are on the network today.
 - **A scan of 30000-61000** on them (Linux picks the port there; the Moto's is 38215) finds no adbd: the 12R has
   37567, 46888 and 47888 open and the tablet 44171, and each closes the connection on adb's first packet with no TLS
   handshake, so none is the debugging port. Wireless debugging is switched off on both (Android turns it off on a
   reboot or a change of network). A third host, .167:38975, behaves the same way.
-- **Every other host** on 192.168.137.x, scanned over 30000-61000 too: the open ports on .147, .151, .167, .180 and
-  .200 all close on adb's first packet; no adbd answers anywhere but on the Moto.
+- **Every other host** on the network, scanned over 30000-61000 too: the open ports on five more hosts all
+  close on adb's first packet; no adbd answers anywhere but on the Moto.
 - **On the PC instead:** the screens are rendered and linted at the 12R's own panel (1264x2780 at 450 dpi, now in the
   layout matrix of `review.ps1 -Set p3`) and at the tablet's (1200x1920): every screen passes, nothing clipped. That
   checks layout only, not the devices.

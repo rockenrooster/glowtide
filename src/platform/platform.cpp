@@ -1,5 +1,7 @@
 #include "platform/platform.h"
 
+#include <atomic>
+
 #include <SDL3/SDL.h>
 
 #include <cstdio>
@@ -26,6 +28,7 @@ jclass g_activityClass = nullptr;
 jmethodID g_haptic = nullptr;
 jmethodID g_refresh = nullptr;
 jmethodID g_requestRefresh = nullptr;
+jmethodID g_checkUpdate = nullptr;
 
 // Present timestamps
 bool g_presentOk = false;
@@ -115,6 +118,7 @@ void init(SDL_Window*) {
     g_haptic = env->GetStaticMethodID(g_activityClass, "haptic", "(I)V");
     g_refresh = env->GetStaticMethodID(g_activityClass, "refreshRate", "()F");
     g_requestRefresh = env->GetStaticMethodID(g_activityClass, "requestRefreshRate", "(F)V");
+    g_checkUpdate = env->GetStaticMethodID(g_activityClass, "checkForUpdate", "()V");
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(cls);
     env->DeleteLocalRef(activity);
@@ -126,6 +130,14 @@ void haptic(int kind) {
     JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
     if (!env) return;
     env->CallStaticVoidMethod(g_activityClass, g_haptic, jint(kind));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+void checkForUpdate() {
+    if (!g_checkUpdate) return;
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    if (!env) return;
+    env->CallStaticVoidMethod(g_activityClass, g_checkUpdate);
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
@@ -230,6 +242,7 @@ int pinToFastCores(char* desc, size_t cap) {
 void init(SDL_Window*) {}
 void haptic(int) {}
 void requestRefreshRate(float) {}
+void checkForUpdate() {}
 float refreshRateHz(SDL_Window* window) {
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
     return mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.0f;
@@ -240,6 +253,19 @@ bool presentAvailable() { return false; }
 void presentBeforeSwap() {}
 int presentCollect(double*, int) { return 0; }
 
+#endif
+
+namespace {
+std::atomic<int> g_latestBuild{0};
+}  // namespace
+
+int latestBuild() { return g_latestBuild.load(std::memory_order_relaxed); }
+
+#if defined(__ANDROID__)
+// GlowtideActivity.nativeUpdateFound(int): the latest GitHub release's build number, from its update thread.
+extern "C" JNIEXPORT void JNICALL Java_dev_glowtide_game_GlowtideActivity_nativeUpdateFound(JNIEnv*, jclass, jint build) {
+    g_latestBuild.store(static_cast<int>(build), std::memory_order_relaxed);
+}
 #endif
 
 }  // namespace gt::platform

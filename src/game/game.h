@@ -149,6 +149,9 @@ private:
     double hapticRing_[kHapticRing] = {};
     int hapticsSent_ = 0, hapticPeak_ = 0;
     int levelFrames_ = 0, levelLate_ = 0;
+    // The updater (docs/RELEASE_PIPELINE.md): asked once a launch; the picture home_update pretends GitHub has build 999.
+    bool updateAsked_ = false;
+    int updateOverride_ = 0;
     char pictureScreen_[16] = "";
 
     // Player input (GAME_DESIGN 4): the oldest finger still down owns the gesture.

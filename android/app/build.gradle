@@ -3,6 +3,11 @@ plugins {
 }
 
 // GLOWTIDE (TECH_SPEC 2.4): the native code is the root CMake tree; SDL's Java glue comes from the pinned checkout.
+// The GitHub release's build number (the workflow's GT_BUILD_NUMBER, the commit count; HOME compares it with the latest
+// release's, docs/RELEASE_PIPELINE.md); 0 for a local build, which never asks.
+def gtBuildNumber = providers.environmentVariable('GT_BUILD_NUMBER').orNull ?: '0'
+// The release key, when the workflow's secrets (or a local run) set it; else the debug key.
+def gtKeystore = providers.environmentVariable('GT_KEYSTORE').orNull
 android {
     namespace 'dev.glowtide.game'
     compileSdk 36
@@ -19,8 +24,19 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments '-DANDROID_STL=c++_static'
+                arguments '-DANDROID_STL=c++_static', '-DGT_BUILD_NUMBER=' + gtBuildNumber
                 abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    signingConfigs {
+        if (gtKeystore) {
+            release {
+                storeFile file(gtKeystore)
+                storePassword providers.environmentVariable('GT_KEYSTORE_PASSWORD').orNull
+                keyAlias providers.environmentVariable('GT_KEY_ALIAS').orNull
+                keyPassword providers.environmentVariable('GT_KEY_PASSWORD').orNull
             }
         }
     }
@@ -36,11 +52,12 @@ android {
             signingConfig signingConfigs.debug
             externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo' } }
         }
-        // Native Release, not debuggable, no app arguments; debug-signed until the owner supplies a key.
+        // Native Release, not debuggable, no app arguments; signed with the release key GT_KEYSTORE names (the GitHub
+        // workflow's secrets), else the debug key.
         release {
             debuggable false
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig gtKeystore ? signingConfigs.release : signingConfigs.debug
             externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Release' } }
         }
     }

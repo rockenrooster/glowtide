@@ -1,9 +1,9 @@
 # Finds a device's wireless-debugging port without mDNS and connects adb to it (P6: the tablet and the 12R).
-#   scripts\find-wireless-adb.ps1 [-Ip 192.168.137.112,192.168.137.169]
-# Default addresses: where RAVEFORM's logs last saw the OnePlus 12R (.112) and the tablet R5GL362BEHX (.169). The device
+#   scripts\find-wireless-adb.ps1 -Ip <address>[,<address>]
+# The addresses: the phones' own on the local network (Settings, About, Status; or RAVEFORM's co-op logs). The device
 # must have Wireless debugging switched on and must already trust this PC (paired before); a port that is not adbd is
 # skipped. Prints the serial of every device it connected.
-param([string[]]$Ip = @('192.168.137.112', '192.168.137.169'))
+param([Parameter(Mandatory)][string[]]$Ip)
 . "$PSScriptRoot\env.ps1"
 
 $Ip = @($Ip | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
