@@ -173,6 +173,14 @@ the rotation), `src/core/alloc_counter.cpp`, the activity's immersive mode, argu
 
 ## After version 1 (ideas, not built)
 
+**Planned on 2026-11-20, not built: the variety and content pass.** The owner asked for upgrades that come down the
+lane toward the lantern ("you have to decide to hit enemies or grab the upgrades which re sometimes behind walls with
+hp you have to destroy") and for "level variety and creativity too so there's no stale or repeated levels", and then
+for a plan another agent executes. It is `VARIETY_PLAN.md` (read first), `VARIETY_DESIGN.md`, `VARIETY_TECH.md` and
+`subplans/V0_*.md` to `V6_*.md`. Its baseline: of today's 295 generated levels, 45% share their gate pattern with
+another level, every level has one goal and one enemy plan, and the greedy bot is never hit
+(`python -I -B docs/variety/baseline_stats.py`). The executor of that pass records its phases in this file.
+
 - The levers of GAME_DESIGN 5.12 (FRENZY and the others), if the contest needs more threat after playing.
 - A lighter level of effects for the Fire 7 class (TECH_SPEC 5.10), if that device matters.
 - Recorded samples instead of synthesis for any sound that still grates (a download: the owner's yes first).

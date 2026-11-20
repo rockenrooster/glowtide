@@ -3,6 +3,10 @@
 Read `docs/PLAN.md` first, then `docs/PROGRESS.md` (phase status, measured numbers, deviations, choices made for the
 owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase names; `docs/subplans/P*.md` per phase.
 
+**Next work, planned and not built (2026-11-20): the variety and content pass** (upgrade pods on the lane, six kinds
+of level, recipes, a calendar, no repeated levels). Read `docs/VARIETY_PLAN.md` first; it names the sections of
+`docs/VARIETY_DESIGN.md` and `docs/VARIETY_TECH.md` and the work orders `docs/subplans/V0_*.md` to `V6_*.md`.
+
 ## Commands (PowerShell 7, repo root; every script dot-sources `scripts\env.ps1`)
 
 | Task | Command |
