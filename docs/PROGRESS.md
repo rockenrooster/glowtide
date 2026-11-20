@@ -11,10 +11,10 @@ just do what you think is best and let me know your choices."
 | P0 Bootstrap | Done 2026-11-20 | Desktop and Moto pipelines, benchmarks with present timestamps, lifecycle 20/20 |
 | P1 Look and performance | Done 2026-11-20 | `bench_flood` inside the contract on the Moto after a 180 s soak; review set `captures/p1/contact.png` |
 | P2 Core gameplay | Done 2026-11-20 | Tests, determinism (PC = Moto), acceptance 1-5, strips with count checks, flux findings (GAME_DESIGN 5.9 corrected) |
-| P3 Game loop and UI | Done 2026-11-20 | Flow test on PC and Moto, lint over 43 renders, save, lifecycle, cold start 1.1 s; the tablet's back-key check waits for the tablet |
+| P3 Game loop and UI | Done 2026-11-20 | Flow test on PC and Moto, lint over 43 renders, save, lifecycle, cold start 0.43 s (1.1 s before the P4 synthesis fix); the tablet's back-key check waits for the tablet |
 | P4 Audio | Done 2026-11-20 | Renders in `captures/p4/` (three ladder timbres through the flood); 10 min of `bench_flood` with sound on the Moto: no late callback. The tablet's run waits for the tablet |
 | P5 Content | Done 2026-11-20 | Levels 2-300 baked and accepted (4 min, 4 jobs); band tables in `captures/levels/bands.md`; 60 thumbnails reviewed; heaviest level (87) inside the contract on the Moto |
-| P6 Polish and release | Not started | |
+| P6 Polish and release | Done 2026-11-20 on the Moto | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; the tablet and the OnePlus 12R were never reachable, so their refresh-rate and matrix rows are open |
 
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
@@ -37,6 +37,14 @@ just do what you think is best and let me know your choices."
 | Synthesis cost (P4) | Oscillators by rotation and decays by multiplication instead of sin() and exp() per sample | The bank took 849 ms on the Moto (limit 150 ms); now 117 ms, no worker thread needed; cold start fell to 0.43 s |
 | Acceptance of a baked level (P5) | Two lines added to GAME_DESIGN 7.4 step 5: the cancelled share within 5 points of `fight`, and from level 21 the naive bot must lose; up to two corrections of the rate scale before the next seed | The first full bake passed 7.4 but 13 levels cancelled 6-9 points over `fight` and three bands let the naive bot win twice |
 | Crossing sliders (P5) | The two gates 1.6 m apart in z | At the same z they passed through each other (labels on top of each other, panels fighting for the same depth) |
+| The spire at the win (P6) | It disappears at the shatter (its own mesh range); the shards fly from where it stood | It stayed standing behind its own shards |
+| Level changes (P6) | The labels and the HUD fade with the picture, 150 ms out and in | They stayed at full brightness over a black frame |
+| Clash sparks (P6) | Six per clash for the first six clashes of a tick, none after | Six for every clash (up to 64 a tick) would empty the particle budget the gates and the win need |
+| The shot (P6) | A 10% squash for 70 ms and a lens ring on every shot; fired wisps grow 0.5 to 1 in 90 ms | It was a wobble while the finger was down |
+| 60 Hz fallback (P6, TECH_SPEC 5.10) | A frame 1.5 periods or more after the one before counts as late; the decision needs at least two seconds of a level's frames | The contract's rounding rule, and a level that ends at once proves nothing |
+| FRENZY and the other levers of GAME_DESIGN 5.12 | Not built; the unused `engage` and `frenzy` tweakables were removed | The design builds them only if the owner asks after playing |
+| Release signing | The release APK is signed with the debug key | The release key is the owner's (docs/RELEASE_CHECKLIST.md) |
+| `.gitattributes` | `* text=auto` kept | Windows tools here write CRLF; the repository stays LF |
 
 ## Measured device facts
 
@@ -56,13 +64,15 @@ just do what you think is best and let me know your choices."
 | 2026-11-20 | PC | bench_play level 5 | — | — | — | — | 0.028 ms | 0 | P2: simulation P95 under 0.5 ms |
 | 2026-11-20 | Moto | bench_flood 600 s with sound | 0.54% | 35.6 ms | 16.96 ms | 4.23 ms | 1.48 ms | 0 | P4: 30,000 callbacks, fill p99 0.33 ms of a 20 ms period, gap max 33.7 ms, 0 late |
 | 2026-11-20 | Moto | bench_play level 87, 90 s | 0.79% | 33.9 ms | 17.00 ms | 4.57 ms | 1.90 ms | 0 | P5: the heaviest baked level (3,080 units at peak): 2,323 wisps, 757 glooms |
+| 2026-11-20 | Moto | bench_play level 87, last 60 s of 20 min | 0.59% | 33.7 ms | — | 4.47 ms | — | 0 | P6 heat soak, battery 28.8 C at the end |
+| 2026-11-20 | Moto | bench_flood 60 s after 60 s | 0.90% | 35.4 ms | 16.96 ms | 4.26 ms | 1.47 ms | 0 | P6 final build (no regression against P1: CPU +4%) |
 
 Other measurements (Moto unless named):
 
 | Check | Result |
 |---|---|
 | Determinism, levels 1-5, greedy bot, 60 s | PC and Moto hashes equal: 6ab53c6b7de9902a, 75fbb176a58bbe28, b555264948d891cc, 7988d22d19d3694a, 2c2b421ea381a278 |
-| Flow test (`--flow-test`, 42 checks incl. input latency) | PC 42/42; Moto 39/39 before the three input checks were added |
+| Flow test (`--flow-test`: screens, settings, save, input latency, SOUND and MUSIC end to end) | 45/45 on the PC and on the Moto (final build) |
 | Layout lint, 6 screens x 7 frames + button strip | 0 problems; `captures/p3/contact.png` |
 | Pressed vs normal fill (button strip) | 4.24:1 |
 | Rebuild check (`--rebuild-gl-at`) for `hud` and `win` | Pixel-identical |
@@ -77,6 +87,25 @@ Other measurements (Moto unless named):
 | Level bake | 299 levels accepted, 0 seeds rejected beyond the first try in most bands; determinism on 10 baked levels; soak 1-300 (greedy and sweep, invariants every tick): 600 runs, 0 failed |
 | Level load (generate + meshes) on the Moto | 0.8 ms (limit 50 ms) |
 | Flashing audit (`flash-audit.ps1`) | Win, boss win, lose and core hit, with and without REDUCE EFFECTS: at most 2 swings of 10% in any second (limit 3) |
+| Heat soak, 20 min of `bench_play` on level 87 (`soak-android.ps1`) | Last 60 s inside the contract: late 0.59%, worst 33.7 ms, CPU p95 4.47 ms, valid. Battery 28.3 to 28.8 C. Memory (PSS, median of three reads on each minute mark) 95.5 MB at minute 1, 93.8 MB at minute 20 (-1.8%). `captures/soak/ZY22BXMJG3_soak_20261120_044332.csv`. (A first run sampled at 30 s and during a level reload and read +6.4%; its minutes 2-19 were flat, so the sampling was fixed, not the game.) |
+| Sanitizers (ASan + UBSan: unit tests, determinism, acceptance, soak 1-50, an audio render, the flux table) | Clean: every run exit 0, no report |
+| Greyscale sheet (`captures/p6/greyscale.png`) | Gates read by symbol (x and ÷); the crowds by shape (teardrops against horned blobs) |
+| Win, boss win, lose and level-change strips (`captures/p6/`) | Slow motion 0.8 s, "CLEARED!" from 1.4 s, stars 250 ms apart, the fade 150 ms each way (by frame count) |
+| Release APK | 3.31 MB; native Release, stripped (no `.debug` or `.symtab`); not debuggable; one permission (VIBRATE); `zipalign -c -P 16` passes and every `LOAD` segment is 0x4000-aligned; on the Moto it starts, ignores `--es args` (still running, scenario play) and `run-as` answers "package not debuggable" (`release-check-android.ps1`) |
+
+## The final device matrix
+
+| Device | Reached | Result |
+|---|---|---|
+| Moto One 5G Ace (`ZY22BXMJG3`, the floor phone) | Yes, over Wi-Fi | Inside the contract everywhere: `bench_flood` 0.90% late / 35.4 ms worst on the final build (and 600 s with sound: 0.54%, 0 late audio callbacks); `bench_play` level 5 0.90%, level 87 (the heaviest) 0.79%; the 20-minute soak; flow test 45/45; lifecycle 20/20 back on PAUSE; cold start 0.43 s; back key; save through a force-stop; determinism equal to the PC; the release APK |
+| Samsung tablet (`R5GL362BEHX` and its other serials) | No: not attached over USB and not advertised over Wi-Fi during the session | Open: `bench_flood` and `bench_play`, the back key, the 90 Hz panel and the fallback |
+| OnePlus 12R (`a0e622a5`) | No | Open: the 120 Hz panel and the fallback, the matrix row |
+| Fire 7 (`GN41WE04450600BJ`) | No | Open: a report only (TECH_SPEC 5.10) |
+
+To fill the open rows once a device is attached (each script takes the lock and checks the foreground app):
+`scripts\deploy-android.ps1 -Serial tablet -NoLaunch`, then `bench-android.ps1 -Serial tablet -Scenario bench_flood`,
+`bench-android.ps1 -Serial tablet -Scenario bench_play -AppArgs '--level 87'`, `backkey-android.ps1 -Serial tablet`,
+`flow-android.ps1 -Serial tablet` (the same with `op12r`).
 
 ## Deviations from the specs
 
@@ -103,7 +132,22 @@ Other measurements (Moto unless named):
 the rotation), `src/core/alloc_counter.cpp`, the activity's immersive mode, argument and haptic patterns,
 `tools/shrink_png.py` (height limit added).
 
-## Open questions for the owner
+## After version 1 (ideas, not built)
 
-- None blocking. The look (P1), the fun (P2), the sound (P4) and the difficulty ramp (P5) need the owner's eyes, ears
-  and thumbs; the checks only they can make are listed per phase below as they come up.
+- The levers of GAME_DESIGN 5.12 (FRENZY and the others), if the contest needs more threat after playing.
+- A lighter level of effects for the Fire 7 class (TECH_SPEC 5.10), if that device matters.
+- Recorded samples instead of synthesis for any sound that still grates (a download: the owner's yes first).
+
+## Open questions for the owner (the phase checkpoints)
+
+1. **The look (P1):** `captures/p1/contact.png`, `captures/p6/contact.png` and the game on the phone. Anything to change?
+2. **The fun (P2):** is the contest right? GAME_DESIGN 5.9 now says what the real simulation does (a sharp edge; a weak
+   player loses late levels to the pressure ramp).
+3. **The sound (P4):** which ladder timbre (`captures/p4/timbres_kalimba.wav`, `_glass.wav`, `_bell.wav`; the game uses
+   the kalimba)? Is the big flood pleasant or busy? Keep the music, change its level, or off by default?
+4. **The difficulty (P5):** play levels 1-20 with the dev build, then jump to 50, 100 and 200 (SETTINGS has a level
+   stepper in dev builds). Right pace? Samey? Right length? Any unfair or dull level (its number is enough)? Change any of
+   the five worlds? Try FRENZY?
+5. **Sign-off (P6):** which phone do you carry? Then the icon and the name, and your own release steps in
+   `docs/RELEASE_CHECKLIST.md` (the key, the store listing).
+6. **The tablet and the 12R:** attach them (USB or wireless debugging) for their rows of the matrix.
