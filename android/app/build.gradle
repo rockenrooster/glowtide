@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+// GLOWTIDE (TECH_SPEC 2.4): the native code is the root CMake tree; SDL's Java glue comes from the pinned checkout.
+android {
+    namespace 'dev.glowtide.game'
+    compileSdk 36
+    ndkVersion '29.0.14206865'
+
+    defaultConfig {
+        applicationId 'dev.glowtide.game'
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'  // (CMakeLists.txt's project VERSION)
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_static'
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Debug' } }
+        }
+        // The everyday and benchmarked build: optimized native code, debuggable, debug-signed.
+        dev {
+            debuggable true
+            signingConfig signingConfigs.debug
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo' } }
+        }
+        // Native Release, not debuggable, no app arguments; debug-signed until the owner supplies a key.
+        release {
+            debuggable false
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Release' } }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('../../CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += ['../../third_party/SDL/android-project/app/src/main/java']
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
