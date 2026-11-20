@@ -185,6 +185,7 @@ int App::run(int argc, char** argv) {
                 bf.wisps = game_.wisps();
                 bf.glooms = game_.glooms();
                 bf.particles = game_.particles();
+                bf.drawCalls = game_.drawCalls();
                 bench_.addFrame(bf);
                 bench_.addPresents(presents, np);
                 if (now - benchT0_ >= double(args_.seconds)) {

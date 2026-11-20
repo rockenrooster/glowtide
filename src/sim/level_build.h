@@ -2,6 +2,7 @@
 // Helpers shared by the files that lay out levels: levels_hand.cpp (hand-made levels), recipes.cpp (VARIETY_DESIGN 9.2),
 // calendar.cpp (what a level number may use) and levels.cpp (the entry points and the baked table).
 
+#include "core/rng.h"
 #include "core/tuning.h"
 #include "sim/level.h"
 
@@ -52,5 +53,6 @@ struct Band {
 };
 Band bandFor(int index);           // calendar.cpp
 void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core and the level's brutes
+void placeGeodes(LevelDef& L, Rng& r);  // recipes.cpp: VARIETY_DESIGN 9.3
 
 }  // namespace gt::sim

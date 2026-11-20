@@ -24,6 +24,9 @@ const char* kHints[] = {
     "\xC3\xB7" "2 HALVES YOUR STREAM",
     "BREAK THE WALL TO REACH \xC3\x97" "4",
     "A THIN STREAM LETS THEM THROUGH",
+    "CRACK A GEODE TO GAIN ITS BOON",  // 6: the first geode (VARIETY_DESIGN 14)
+    "BREAK ITS SHIELD FIRST",          // 7: the first shielded geode
+    "IT GOT AWAY: CATCH THEM EARLY",   // 8: the first geode that slips past
 };
 
 Rect centered(const Layout& L, float cy, float wDp, float hDp) {
@@ -192,7 +195,11 @@ void Game::drawResult(bool won) {
         }
         char tide[32];
         formatThousands(world_.peakTide, tide, sizeof tide);
-        std::snprintf(buf, sizeof buf, "TIME %.1f S   TIDE %s", double(world_.time()), tide);
+        if (world_.geodesShown > 0)
+            std::snprintf(buf, sizeof buf, "TIME %.1f S   TIDE %s   BOONS %d/%d", double(world_.time()), tide, world_.geodesOpened,
+                          world_.geodesShown);
+        else
+            std::snprintf(buf, sizeof buf, "TIME %.1f S   TIDE %s", double(world_.time()), tide);
         pill(buf, float(L.h) * 0.45f, 18);
         ui_.text(buf, float(L.w) * 0.5f, float(L.h) * 0.45f, 18, kWhite);
         if (ui_.button("NEXT", centered(L, float(L.h) * 0.74f, 280, 74), Ui::kPrimary, 1.2f)) {
@@ -307,12 +314,25 @@ void Game::drawScreens(float dt) {
         hs.spireFrac = float(world_.spire) / float(maxv<i32>(1, world_.spireStart));
         hs.tide = world_.tide;
         hs.tidePunch = view_.tidePunch;
-        hs.bannerMark = view_.bannerMark;
-        hs.bannerTime = view_.bannerTime;
+        std::snprintf(hs.banner, sizeof hs.banner, "%s", bannerNow_);
+        hs.bannerTime = bannerLeft_;
+        auto chip = [&](int boon, int held) {
+            if (held <= 0 || hs.trayCount >= 4) return;
+            hs.trayBoon[hs.trayCount] = u8(boon);
+            hs.trayHeld[hs.trayCount] = held;
+            hs.trayPunch[hs.trayCount] = trayPunch_[boon];
+            ++hs.trayCount;
+        };
+        chip(sim::kBoonLantern, world_.lanterns - 1);
+        chip(sim::kBoonQuicken, world_.quicken);
+        chip(sim::kBoonBright, world_.bright);
+        for (int i = 0; i < 4; ++i) hs.fly[i] = fly_[i];
         hs.drawPause = false;
         hs.opacity = screen_ == Screen::Pause ? 0.5f : 1.0f;
         drawHud(uiBatch_, layout_, hs);
         if (screen_ == Screen::Play) {
+            ui_.note(hudTideRect(layout_, world_.tide), "#TIDE");
+            for (int i = 0; i < hs.trayCount; ++i) ui_.note(hudTrayChip(layout_, i), "#TRAY");
             const Rect pr = hudPauseRect(layout_);
             if (ui_.button("#PAUSE", pr, Ui::kRound)) {
                 feedback_.uiTap();
@@ -552,6 +572,40 @@ void Game::flowStep() {
             check(world_.launcherX > flowLauncher_, "the launcher moves in the same frame");
             PointerEvent u{PtrType::Up, 88, cx + 120, cy, 0, 0};
             pointer(u);
+            // Geodes (VARIETY_PLAN V1 task 10): level 6 played by greedy.
+            enterLevel(6, false);
+            bot_.init(sim::BotKind::Greedy, 3);
+            useBot_ = true;
+            next();
+            break;
+        }
+        case 23:
+            if (flowWait_ > 2) {
+                tap(cx, cy);
+                next();
+            }
+            break;
+        case 24:
+            if (world_.lanterns > 1 || flowWait_ > 60 * 40 || screen_ != Screen::Play) {
+                check(world_.lanterns == 2, "greedy opens the geode and the LANTERN applies");
+                next();
+            }
+            break;
+        case 25:
+            if (flowWait_ > 2) {
+                bool tray = false;
+                for (int i = 0; i < ui_.controlCount(); ++i) tray = tray || !std::strcmp(ui_.control(i).label, "#TRAY");
+                check(tray, "the boon's chip shows in the tray");
+                next();
+            }
+            break;
+        case 26:
+            if (screen_ == Screen::Win || screen_ == Screen::Lose || flowWait_ > 60 * 60) {
+                check(screen_ == Screen::Win && world_.geodesShown >= 1 && world_.geodesOpened >= 1, "the result line counts the boons");
+                next();
+            }
+            break;
+        case 27: {
             GT_TAG("FLOW", "done: %d checks, %d failed", flowChecks_, flowFailures_);
             std::remove(savePath_);
             quit_ = true;

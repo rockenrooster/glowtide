@@ -31,6 +31,8 @@ public:
     bool holdButton(const char* label, const Rect& r, float seconds, float dt, float& progress);
     void text(const char* s, float x, float y, float sizeDp, u32 color, Align align = Align::Center, float alpha = 1.0f);
     void panel(const Rect& r, float radiusDp, float alpha = 0.86f);
+    // A HUD element for the layout lint (the boon tray, the tide counter): inside the safe area and clear of the others.
+    void note(const Rect& r, const char* label) { record(r, label, 0, 0, 0, false); }
 
     // Hit test against the controls drawn last frame.
     bool hitsControl(float x, float y) const;

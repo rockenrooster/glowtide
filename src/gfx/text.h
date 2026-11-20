@@ -36,6 +36,7 @@ public:
 
     void rect(float cx, float cy, float w, float h, float radius, Rgba fill, Rgba stroke = {0, 0, 0, 0}, float strokeW = 0,
               float shadow = 0);
+    void rectRotated(float cx, float cy, float w, float h, float radius, float angle, Rgba fill);  // angle in radians
     void star(float cx, float cy, float r, Rgba fill, Rgba stroke = {0, 0, 0, 0}, float strokeW = 0);
     // `size` is the em size in pixels; y is the baseline unless `centerY` (then the cap height is centred on y).
     // Returns the width drawn.

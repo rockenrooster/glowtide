@@ -240,6 +240,158 @@ void testBumper() {
     GT_CHECK_MSG(w.w.n == 1 && w.w.z[0] > 15.0f, "a wisp is not stopped by a bumper");
 }
 
+// Geodes and boons (VARIETY_DESIGN 2, 3; VARIETY_TECH 10's first row).
+Geode geodeAt(float x, float z, i32 hp, u8 boon, i32 shield = 0) {
+    Geode g;
+    g.x = x;
+    g.z0 = z;
+    g.t = 0;
+    g.speed = 0.0f;  // still, so the arithmetic is about the wisps alone
+    g.hp = hp;
+    g.shield = shield;
+    g.boon = boon;
+    return g;
+}
+
+int eventsOf(const World& w, u8 type) {
+    int n = 0;
+    for (int e = 0; e < w.eventCount; ++e) n += w.events[e].type == type ? 1 : 0;
+    return n;
+}
+
+void testGeodes() {
+    static World w;
+    Input in;
+    // A geode takes exactly the power it is given and passes the rest on.
+    LevelDef d = emptyLevel();
+    d.geodes[d.geodeCount++] = geodeAt(0, 20, 10, kBoonQuicken);
+    w.init(d, 1);
+    w.tick(in);  // it appears
+    place(w.w, -0.1f, 20.0f, 4);
+    place(w.w, 0.0f, 20.0f, 4);
+    place(w.w, 0.1f, 20.0f, 4);
+    w.tick(in);
+    GT_CHECK_MSG(w.geodeState[0] == kGeodeOpened && w.spent == 10 && tideOf(w) == 2, "a geode takes its health and passes the rest on");
+    GT_CHECK_MSG(w.quicken == 1 && eventsOf(w, kEvGeodeOpen) == 1 && eventsOf(w, kEvBoon) == 1, "opening applies the boon in that tick");
+
+    // A plate goes first, from any side: while it stands the geode takes nothing, even from a wisp already past it.
+    LevelDef p = emptyLevel();
+    p.geodes[p.geodeCount++] = geodeAt(0, 20, 3, kBoonLantern, 5);
+    w.init(p, 1);
+    w.tick(in);
+    place(w.w, 0.0f, 20.0f, 6);  // on the body itself, beyond the plate
+    w.tick(in);
+    GT_CHECK_MSG(w.geodeHp[0] == 3 && w.geodeShield[0] == 5 && tideOf(w) == 6, "the geode takes nothing while its plate stands");
+    w.w.n = 0;
+    place(w.w, 0.5f, 20.0f - tune.plateGap - 0.05f, 4);  // crosses the plate this tick
+    w.tick(in);
+    GT_CHECK_MSG(w.geodeShield[0] == 1 && w.geodeHp[0] == 3 && w.spent == 4, "the plate takes the power that crosses it");
+    place(w.w, -0.5f, 20.0f - tune.plateGap - 0.05f, 4);
+    w.tick(in);
+    GT_CHECK_MSG(w.geodeShield[0] <= 0 && w.spent == 5 && tideOf(w) == 3, "the plate breaks; the rest of that wisp carries on");
+    for (int t = 0; t < 10 && w.geodeState[0] == kGeodeAlive; ++t) w.tick(in);
+    GT_CHECK_MSG(w.geodeState[0] == kGeodeOpened && w.spent == 8 && w.lanterns == 2, "then the geode itself, and its boon");
+
+    // Slipping past costs nothing.
+    LevelDef s = emptyLevel();
+    Geode g = geodeAt(1.0f, 4.0f, 50, kBoonLantern);
+    g.speed = 2.0f;
+    s.geodes[s.geodeCount++] = g;
+    w.init(s, 1);
+    for (int t = 0; t < 120; ++t) w.tick(in);
+    GT_CHECK_MSG(w.geodeState[0] == kGeodeLost && w.core == 10 && w.spent == 0 && w.lanterns == 1, "a geode that slips past costs nothing");
+
+    // A choice pair: opening one dissolves the other.
+    LevelDef c = emptyLevel();
+    Geode a = geodeAt(-2.0f, 20, 1, kBoonLantern), b = geodeAt(2.0f, 20, 1, kBoonBright);
+    a.group = b.group = 1;
+    c.geodes[c.geodeCount++] = a;
+    c.geodes[c.geodeCount++] = b;
+    w.init(c, 1);
+    w.tick(in);
+    place(w.w, -2.0f, 20.0f, 1);
+    w.tick(in);
+    GT_CHECK_MSG(w.geodeState[0] == kGeodeOpened && w.geodeState[1] == kGeodeLost && w.bright == 0, "a choice pair's other geode dissolves");
+
+    // Each boon's arithmetic and limit.
+    LevelDef q = emptyLevel();
+    for (int k = 0; k < 4; ++k) q.geodes[q.geodeCount++] = geodeAt(-3.0f + 2.0f * float(k), 20, 1, kBoonQuicken);
+    for (int k = 0; k < 3; ++k) q.geodes[q.geodeCount++] = geodeAt(-3.0f + 3.0f * float(k), 26, 1, kBoonBright);
+    for (int k = 0; k < 3; ++k) q.geodes[q.geodeCount++] = geodeAt(-3.0f + 3.0f * float(k), 32, 1, kBoonLantern);
+    w.init(q, 1);
+    w.tick(in);
+    float rates[4];
+    for (int k = 0; k < 4; ++k) {
+        place(w.w, -3.0f + 2.0f * float(k), 20.0f, 1);
+        w.tick(in);
+        rates[k] = w.fireRate();
+    }
+    GT_CHECK_MSG(std::fabs(rates[0] - 15) < 1e-3f && std::fabs(rates[1] - 18) < 1e-3f && std::fabs(rates[2] - 21) < 1e-3f &&
+                     std::fabs(rates[3] - 21) < 1e-3f,
+                 "QUICKEN: 12, 15, 18, 21 shots a second, no more");
+    int powers[3], counts[3];
+    float lo[3], hi[3];
+    for (int k = 0; k < 3; ++k) {
+        place(w.w, -3.0f + 3.0f * float(k), 26.0f, 1);
+        w.tick(in);
+        powers[k] = w.shotPower();
+    }
+    for (int k = 0; k < 3; ++k) {
+        place(w.w, -3.0f + 3.0f * float(k), 32.0f, 1);
+        w.tick(in);
+        counts[k] = w.lanterns;
+        lo[k] = w.aimMin();
+        hi[k] = w.aimMax();
+    }
+    GT_CHECK_MSG(powers[0] == 2 && powers[1] == 3 && powers[2] == 3, "BRIGHT: power 2, then 3, no more");
+    GT_CHECK_MSG(counts[0] == 2 && counts[1] == 3 && counts[2] == 3, "LANTERN: two lanterns, then three, no more");
+    GT_CHECK_MSG(std::fabs(lo[0] + 4.4f) < 1e-4f && std::fabs(hi[0] - 3.5f) < 1e-4f && std::fabs(lo[1] + 3.5f) < 1e-4f &&
+                     std::fabs(hi[1] - 3.5f) < 1e-4f,
+                 "the aim range keeps every lantern on the rail");
+    // Three lanterns fire one wisp each on one shot, 0.9 m apart, with BRIGHT's power.
+    w.w.n = 0;
+    Input fire;
+    fire.firing = true;
+    fire.launcherTargetX = 9.0f;  // clamped to the range
+    for (int t = 0; t < 30; ++t) w.tick(fire);
+    GT_CHECK_MSG(w.launcherX <= 3.5f + 1e-4f, "the launcher stays in the narrowed range");
+    float minX = 9, maxX = -9;
+    for (int i = 0; i < w.w.n; ++i) minX = minv(minX, w.w.x[i]), maxX = maxv(maxX, w.w.x[i]);
+    GT_CHECK_MSG(w.w.n > 0 && w.w.n % 3 == 0 && w.w.power[0] == 3 && maxX - minX > 1.6f, "three lanterns: three wisps a shot, 1.8 m across");
+
+    // WARD: the core back to 10; every gloom below wardZ pops, the others stay.
+    LevelDef wd = emptyLevel();
+    wd.geodes[wd.geodeCount++] = geodeAt(0, 20, 1, kBoonWard);
+    w.init(wd, 1);
+    w.core = 4;
+    w.tick(in);
+    place(w.g, 2.0f, 6.0f, 3);
+    place(w.g, -2.0f, 13.0f, 1);
+    place(w.g, 3.0f, 30.0f, 2);
+    place(w.w, 0.0f, 20.0f, 1);
+    w.tick(in);
+    GT_CHECK_MSG(w.core == 10 && w.g.n == 1 && w.g.power[0] == 2, "WARD: the core whole, the glooms below z 14 gone");
+}
+
+// At the cap three lanterns still feed three columns: the shot's power joins a wisp of its own lantern.
+void testCapThreeLanterns() {
+    const float saved = tune.capW;
+    tune.capW = 90;
+    static World w;
+    LevelDef d = emptyLevel();
+    d.len = 44;
+    w.init(d, 1);
+    w.lanterns = 3;
+    Input fire;
+    fire.firing = true;
+    for (int t = 0; t < 600; ++t) w.tick(fire);
+    i64 col[3] = {};
+    for (int i = 0; i < w.w.n; ++i) col[w.w.x[i] < -0.45f ? 2 : w.w.x[i] > 0.45f ? 1 : 0] += w.w.power[i];
+    GT_CHECK_MSG(w.w.n <= 90 && col[0] > 0 && col[1] > 0 && col[2] > 0 && col[0] < 2 * col[1] && col[1] < 2 * col[0] && col[2] < 2 * col[0],
+                 "at the cap three lanterns keep three columns");
+    tune.capW = saved;
+}
+
 void testNoAllocation() {
 #if !defined(GT_SANITIZE)
     static World w;
@@ -251,6 +403,12 @@ void testNoAllocation() {
     const u64 before = allocationCount();
     for (int t = 0; t < 1200; ++t) w.tick(bot.think(w));
     GT_CHECK_MSG(allocationCount() == before, "no heap allocation in World::tick or Bot::think");
+    // A geode level, with greedy weighing the geodes.
+    w.init(levelFor(23), 3);
+    bot.init(BotKind::Greedy, 3);
+    const u64 before2 = allocationCount();
+    for (int t = 0; t < 1800; ++t) w.tick(bot.think(w));
+    GT_CHECK_MSG(allocationCount() == before2, "no heap allocation on a geode level");
 #endif
 }
 
@@ -258,7 +416,8 @@ void testGenerator() {
     int bad = 0;
     for (int s = 0; s < 1000; ++s) {
         const int index = 6 + (s * 37) % 295;
-        const LevelDef L = generate(index, hash64(u64(s)) & 0xFFFFFFFFull);
+        LevelDef L = generate(index, hash64(u64(s)) & 0xFFFFFFFFull);
+        sizeGeodes(L);
         char why[96] = "";
         bool ok = L.rowCount >= 2 && L.len >= 30 && L.len <= 44 && L.gateCount <= kMaxGates && L.emitterCount >= 1;
         if (!ok) std::snprintf(why, sizeof why, "rows %d len %.1f gates %d", L.rowCount, double(L.len), L.gateCount);
@@ -304,6 +463,33 @@ void testGenerator() {
                 }
             }
         }
+        // Geodes (VARIETY_DESIGN 9.3): how many, when, how far apart, at most three kinds, the first lasting up to 60, the
+        // budget, and inside the lane where a stream can reach them.
+        const int maxGeodes = index <= 20 ? 2 : index <= 60 ? 3 : 4;
+        if (ok && (L.geodeCount > maxv(maxGeodes, L.boss ? 2 : 0) || (index >= 6 && L.geodeCount == 0)))
+            ok = false, std::snprintf(why, sizeof why, "%d geodes", L.geodeCount);
+        float worth = 1;
+        int lanterns = 1, quicken = 0, bright = 0, kinds = 0;
+        bool seen[kBoonCount] = {};
+        for (int g = 0; ok && g < L.geodeCount; ++g) {
+            const Geode& G = L.geodes[g];
+            const bool lasting = G.boon != kBoonWard;
+            if (g == 0 && (G.t < 0.08f * L.targetT - 1e-3f || G.t > 0.25f * L.targetT + 1e-3f))
+                ok = false, std::snprintf(why, sizeof why, "first geode at %.1f s of %.0f", double(G.t), double(L.targetT));
+            if (g > 0 && G.t < L.geodes[g - 1].t + 5.0f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "geodes under 5 s apart");
+            if (lasting && G.t > 0.75f * L.targetT + 1e-3f) ok = false, std::snprintf(why, sizeof why, "a lasting boon after 75%% of T");
+            if (g == 0 && index <= 60 && !lasting) ok = false, std::snprintf(why, sizeof why, "the first geode is a WARD");
+            if (std::fabs(G.x) + G.amp > 3.9f + 1e-3f) ok = false, std::snprintf(why, sizeof why, "geode %d outside the reachable lane", g);
+            if (G.hp <= 0 || (G.shieldSeconds > 0 && G.shield <= 0)) ok = false, std::snprintf(why, sizeof why, "geode %d has no health", g);
+            if (!seen[G.boon]) seen[G.boon] = true, ++kinds;
+            worth *= 1.0f + boonGain(G.boon, lanterns, quicken, bright);
+            lanterns += G.boon == kBoonLantern;
+            quicken += G.boon == kBoonQuicken;
+            bright += G.boon == kBoonBright;
+        }
+        if (ok && kinds > 3) ok = false, std::snprintf(why, sizeof why, "%d kinds of boon", kinds);
+        if (ok && worth > (index <= 20 ? 2.0f : index <= 60 ? 2.5f : 3.0f) + 1e-3f)
+            ok = false, std::snprintf(why, sizeof why, "boons worth x%.2f over the budget", double(worth));
         if (!ok) {
             if (bad < 5) std::printf("generator: level %d seed %d: %s\n", index, s, why);
             ++bad;
@@ -379,6 +565,8 @@ void runSimTests() {
     testSliders();
     testBursts();
     testBumper();
+    testGeodes();
+    testCapThreeLanterns();
     testNoAllocation();
     testGenerator();
     testCameraFit();

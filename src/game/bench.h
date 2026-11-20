@@ -14,6 +14,7 @@ struct BenchFrame {
     float phase[kPhaseCount] = {};
     float tickMax = 0;    // s, the slowest simulation tick in the frame
     int wisps = 0, glooms = 0, particles = 0;
+    int drawCalls = 0;
 };
 
 class Bench {

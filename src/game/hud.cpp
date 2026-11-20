@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 namespace gt {
 
@@ -20,6 +21,66 @@ void formatThousands(long long v, char* buf, int n) {
 }
 
 void drawStar(UiBatch& ui, float cx, float cy, float r, Rgba c) { ui.star(cx, cy, r, c); }
+
+Rect hudTrayChip(const Layout& L, int i) {
+    const float w = L.px(66), h = L.px(44);
+    const float y = L.bottom() - L.px(24) - L.px(26) - h * 0.5f;
+    return {L.safe.left + L.px(12) + float(i) * (w + L.px(6)), y, w, h};
+}
+
+Rect hudTideRect(const Layout& L, long long tide) {
+    char buf[32];
+    formatThousands(tide, buf, sizeof buf);
+    const float tw = UiBatch::textWidth(buf, L.px(24)) + L.px(62), h = L.px(48);
+    const float ty = L.bottom() - L.px(24) - L.px(26);
+    return {float(L.w) - L.safe.right - L.px(12) - tw, ty - h * 0.5f, tw, h};
+}
+
+void drawBoonIcon(UiBatch& ui, int boon, float cx, float cy, float s, Rgba c) {
+    const float k = s / 0.5f;  // the badge's units: the icon spans about -0.25..0.25
+    auto box = [&](float u0, float v0, float u1, float v1) {
+        ui.rect(cx + (u0 + u1) * 0.5f * k, cy - (v0 + v1) * 0.5f * k, (u1 - u0) * k, (v1 - v0) * k, 0.02f * k, c);
+    };
+    auto bar = [&](float ua, float va, float ub, float vb, float th) {
+        const float du = ub - ua, dv = vb - va;
+        ui.rectRotated(cx + (ua + ub) * 0.5f * k, cy - (va + vb) * 0.5f * k, std::sqrt(du * du + dv * dv) * k, th * k, th * 0.5f * k,
+                       -std::atan2(dv, du), c);
+    };
+    switch (boon) {
+        case 0:  // LANTERN
+            box(-0.13f, -0.13f, 0.13f, 0.15f);
+            box(-0.07f, 0.15f, 0.07f, 0.23f);
+            box(-0.17f, -0.21f, 0.17f, -0.13f);
+            break;
+        case 1:  // QUICKEN
+            for (float v : {-0.12f, 0.06f}) {
+                bar(-0.19f, v, 0.0f, v + 0.14f, 0.075f);
+                bar(0.0f, v + 0.14f, 0.19f, v, 0.075f);
+            }
+            break;
+        case 2:  // BRIGHT
+            ui.rect(cx, cy + 0.06f * k, 0.3f * k, 0.3f * k, 0.15f * k, c);
+            bar(-0.08f, 0.02f, 0.0f, 0.24f, 0.09f);
+            bar(0.08f, 0.02f, 0.0f, 0.24f, 0.09f);
+            break;
+        case 3:  // WARD
+            ui.rect(cx, cy, 0.44f * k, 0.44f * k, 0.22f * k, Rgba{0, 0, 0, 0}, c, 0.1f * k);
+            break;
+        case 4:  // KINDLE
+            box(-0.2f, -0.2f, -0.12f, 0.18f);
+            box(0.12f, -0.2f, 0.2f, 0.18f);
+            box(-0.2f, 0.14f, 0.2f, 0.22f);
+            break;
+        case 5:  // COMET
+            ui.rect(cx + 0.09f * k, cy - 0.09f * k, 0.22f * k, 0.22f * k, 0.11f * k, c);
+            bar(0.06f, 0.06f, -0.22f, -0.2f, 0.08f);
+            break;
+        default:  // HUSH
+            ui.rect(cx, cy, 0.44f * k, 0.44f * k, 0.22f * k, c);
+            ui.rect(cx + 0.12f * k, cy - 0.06f * k, 0.38f * k, 0.38f * k, 0.19f * k, rgba(kInk, c.a));
+            break;
+    }
+}
 
 Rect hudPauseRect(const Layout& L) {
     const float s = L.px(48);
@@ -73,16 +134,32 @@ void drawHud(UiBatch& ui, const Layout& L, const HudState& s) {
     ui.rect(tx + tw * 0.5f, ty, tw, L.px(48) * punch, L.px(24) * punch, ink, rgba(kGold, u8(150 * s.opacity)), L.px(1.5f));
     drawStar(ui, tx + L.px(26), ty, L.px(11) * punch, rgba(kGold, u8(255 * s.opacity)));
     ui.text(buf, tx + L.px(44), ty, ts, white, inkStroke, 0, Align::Left);
-    // The flood banner (GAME_DESIGN 10).
-    if (s.bannerTime > 0 && s.bannerMark > 0) {
-        char b2[48];
-        char num[24];
-        formatThousands(s.bannerMark, num, sizeof num);
-        std::snprintf(b2, sizeof b2, "FLOOD \xC3\x97%s", num);
+    // The boon tray: a chip a boon held, its icon and how many; it is empty and invisible until the first boon.
+    for (int i = 0; i < s.trayCount && i < 4; ++i) {
+        const Rect r = hudTrayChip(L, i);
+        const float p = 1.0f + 0.25f * s.trayPunch[i];
+        ui.rect(r.cx(), r.cy(), r.w * p, r.h * p, r.h * 0.5f * p, ink, rgba(kGold, u8(170 * s.opacity)), L.px(1.5f));
+        drawBoonIcon(ui, s.trayBoon[i], r.x + L.px(22), r.cy(), L.px(28) * p, rgba(kGold, u8(255 * s.opacity)));
+        std::snprintf(buf, sizeof buf, "\xC3\x97%d", s.trayHeld[i]);
+        ui.text(buf, r.x + L.px(38), r.cy(), L.px(18) * p, white, inkStroke, 0, Align::Left);
+    }
+    // Icons on their way from a geode to the tray.
+    for (const HudState::Fly& f : s.fly) {
+        if (f.t >= 1.0f) continue;
+        int slot = 0;
+        for (int i = 0; i < s.trayCount; ++i)
+            if (s.trayBoon[i] == f.boon) slot = i;
+        const Rect r = hudTrayChip(L, slot);
+        const float e = f.t * f.t * (3.0f - 2.0f * f.t);
+        const float x = f.x0 + (r.x + L.px(22) - f.x0) * e, y = f.y0 + (r.cy() - f.y0) * e - L.px(60) * 4.0f * f.t * (1.0f - f.t);
+        drawBoonIcon(ui, f.boon, x, y, L.px(44 - 14 * e), rgba(kGold, u8(255 * s.opacity)));
+    }
+    // The banner (GAME_DESIGN 10): FLOOD xN, +1 LANTERN; one at a time.
+    if (s.bannerTime > 0 && s.banner[0]) {
         const float a = minv(1.0f, s.bannerTime / 0.25f) * minv(1.0f, (0.9f - s.bannerTime) / 0.12f + 0.2f);
         const float size = L.px(40) * (1.0f + 0.15f * maxv(0.0f, s.bannerTime - 0.7f) / 0.2f);
-        ui.text(b2, float(L.w) * 0.5f, float(L.h) * 0.36f, size, rgba(kGold, u8(255 * a * s.opacity)), rgba(0x5A2A08, u8(255 * a * s.opacity)),
-                maxv(3.0f, size * 0.09f), Align::Center);
+        ui.text(s.banner, float(L.w) * 0.5f, float(L.h) * 0.36f, size, rgba(kGold, u8(255 * a * s.opacity)),
+                rgba(0x5A2A08, u8(255 * a * s.opacity)), maxv(3.0f, size * 0.09f), Align::Center);
     }
 }
 

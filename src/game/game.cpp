@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "core/clock.h"
 #include "core/log.h"
@@ -53,11 +54,12 @@ bool Game::init(const Args& args, const GameEnv& env) {
     }
 
     if (!std::strcmp(args.scenario, "sim_hash")) {
-        // The determinism hash on this device (P2): levels 1-5, the greedy bot, 60 s each, the same runs as
-        // glowtide_headless --sim determinism on the PC (seed 1 unless --seed).
+        // The determinism hash on this device (P2): levels 1-5 and four geode levels (VARIETY_PLAN V1), the greedy bot, 60 s
+        // each, the same runs as glowtide_headless --sim determinism on the PC (seed 1 unless --seed;
+        // scripts\simhash-android.ps1 compares them).
         mode_ = Mode::Debug;
         const u64 seed = args.seed >= 0 ? u64(args.seed) : 1u;
-        for (int level = 1; level <= 5; ++level) {
+        for (int level : {1, 2, 3, 4, 5, 6, 11, 23, 47}) {
             world_.init(sim::levelFor(level), seed);
             bot_.init(sim::BotKind::Greedy, seed);
             for (int t = 0; t < 60 * 60; ++t) world_.tick(bot_.think(world_));
@@ -151,7 +153,12 @@ void Game::enterLevel(int index, bool fade) {
     fingerCount_ = 0;
     levelTime_ = 0;
     levelFrames_ = levelLate_ = 0;
-    firingTicks_ = divPasses_ = mulPasses_ = 0;
+    firingTicks_ = divPasses_ = mulPasses_ = geodeAimTicks_ = 0;
+    bannerQueued_ = 0;
+    bannerNow_[0] = 0;
+    bannerLeft_ = 0;
+    for (float& p : trayPunch_) p = 0;
+    for (HudState::Fly& f : fly_) f.t = 1;
     popWaveZ_ = 0;
     setScreen(Screen::Home);
     fadeIn_ = fade ? 0.0f : 1.0f;
@@ -208,10 +215,21 @@ void Game::finishLevel(bool won) {
         const float fired = float(firingTicks_) / maxv(1.0f, float(world_.tickCount));
         if (fired < 0.5f) std::snprintf(advice_, sizeof advice_, "HOLD TO POUR A STEADY STREAM");
         else if (divPasses_ > mulPasses_ / 3) std::snprintf(advice_, sizeof advice_, "STEER CLEAR OF THE \xC3\xB7 GATES");
+        else if (world_.geodesShown > 0 && world_.geodesOpened == 0) std::snprintf(advice_, sizeof advice_, "THE GEODES WOULD HAVE HELPED");
+        else if (geodeAimTicks_ * 3 > world_.tickCount) std::snprintf(advice_, sizeof advice_, "DO NOT CHASE EVERY GEODE");
         else std::snprintf(advice_, sizeof advice_, "KEEP THE STREAM ON THE BIGGEST GATES");
         setScreen(Screen::Lose);
     }
     saveNow();
+}
+
+void Game::pushBanner(const char* text) {
+    if (bannerLeft_ <= 0 && bannerQueued_ == 0) {
+        std::snprintf(bannerNow_, sizeof bannerNow_, "%s", text);
+        bannerLeft_ = 0.9f;
+    } else if (bannerQueued_ < 4) {
+        std::snprintf(bannerQueue_[bannerQueued_++], sizeof bannerQueue_[0], "%s", text);
+    }
 }
 
 void Game::showHint(int id) {
@@ -424,6 +442,38 @@ void Game::tick() {
             showHint(1);
         } else if (ev.type == sim::kEvGateDiv) {
             divPasses_ += ev.b;
+        } else if (ev.type == sim::kEvTideMark) {
+            char num[24], b[40];
+            formatThousands(ev.a, num, sizeof num);
+            std::snprintf(b, sizeof b, "FLOOD \xC3\x97%s", num);
+            pushBanner(b);
+        } else if (ev.type == sim::kEvGeodeAppear) {
+            showHint(world_.def.geodes[ev.a].shield > 0 && (save_.hints & (1u << 6)) ? 7 : 6);
+        } else if (ev.type == sim::kEvGeodeLost && ev.b == 0) {
+            showHint(8);
+        } else if (ev.type == sim::kEvGeodeOpen) {
+            char b[40];
+            std::snprintf(b, sizeof b, "+1 %s", sim::boonName(ev.b));
+            pushBanner(b);
+            float sx, sy;
+            if (view_.cam.project(V3(ev.x, 1.4f, ev.z), sx, sy) > 0) {
+                for (HudState::Fly& f : fly_) {
+                    if (f.t < 1.0f) continue;
+                    f.boon = u8(ev.b);
+                    f.x0 = sx;
+                    f.y0 = sy;
+                    f.t = 0;
+                    break;
+                }
+            }
+        } else if (ev.type == sim::kEvBoon && ev.a < sim::kBoonCount) {
+            trayPunch_[ev.a] = 1.0f;
+        }
+    }
+    for (int g = 0; g < world_.def.geodeCount; ++g) {
+        if (world_.geodeState[g] == sim::kGeodeAlive && std::fabs(world_.geodeX[g] - world_.launcherX) < 1.0f) {
+            ++geodeAimTicks_;
+            break;
         }
     }
     // The first time the enemy's line comes down past the first gate row (GAME_DESIGN 11).
@@ -447,6 +497,15 @@ void Game::update(float dt, float alpha) {
     screenTime_ += dt;
     if (screen_ == Screen::Play) levelTime_ += dt;
     if (hintTime_ > 0) hintTime_ -= dt;
+    bannerLeft_ -= dt;
+    if (bannerLeft_ <= 0 && bannerQueued_ > 0) {
+        std::snprintf(bannerNow_, sizeof bannerNow_, "%s", bannerQueue_[0]);
+        for (int i = 1; i < bannerQueued_; ++i) std::snprintf(bannerQueue_[i - 1], sizeof bannerQueue_[0], "%s", bannerQueue_[i]);
+        --bannerQueued_;
+        bannerLeft_ = 0.9f;
+    }
+    for (HudState::Fly& f : fly_) f.t = minv(1.0f, f.t + dt / 0.4f);
+    for (float& p : trayPunch_) p = maxv(0.0f, p - dt / 0.25f);
     if (titleFade_ > 0 && screen_ != Screen::Home) titleFade_ = maxv(0.0f, titleFade_ - dt / 0.4f);
     // Fades between levels: 150 ms out, enter, 150 ms in.
     if (fadeOut_ > 0) {
@@ -518,7 +577,7 @@ Game::StripPre Game::stripBefore() const {
     StripPre p;
     if (mode_ != Mode::Picture || args_.strip < 2) return p;
     if (std::strcmp(pictureScreen_, "gate_strip") && std::strcmp(pictureScreen_, "clash_strip") &&
-        std::strcmp(pictureScreen_, "core_hit_strip"))
+        std::strcmp(pictureScreen_, "core_hit_strip") && std::strcmp(pictureScreen_, "geode_strip") && std::strcmp(pictureScreen_, "ward_strip"))
         return p;
     // Only the captured frames (and the ticks between them).
     const int first = args_.frames - (args_.strip - 1) * args_.stripStep;
@@ -528,6 +587,10 @@ Game::StripPre Game::stripBefore() const {
     p.cancelled = world_.cancelled;
     p.spawned = world_.gloomSpawned;
     p.core = world_.core;
+    p.spent = world_.spent;
+    p.warded = world_.warded;
+    for (int g = 0; g < world_.def.geodeCount; ++g)
+        if (world_.geodeState[g] == sim::kGeodeAlive) p.geodeHealth += world_.geodeHp[g] + world_.geodeShield[g];
     return p;
 }
 
@@ -570,7 +633,24 @@ void Game::stripCheck(const StripPre& pre) {
         if (W.events[e].type == sim::kEvClashCount) clashes += W.events[e].a;
     }
     const i64 cancelled = W.cancelled - pre.cancelled;
-    const bool gloomOk = pre.gloomPower + spawned - cancelled - coreDamage == post;
+    // Geodes: the power given to them and their plates is exactly the health they lost (VARIETY_TECH 10).
+    i64 geodeAfter = 0, appeared = 0;
+    for (int g = 0; g < W.def.geodeCount; ++g) {
+        const bool counted = W.geodeState[g] == sim::kGeodeAlive || W.geodeState[g] == sim::kGeodeOpened;
+        if (counted) geodeAfter += W.geodeHp[g] + W.geodeShield[g];
+    }
+    for (int e = 0; e < W.eventCount; ++e)
+        if (W.events[e].type == sim::kEvGeodeAppear)
+            appeared += maxv<i32>(1, W.def.geodes[W.events[e].a].hp) + maxv<i32>(0, W.def.geodes[W.events[e].a].shield);
+    i64 vanished = 0;  // geodes that slipped past or dissolved this tick take their health with them
+    for (int e = 0; e < W.eventCount; ++e)
+        if (W.events[e].type == sim::kEvGeodeLost) vanished += W.geodeHp[W.events[e].a] + W.geodeShield[W.events[e].a];
+    const bool geodeOk = pre.geodeHealth + appeared - vanished - geodeAfter == W.spent - pre.spent;
+    bad += geodeOk ? 0 : 1;
+    if (W.spent != pre.spent && n < 180)
+        n += std::snprintf(line + n, sizeof line - size_t(n), " geodes took %lld of %lld%s;", (long long)(W.spent - pre.spent),
+                           (long long)(pre.geodeHealth + appeared - vanished - geodeAfter), geodeOk ? "" : " MISMATCH");
+    const bool gloomOk = pre.gloomPower + spawned - cancelled - coreDamage - (W.warded - pre.warded) == post;
     const bool coreOk = i64(pre.core) - i64(W.core) == coreDamage;
     bad += (gloomOk ? 0 : 1) + (coreOk ? 0 : 1);
     if (n < 200)

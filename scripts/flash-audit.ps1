@@ -1,4 +1,4 @@
-# The flashing audit (P6 task 5, GAME_DESIGN 14): renders every frame of the win, boss win, lose and core-hit strips,
+# The flashing audit (P6 task 5, GAME_DESIGN 14): renders every frame of the win, boss win, lose, core-hit, geode and WARD strips,
 # with and without REDUCE EFFECTS, and counts brightness swings of more than 10% per second (at most three).
 #   scripts\flash-audit.ps1 [-Config debug|dev] [-NoBuild]
 param(
@@ -9,7 +9,7 @@ param(
 if (-not $NoBuild) { & "$PSScriptRoot\build-desktop.ps1" -Config $Config }
 $exe = Join-Path $GT_ROOT "build\desktop-$Config\glowtide.exe"
 $root = Join-Path $GT_ROOT 'captures\flash'
-$strips = [ordered]@{ win_strip = 210; boss_win_strip = 210; lose_strip = 150; core_hit_strip = 120 }
+$strips = [ordered]@{ win_strip = 210; boss_win_strip = 210; lose_strip = 150; core_hit_strip = 120; geode_strip = 60; ward_strip = 60 }
 $failed = 0
 foreach ($mode in 'normal', 'reduced') {
     $dir = Join-Path $root $mode

@@ -20,8 +20,20 @@ struct HudState {
     float spireFrac = 1;   // 0..1
     long long tide = 0;
     float tidePunch = 0;
-    int bannerMark = 0;
+    // The banner showing now (a boon, the flood's marks; later a goal or a twist): one at a time, 0.9 s.
+    char banner[40] = "";
     float bannerTime = 0;  // seconds left
+    // Boons held this level (VARIETY_DESIGN 14): the tray, bottom left, a chip a boon in the order they came.
+    int trayCount = 0;
+    u8 trayBoon[4] = {};
+    int trayHeld[4] = {};
+    float trayPunch[4] = {};
+    // Icons flying from an opened geode to its chip (0.4 s): where they started on screen and how far they are (0..1).
+    struct Fly {
+        u8 boon = 0;
+        float x0 = 0, y0 = 0, t = 1;
+    };
+    Fly fly[4];
     bool pausePressed = false;
     bool drawPause = true;
     float opacity = 1;
@@ -42,6 +54,12 @@ struct Rect {
 
 // The pause button's touch rectangle (48 dp or more).
 Rect hudPauseRect(const Layout& L);
+// Where the boon tray's chip `i` is (bottom left, mirroring the tide counter), and the tide counter itself.
+Rect hudTrayChip(const Layout& L, int i);
+Rect hudTideRect(const Layout& L, long long tide);
+// A boon's icon in gold (the geode's badge drawn flat): a lantern, two chevrons, a teardrop, a ring, a gate, a comet, a
+// crescent.
+void drawBoonIcon(UiBatch& ui, int boon, float cx, float cy, float size, Rgba c);
 void drawHud(UiBatch& ui, const Layout& L, const HudState& s);
 void drawStar(UiBatch& ui, float cx, float cy, float r, Rgba c);
 void formatThousands(long long v, char* buf, int n);

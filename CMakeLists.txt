@@ -3,7 +3,7 @@
 # Android: android/ Gradle project points externalNativeBuild here (SDK CMake 3.22.1, NDK r29).
 
 cmake_minimum_required(VERSION 3.22)
-project(glowtide VERSION 0.1.0 LANGUAGES C CXX)  # (android/app/build.gradle versionName is kept the same)
+project(glowtide VERSION 0.2.0 LANGUAGES C CXX)  # (android/app/build.gradle versionName is kept the same)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

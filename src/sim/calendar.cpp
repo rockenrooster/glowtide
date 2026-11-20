@@ -44,6 +44,15 @@ float fightFor(int index) { return tune.fightBase + tune.fightPerLevel * float(m
 
 int worldFor(int index) { return ((index - 1) / 10) % 5 + 1; }
 
+float hardnessFor(int index) {
+    if (index <= 5) return 0.2f;
+    // A world's rhythm (VARIETY_DESIGN 10.2): its opening, rising, a breather at 5, rising again, the hard one, the boss.
+    static const float byPlace[10] = {0.2f, 0.4f, 0.5f, 0.6f, 0.4f, 0.5f, 0.65f, 0.8f, 1.0f, 0.8f};
+    return byPlace[(index - 1) % 10];
+}
+
+bool isHandMade(int index) { return index <= 6 || index == 11 || index == 23; }
+
 Band bandFor(int index) {
     Band b;
     auto set = [&](int lo, int hi, int strongest, float a, float c, float t, float s, float w, float p, float x, float n) {

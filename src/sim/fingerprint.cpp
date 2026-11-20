@@ -53,6 +53,23 @@ Fingerprint fingerprintOf(const LevelDef& L) {
         const Snuffer& S = L.snuffers[i];
         m.cover(S.xa - 0.6f, S.xb + 0.6f, S.z, S.z, kFpSnuffer, false);
     }
+    // Geodes: the path each drifts down, and the boons offered in the order they come.
+    int order[kMaxGeodes];
+    const int ng = minv(L.geodeCount, kMaxGeodes);
+    for (int i = 0; i < ng; ++i) {
+        const Geode& G = L.geodes[i];
+        const float z0 = G.z0 > 0 ? G.z0 : L.len - 3.0f;
+        m.cover(G.x - G.radius - G.amp, G.x + G.radius + G.amp, 4.0f, z0, kFpGeode, G.amp > 0);
+        order[i] = i;
+    }
+    for (int a = 0; a < ng; ++a)
+        for (int b = a + 1; b < ng; ++b)
+            if (L.geodes[order[b]].t < L.geodes[order[a]].t) {
+                const int t = order[a];
+                order[a] = order[b];
+                order[b] = t;
+            }
+    for (int i = 0; i < ng && fp.boonCount < 16; ++i) fp.boons[fp.boonCount++] = L.geodes[order[i]].boon;
     return fp;
 }
 

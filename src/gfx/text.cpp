@@ -1,5 +1,7 @@
 #include "gfx/text.h"
 
+#include <cmath>
+
 #include <cstring>
 
 namespace gt {
@@ -65,6 +67,28 @@ void UiBatch::rect(float cx, float cy, float w, float h, float radius, Rgba fill
     c.x = cx - hw; c.y = cy + hh; c.u = -hw; c.v = hh;
     d.x = cx + hw; d.y = cy + hh; d.u = hw;  d.v = hh;
     quad(a, b, c, d);
+}
+
+void UiBatch::rectRotated(float cx, float cy, float w, float h, float radius, float angle, Rgba fill) {
+    // The rounded rectangle's distance field lives in its own frame (u, v); only the corners turn.
+    const float m = 2.0f;
+    const float hw = w * 0.5f + m, hh = h * 0.5f + m;
+    const float c = std::cos(angle), s = std::sin(angle);
+    UiVertex base{};
+    std::memcpy(base.fill, &fill, 4);
+    base.p0[0] = 1.0f;
+    base.p0[2] = minv(radius, minv(w, h) * 0.5f);
+    base.p1[0] = w * 0.5f;
+    base.p1[1] = h * 0.5f;
+    UiVertex q[4] = {base, base, base, base};
+    const float us[4] = {-hw, hw, -hw, hw}, vs[4] = {-hh, -hh, hh, hh};
+    for (int i = 0; i < 4; ++i) {
+        q[i].u = us[i];
+        q[i].v = vs[i];
+        q[i].x = cx + us[i] * c - vs[i] * s;
+        q[i].y = cy + us[i] * s + vs[i] * c;
+    }
+    quad(q[0], q[1], q[2], q[3]);
 }
 
 void UiBatch::star(float cx, float cy, float r, Rgba fill, Rgba stroke, float strokeW) {

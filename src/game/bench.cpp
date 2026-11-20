@@ -62,11 +62,12 @@ void Bench::finish(const char* device, const char* glRenderer, const char* glVer
     stats([](const BenchFrame& f) { return f.cpu; }, cpu);
     stats([](const BenchFrame& f) { return f.tickMax; }, tick);
     for (int p = 0; p < kPhaseCount; ++p) stats([p](const BenchFrame& f) { return f.phase[p]; }, phases[p]);
-    int maxW = 0, maxG = 0, maxP = 0;
+    int maxW = 0, maxG = 0, maxP = 0, maxDraws = 0;
     for (int i = 0; i < n; ++i) {
         maxW = maxv(maxW, frames_[i].wisps);
         maxG = maxv(maxG, frames_[i].glooms);
         maxP = maxv(maxP, frames_[i].particles);
+        maxDraws = maxv(maxDraws, frames_[i].drawCalls);
     }
 
     // The contract (PLAN 5): present intervals in whole refresh periods; late = shown two or more periods after the
@@ -117,6 +118,7 @@ void Bench::finish(const char* device, const char* glRenderer, const char* glVer
         interval[3], cpu[0], cpu[1], cpu[2], cpu[3], tick[0], tick[1], tick[2], tick[3], (unsigned long long)allocs, maxW,
         maxG, maxP, phases[kPhaseEvents][1], phases[kPhaseSim][1], phases[kPhaseView][1], phases[kPhaseBuild][1],
         phases[kPhaseSubmit][1], phases[kPhaseSwap][1]);
+    if (o < int(sizeof json) - 40) o += std::snprintf(json + o, sizeof json - size_t(o), ",\"draw_calls\":%d", maxDraws);
     if (extra && o < int(sizeof json) - 2) o += std::snprintf(json + o, sizeof json - size_t(o), "%s", extra);
     if (o < int(sizeof json) - 2) std::snprintf(json + o, sizeof json - size_t(o), "}");
     GT_TAG("GTBENCH", "%s", json);

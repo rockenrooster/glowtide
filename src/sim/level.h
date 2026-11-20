@@ -10,19 +10,46 @@ namespace gt::sim {
 // Bump kGeneratorVersion when anything that changes a layout changes (a recipe, the calendar, a hand-made level), and
 // kRulesVersion when anything that changes a bot's run changes (a rule in world.cpp, a tuning default, a bot). The bake
 // writes both into levels_baked.h; a unit test fails while the table's differ from these (VARIETY_TECH 2).
-constexpr int kGeneratorVersion = 2;  // 2: level 1's spire 66
-constexpr int kRulesVersion = 2;  // 2: shots leave the barrel's tip
+constexpr int kGeneratorVersion = 5;  // 5: geodes from level 6; hand-made 6, 11, 23; hardness moves fight
+constexpr int kRulesVersion = 3;      // 3: geodes, lanterns, boons; bots value geodes
 int bakedGeneratorVersion();
 int bakedRulesVersion();
 
 constexpr float kHW = 5.0f;              // lane half-width (GAME_DESIGN 3)
 constexpr float kLauncherRange = 4.4f;   // the launcher's rail: x in [-4.4, 4.4]
-constexpr float kMuzzleZ = 2.55f;  // the barrel's tip: where the lens is (gfx/mesh.cpp's launcher, placed at z 0.2)
+constexpr float kMuzzleZ = 2.55f;        // the barrel's tip: where the lens is (gfx/mesh.cpp's launcher, placed at z 0.2)
 constexpr float kCoreZ = 0.8f;
 constexpr int kMaxGates = 24, kMaxBarriers = 8, kMaxBumpers = 16, kMaxSnuffers = 8, kMaxEmitters = 3, kMaxBursts = 8,
-              kMaxRows = 6;
+              kMaxRows = 6, kMaxGeodes = 16;
 
 enum GateKind : u8 { kGateMul = 0, kGateDiv = 1 };
+enum Pattern : u8 { kPatOpen, kPatChoice, kPatTrap, kPatSlider, kPatWall, kPatPillars, kPatPatrol, kPatCrossing, kPatHand };
+
+// A level's goal (VARIETY_DESIGN 6), its lane's length class (9.1), the enemy's plan (5.1), the named moments (7) and
+// what geodes give (3). Their names (for reports and pictures) are in calendar.cpp; recipes' names in recipes.cpp.
+enum Kind : u8 { kSiege, kHoldout, kColossus, kTwins, kFestival, kBoss, kKindCount };
+enum LengthClass : u8 { kSprint, kStandard, kLong, kLengthCount };
+enum Plan : u8 { kPlanSteady, kPlanPulse, kPlanPincer, kPlanLateSurge, kPlanEarlyRush, kPlanFlank, kPlanBruteLine, kPlanRunnerPacks, kPlanCount };
+enum Twist : u8 {
+    kTwistSurge,
+    kTwistBruteGuard,
+    kTwistGeodeRain,
+    kTwistEclipse,
+    kTwistStampede,
+    kTwistSecondWind,
+    kTwistGoldenGate,
+    kTwistGateStorm,
+    kTwistWardWall,
+    kTwistCub,
+    kTwistCount
+};
+enum Boon : u8 { kBoonLantern, kBoonQuicken, kBoonBright, kBoonWard, kBoonKindle, kBoonComet, kBoonHush, kBoonCount };
+const char* kindName(int kind);
+const char* lengthClassName(int lengthClass);
+const char* planName(int plan);
+const char* twistName(int twist);
+const char* boonName(int boon);
+const char* recipeName(int recipe);
 
 struct Gate {
     float cx = 0, hw = 1.5f, z = 10;
@@ -54,33 +81,21 @@ struct Burst {
     i32 brutes = 0;
 };
 
-enum Pattern : u8 { kPatOpen, kPatChoice, kPatTrap, kPatSlider, kPatWall, kPatPillars, kPatPatrol, kPatCrossing, kPatHand };
-
-// A level's goal (VARIETY_DESIGN 6), its lane's length class (9.1), the enemy's plan (5.1), the named moments (7) and
-// what geodes give (3). Their names (for reports and pictures) are in calendar.cpp; recipes' names in recipes.cpp.
-enum Kind : u8 { kSiege, kHoldout, kColossus, kTwins, kFestival, kBoss, kKindCount };
-enum LengthClass : u8 { kSprint, kStandard, kLong, kLengthCount };
-enum Plan : u8 { kPlanSteady, kPlanPulse, kPlanPincer, kPlanLateSurge, kPlanEarlyRush, kPlanFlank, kPlanBruteLine, kPlanRunnerPacks, kPlanCount };
-enum Twist : u8 {
-    kTwistSurge,
-    kTwistBruteGuard,
-    kTwistGeodeRain,
-    kTwistEclipse,
-    kTwistStampede,
-    kTwistSecondWind,
-    kTwistGoldenGate,
-    kTwistGateStorm,
-    kTwistWardWall,
-    kTwistCub,
-    kTwistCount
+// A geode (VARIETY_DESIGN 2): a crystal with health that drifts down the lane toward the lantern; the stream cracks it
+// open for its boon. A shielded one carries a plate (a barrier that moves with it) that must break first.
+struct Geode {
+    float x = 0, z0 = 0, t = 0;              // where and when it appears (z0 0: the lane's length - 3)
+    float speed = 1.6f;                      // m/s down the lane
+    float amp = 0, period = 4, phase = 0;    // a sideways slide, the gates' wave (amp 0: none)
+    float radius = 0.9f;
+    float leaveAt = 0;                       // a vault waits at z0 until this time (0: drifts from the start)
+    // Health in seconds of the stream that reaches the geode's column from straight below where it appears (the
+    // gates it passes multiply it); the plate's the same way; 0: no plate. sizeGeodes turns them into numbers.
+    float hpSeconds = 2.5f, shieldSeconds = 0;
+    i32 hp = 0, shield = 0;
+    u8 boon = kBoonLantern;
+    u8 group = 0;                            // a choice pair shares a group above 0: opening one dissolves the other
 };
-enum Boon : u8 { kBoonLantern, kBoonQuicken, kBoonBright, kBoonWard, kBoonKindle, kBoonComet, kBoonHush, kBoonCount };
-const char* kindName(int kind);
-const char* lengthClassName(int lengthClass);
-const char* planName(int plan);
-const char* twistName(int twist);
-const char* boonName(int boon);
-const char* recipeName(int recipe);
 
 struct LevelDef {
     int index = 1;
@@ -96,6 +111,8 @@ struct LevelDef {
     bool boss = false;
     float bruteEvery = 0;   // seconds; 0: no brutes
     i32 brutePower = 0;
+    float ref = 0;          // the reference power R the bake sized the level by (VARIETY_DESIGN 12.2)
+    float hardness = 0.5f;  // the level's place in its world's rhythm, 0..1 (VARIETY_DESIGN 10.2)
 
     int gateCount = 0;
     Gate gates[kMaxGates];
@@ -112,15 +129,34 @@ struct LevelDef {
     int rowCount = 0;
     float rowZ[kMaxRows] = {};
     u8 rowPattern[kMaxRows] = {};
+    int geodeCount = 0;
+    Geode geodes[kMaxGeodes];
 
     bool hasEnemy() const { return emitterCount > 0; }
 };
 
+// Geode and plate health from their seconds and the stream that reaches their column, rounded to two significant
+// figures like the spire's.
+void sizeGeodes(LevelDef& L);
+// What a straight stream at x has been multiplied by below z: the gates' factors, a slider's for the share of its
+// travel it spends over x.
+float columnMult(const LevelDef& L, float x, float z);
+// How far a stream aimed at x has fanned out to each side below z: each multiply gate it passes throws its clones
+// sideways (GAME_DESIGN 5.4), about (fanBase + fanPerK k) * fanDecay metres.
+float fanSpread(const LevelDef& L, float x, float z);
+i32 twoSignificant(float v);
+// Whether a level number is laid out by hand (levels_hand.cpp) rather than by a recipe.
+bool isHandMade(int index);
+float hardnessFor(int index);  // VARIETY_DESIGN 10.2
+// What a boon taken now multiplies the stream's power by, minus one, given what the stream already has (VARIETY_DESIGN
+// 3); 0 at its limit and for an instant boon.
+float boonGain(int boon, int lanterns, int quicken, int bright);
+
 // The level the game plays at `index` (1-based): hand-made, or generated from the baked seed.
 LevelDef levelFor(int index);
-// The layout alone (no baked numbers): hand-made for 1..5, else generated from (index, seed).
+// The layout alone (no baked numbers): hand-made or generated from (index, seed).
 LevelDef layoutFor(int index, u64 seed);
-LevelDef introLevel(int index);  // 1..5
+LevelDef introLevel(int index);  // the hand-made levels
 LevelDef generate(int index, u64 seed);
 float targetTime(int index);
 float fightFor(int index);

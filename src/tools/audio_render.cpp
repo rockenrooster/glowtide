@@ -116,6 +116,14 @@ int renderAudio(const char* scene, const char* out, float seconds, int level) {
     }
     if (!std::strcmp(scene, "flood")) {
         pcm = renderFlood(0, seconds > 0 ? seconds : 30.0f, level);
+    } else if (!std::strcmp(scene, "geodes")) {
+        // A level with four geodes played by greedy (VARIETY_TECH 8): the tinks, the openings and the boons' motifs over
+        // the flood. Without --level, the first baked level from 61 that has four.
+        int lv = level;
+        for (int i = 61; i <= 300 && level == 25 && lv == 25; ++i)
+            if (sim::levelFor(i).geodeCount >= 4) lv = i;
+        std::printf("render-audio geodes: level %d\n", lv);
+        pcm = renderFlood(0, seconds > 0 ? seconds : 30.0f, lv);
     } else if (!std::strcmp(scene, "ladder")) {
         // The eleven ladder notes, one every half second, alone (the pitch check reads each window).
         audio::Mixer m;
@@ -174,7 +182,7 @@ int renderAudio(const char* scene, const char* out, float seconds, int level) {
         const int frames = int((seconds > 0 ? seconds : 60.0f) * float(kRate));
         for (int done = 0; done < frames; done += 1024) mixInto(m, pcm, done + 1024 <= frames ? 1024 : frames - done);
     } else {
-        std::fprintf(stderr, "unknown scene %s (ladder, flood, ui, win, lose, music, timbres)\n", scene);
+        std::fprintf(stderr, "unknown scene %s (ladder, flood, geodes, ui, win, lose, music, timbres)\n", scene);
         return 2;
     }
     if (!writeWav(out, pcm)) return 1;

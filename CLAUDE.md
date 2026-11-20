@@ -25,6 +25,9 @@ of level, recipes, a calendar, no repeated levels). Read `docs/VARIETY_PLAN.md` 
 | Every device check on one device (install, flow, picture checks, back key, save, cold start, lifecycle, both benches, refresh rate) -> `captures\matrix\<serial>.md` | `scripts\matrix-android.ps1 -Serial tablet\|op12r\|moto [-NoInstall] [-Pictures concept,geodes]` |
 | The device picture check: a phone's render of a picture against the PC's at the phone's frame (VARIETY_TECH 10) | `scripts\picture-android.ps1 -Serial moto [-Picture concept] [-Against elements] [-Install]` |
 | The variety report: likeness of levels, the no-repeat rule, counts per hundred levels (exit 1 if the rule breaks) | `glowtide_headless --sim variety --from 1 --to 300 [--pairs]` |
+| Greedy's decisions on one level, a line a second (its aim, the geodes it sees, each line's score with and without the boons' worth); `--no-enemy` as in the bake's Pa run | `glowtide_headless --sim decisions --level 37 [--seconds 40] [--no-enemy]` |
+| Re-bake a few levels into the table as it is built (the rows past `--to` up to `--keep-to` are kept) | `glowtide_headless --bake-levels --from 11 --to 11 --keep-to 300 --jobs 4 --out src\sim\levels_baked.h --report <scratch>.md` |
+| Determinism on a phone against the PC (levels 1-5 and four geode levels) | `scripts\simhash-android.ps1 -Serial moto [-Install]` |
 | Level sheets from above: thirty consecutive levels, or a list | `scripts\review.ps1 -Set levels -Config dev -From 40 -Count 30`, `-Levels 12,40,77` |
 | Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
 | Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |

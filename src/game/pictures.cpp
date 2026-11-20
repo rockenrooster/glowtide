@@ -211,6 +211,47 @@ bool Game::setupPicture(const char* name) {
             return true;
         }
     }
+    if (!std::strcmp(name, "lanterns_3") || !std::strcmp(name, "hud_boons")) {
+        // Three lanterns with QUICKEN and BRIGHT at their limits on a real lane (VARIETY_PLAN V1): the stream, the lenses
+        // and a full boon tray (hud_boons: the same, for the layout lint across the frames).
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        enterLevel(3, false);
+        coldStart_ = false;
+        bot_.init(sim::BotKind::Greedy, 1);
+        useBot_ = true;
+        startPlaying();
+        world_.lanterns = 3;
+        world_.quicken = 3;
+        world_.bright = 2;
+        for (int t = 0; t < 60 * 4 && world_.result == sim::Result::None; ++t) {
+            world_.tick(bot_.think(world_));
+            view_.onTick(world_);
+            if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
+        }
+        worldTicks_ = true;
+        return true;
+    }
+    if (!std::strcmp(name, "geode_strip") || !std::strcmp(name, "ward_strip")) {
+        // A geode cracking and opening, its icon flying to the tray (level 6's LANTERN), or WARD's ring (level 23's second
+        // geode): played by greedy until the geode is under 40% of its health; the strip's frames run through the rest.
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        const bool ward = !std::strcmp(name, "ward_strip");
+        const int gi = ward ? 1 : 0;
+        enterLevel(ward ? 23 : 6, false);
+        coldStart_ = false;
+        bot_.init(sim::BotKind::Greedy, 1);
+        useBot_ = true;
+        startPlaying();
+        for (int t = 0; t < 60 * 60 && world_.result == sim::Result::None; ++t) {
+            const bool near = world_.geodeState[gi] == sim::kGeodeAlive && world_.geodeHp[gi] * 10 < world_.def.geodes[gi].hp * 4;
+            if (near || world_.geodeState[gi] > sim::kGeodeAlive) break;
+            world_.tick(bot_.think(world_));
+            view_.onTick(world_);
+            if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
+        }
+        worldTicks_ = true;
+        return true;
+    }
     if (!std::strcmp(name, "pan_strip")) {
         // The thumb flicks the lantern across the lane every half second while it fires: every shot must leave the
         // barrel's tip, wherever the lantern has gone since (VARIETY_PLAN work, 2026-11-20).
@@ -268,6 +309,55 @@ bool Game::setupPicture(const char* name) {
     sim::LevelDef def = conceptLevel();
     int world = args_.world;
     if (!std::strncmp(name, "world_", 6)) world = std::atoi(name + 6);
+    if (!std::strcmp(name, "geodes")) {
+        // Every boon's geode, a shielded one, and beside them a gate, a divide gate, a snuffer, glooms and a brute: the
+        // greyscale check tells a geode from each (VARIETY_DESIGN 13).
+        def = sim::LevelDef();
+        def.index = 25;
+        def.len = 36;
+        def.spireHealth = 2400;
+        def.coreHealth = 10;
+        def.gates[def.gateCount++] = gate(-2.6f, 1.6f, 8, 3, true, 0);
+        def.gates[def.gateCount++] = gate(2.6f, 1.6f, 8, 2, false, 0);
+        def.snuffers[def.snufferCount++] = {-3.6f, -0.6f, 30.0f, 3.0f, 0.25f};
+        def.emitters[def.emitterCount++] = {1.5f, 0, 5, 0};
+        const struct {
+            float x, z;
+            u8 boon;
+            i32 hp, shield;
+        } gs[] = {{-2.7f, 13.5f, sim::kBoonLantern, 120, 0}, {0.0f, 17.0f, sim::kBoonQuicken, 85, 0}, {2.7f, 13.5f, sim::kBoonBright, 60, 0},
+                  {-2.2f, 23.0f, sim::kBoonWard, 40, 0},       {2.3f, 25.5f, sim::kBoonLantern, 30, 200}};
+        for (const auto& q : gs) {
+            sim::Geode g;
+            g.x = q.x;
+            g.z0 = q.z;
+            g.speed = 0;
+            g.boon = q.boon;
+            g.hp = q.hp;
+            g.shield = q.shield;
+            def.geodes[def.geodeCount++] = g;
+        }
+    }
+    if (!std::strcmp(name, "geodes")) {
+        world_.init(def, 0);
+        world_.enemyOff = true;
+        world_.tick(sim::Input{});  // they appear
+        world_.lanterns = 3;
+        world_.quicken = 2;
+        world_.bright = 1;
+        world_.launcherX = -0.4f;
+        world_.w.n = world_.g.n = 0;
+        for (int k = 0; k < 3; ++k)
+            for (float z = sim::kMuzzleZ + 0.2f; z < 7.0f; z += 0.7f) addUnit(world_.w, sim::kMaxWisps, world_.lanternX(k) + r.range(-0.06f, 0.06f), z, 3, 0, r);
+        for (int k = 0; k < 24; ++k) addUnit(world_.g, sim::kMaxGlooms, r.range(-1.0f, 3.5f), r.range(31.0f, 34.0f), 1, 0, r);
+        addUnit(world_.g, sim::kMaxGlooms, 0.8f, 28.5f, 30, sim::kBrute, r);
+        view_.setLevel(def, 2);
+        if (graphicsReady_) renderer_.setLevel(def, *view_.wp, *view_.gp);
+        level_ = 25;
+        setScreen(Screen::Play);
+        pictureTick_ = 0;
+        return true;
+    }
     if (!std::strcmp(name, "elements")) {
         def = sim::LevelDef();
         def.index = 1;
@@ -372,11 +462,8 @@ void Game::tickPictureScript() {
 void Game::setupBenchFlood() {
     // The contract's scene (TECH_SPEC 8.1): both crowds held at their caps, flowing over a five-row level with every
     // gate passing; the real World in its bench rig (no clash, no damage, units wrap).
-    const sim::LevelDef d = sim::benchFloodLevel();
-    world_.init(d, 0);
-    world_.noClash = true;
-    world_.noDamage = true;
-    world_.wrap = true;
+    sim::initBenchWorld(world_);
+    const sim::LevelDef d = world_.def;
     view_.setLevel(d, 0);
     worldTicks_ = true;
 }

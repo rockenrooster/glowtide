@@ -252,6 +252,17 @@ void Bank::build(int rate, int timbre) {
         pluck(b, rate, midiHz(72), 0, 0.06f);
         make(kSndUiTap, std::move(b), 0.4f);
     }
+    {  // tink: a short glass pluck, C5
+        auto b = buffer(0.25f, rate);
+        pluck(b, rate, midiHz(72), 1, 0.07f);
+        make(kSndTink, std::move(b), 0.45f);
+    }
+    {  // geode_open: a bright crack, then E6 G6 C7 in glass, 40 ms apart
+        auto b = burst(0.6f, 0.05f, 9500.0f, 0, 0);
+        const int notes[3] = {88, 91, 96};
+        for (int k = 0; k < 3; ++k) pluck(b, rate, midiHz(float(notes[k])), 1, 0.16f, 0.03f + 0.04f * float(k), 0.6f);
+        make(kSndGeodeOpen, std::move(b), 0.85f);
+    }
     {  // the music's low pulse: C2, 200 ms
         auto b = buffer(0.4f, rate);
         for (size_t i = 0; i < b.size(); ++i) {

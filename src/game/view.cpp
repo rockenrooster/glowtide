@@ -69,6 +69,14 @@ void View::setLevel(const sim::LevelDef& d, int worldOverride) {
     timeScale = 1;
     for (int i = 0; i < sim::kMaxGates; ++i) gateFlash_[i] = gatePunch_[i] = 0;
     for (int i = 0; i < sim::kMaxBarriers; ++i) barrierShake_[i] = barrierPunch_[i] = 0;
+    for (int i = 0; i < sim::kMaxGeodes; ++i) {
+        geodePunch_[i] = geodeFlash_[i] = plateShake_[i] = geodeEndT_[i] = 0;
+        geodePunchAt_[i] = -1;
+        geodeEnd_[i] = 0;
+    }
+    for (float& p : lanternPop_) p = 0;
+    wardRing_ = barrelRing_ = 0;
+    pipsLit_ = float(d.coreHealth);
     for (Flash& f : flashes_) f.life = 0;
     clearParticles();
 }
@@ -128,7 +136,69 @@ void View::onTick(const sim::World& w) {
         switch (ev.type) {
             case sim::kEvFire:
                 lastShot_ = time;
-                spawn(V3(w.launcherX, 1.42f, sim::kMuzzleZ + 0.05f), V3(0, 0, 0), gp->wispLight, 0.75f, 0.42f, 0.12f, 4);  // at the lens
+                for (int k = 0; k < maxv(1, ev.a); ++k)  // at each lens
+                    spawn(V3(w.lanternX(k), 1.42f, sim::kMuzzleZ + 0.05f), V3(0, 0, 0), gp->wispLight, 0.75f, k ? 0.3f : 0.42f, 0.12f, 4);
+                break;
+            case sim::kEvGeodeAppear:
+                geodeEnd_[ev.a] = 0;
+                geodeFlash_[ev.a] = 1.0f;
+                for (int k = 0; k < 8; ++k)
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 1.6f, 1.0f + rnd() * 1.4f, ev.z), V3((rnd() - 0.5f) * 1.5f, 1 + rnd() * 1.5f, 0), gp->good, 0.9f, 0.14f,
+                          0.5f, 0);
+                break;
+            case sim::kEvGeodeHit:
+                if (time - geodePunchAt_[ev.a] >= 0.08) {  // the number punches at most every 80 ms; it counts down every tick
+                    geodePunch_[ev.a] = 1.0f;
+                    geodePunchAt_[ev.a] = time;
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 1.2f, 1.2f + rnd() * 0.6f, ev.z - 0.6f), V3((rnd() - 0.5f) * 3, 2 + rnd() * 2, -1.5f),
+                          rnd() < 0.5f ? gp->good : V3(0.8f, 1.0f, 0.98f), 1.0f, 0.15f, 0.45f, 2, (rnd() - 0.5f) * 10);
+                }
+                geodeFlash_[ev.a] = minv(1.0f, geodeFlash_[ev.a] + 0.35f);
+                break;
+            case sim::kEvPlateHit:
+                plateShake_[ev.a] = 1.0f;
+                if (rnd() < 0.5f)
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 2.5f, 1.0f, ev.z - 0.3f), V3((rnd() - 0.5f) * 3, 2.5f, -1.5f), V3(0.45f, 0.28f, 0.78f), 1.0f, 0.16f,
+                          0.5f, 2, 8.0f);
+                break;
+            case sim::kEvPlateBreak:
+                for (int k = 0; k < 16; ++k)
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 3.0f, 0.4f + rnd() * 1.0f, ev.z), V3((rnd() - 0.5f) * 5, 2 + rnd() * 4, (rnd() - 0.6f) * 4),
+                          k & 1 ? V3(0.46f, 0.28f, 0.78f) : V3(0.7f, 0.45f, 0.95f), 1.0f, 0.2f, 0.8f, 2, (rnd() - 0.5f) * 12);
+                spawn(V3(ev.x, 0.05f, ev.z), V3(0, 0, 0), gp->crack, 0.8f, 2.0f, 0.4f, 4);
+                trauma = minv(1.0f, trauma + 0.1f);
+                break;
+            case sim::kEvGeodeOpen: {
+                geodeEnd_[ev.a] = 1;
+                geodeEndT_[ev.a] = 0;
+                geodeEndX_[ev.a] = ev.x;
+                geodeEndZ_[ev.a] = ev.z;
+                for (int k = 0; k < 20; ++k)  // the shell bursts into twenty shards
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 1.2f, 1.0f + rnd() * 0.9f, ev.z + (rnd() - 0.5f) * 1.2f),
+                          V3((rnd() - 0.5f) * 7, 2 + rnd() * 5, (rnd() - 0.5f) * 6), k % 3 == 0 ? hexColor(0xFFD25A) : (k % 3 == 1 ? gp->good : V3(0.85f, 1, 1)),
+                          1.0f, 0.2f + rnd() * 0.12f, 0.9f, 2, (rnd() - 0.5f) * 14);
+                spawn(V3(ev.x, 1.4f, ev.z), V3(0, 0, 0), V3(1, 0.95f, 0.8f), 0.9f, 1.6f, 0.25f, 4);
+                Flash& f = flashes_[flashHead_];
+                flashHead_ = (flashHead_ + 1) % kFlashes;
+                f = {ev.x, ev.z, 2.2f, t, 0.4f, hexColor(0xFFD25A), 0.55f};
+                trauma = minv(1.0f, trauma + 0.12f);
+                break;
+            }
+            case sim::kEvGeodeLost:
+                geodeEnd_[ev.a] = ev.b ? 3 : 2;
+                geodeEndT_[ev.a] = 0;
+                geodeEndX_[ev.a] = ev.x;
+                geodeEndZ_[ev.a] = ev.z;
+                break;
+            case sim::kEvBoon:
+                if (ev.a == sim::kBoonLantern) {
+                    lanternPop_[clampv(ev.b - 1, 0, 2)] = 1.0f;
+                } else if (ev.a == sim::kBoonQuicken || ev.a == sim::kBoonBright) {
+                    barrelRing_ = 1.0f;
+                } else if (ev.a == sim::kBoonWard) {
+                    wardRing_ = 1.0f;
+                    trauma = minv(1.0f, trauma + 0.15f);
+                }
                 break;
             case sim::kEvGateMul: {
                 const int g = ev.a;
@@ -253,6 +323,17 @@ void View::update(float dt, const sim::World& w) {
     for (float& f : snufferFlare_) f = maxv(0.0f, f - k / 0.25f);
     tidePunch = maxv(0.0f, tidePunch - k / 0.2f);
     bannerTime = maxv(0.0f, bannerTime - k);
+    for (int i = 0; i < sim::kMaxGeodes; ++i) {
+        geodePunch_[i] = maxv(0.0f, geodePunch_[i] - k / 0.16f);
+        geodeFlash_[i] = maxv(0.0f, geodeFlash_[i] - k / 0.25f);
+        plateShake_[i] = maxv(0.0f, plateShake_[i] - k / 0.25f);
+        geodeEndT_[i] += k;
+    }
+    for (float& p : lanternPop_) p = maxv(0.0f, p - k / 0.3f);
+    wardRing_ = maxv(0.0f, wardRing_ - k / 0.7f);
+    barrelRing_ = maxv(0.0f, barrelRing_ - k / 0.35f);
+    // The pips relight one by one (WARD), and go out at once.
+    pipsLit_ = float(w.core) < pipsLit_ ? float(w.core) : minv(float(w.core), pipsLit_ + k * 20.0f);
     // Camera follow: a critically damped spring toward 12% of the launcher's x.
     const float target = w.launcherX * tune.camFollow;
     const float omega = 6.0f;
@@ -434,6 +515,16 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
         addLight((S.xa + S.xb) * 0.5f, S.z, (S.xb - S.xa) * 0.5f + 0.3f, 0.12f, gp->bad, 0.28f, 1);
         addLight(w.snufferX[i], S.z, 1.0f, 1.0f, gp->bad, 0.35f, 0);
     }
+    for (int g = 0; g < def.geodeCount; ++g) {
+        if (w.geodeState[g] != sim::kGeodeAlive) continue;
+        addLight(w.geodeX[g], w.geodeZ[g], 1.25f, 1.25f, gp->good, 0.3f + 0.3f * geodeFlash_[g], 0);
+        if (w.geodeShield[g] > 0)
+            addLight(w.geodeX[g], w.geodeZ[g] - tune.plateGap, 1.5f, 0.5f, gp->crack, 0.22f + 0.3f * plateShake_[g], 1);
+    }
+    if (wardRing_ > 0) {  // WARD: a gold wash spreading from the lantern up the lane
+        const float e = 1.0f - wardRing_, reach = 1.5f + e * (tune.wardZ - 1.5f);
+        addLight(w.launcherX, reach * 0.5f, 5.5f, reach * 0.55f + 0.5f, hexColor(0xFFD25A), 0.5f * wardRing_, 0);
+    }
     for (const Flash& f : flashes_) {
         const float age = tt - f.t0;
         if (f.life <= 0 || age < 0 || age > f.life) continue;
@@ -446,21 +537,35 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
 
     // Props that move: the launcher and its pips, sliding gate posts, snuffers.
     propCount_ = 0;
+    auto nextProp = [&]() -> PropDraw& {  // a fresh slot: no tint or glow left over from last frame's user
+        PropDraw& p = props_[propCount_++];
+        p = PropDraw();
+        return p;
+    };
     {
         const float lx = w.launcherX;
         const float kick = lastShot_ >= 0 ? 0.10f * clampv(1.0f - float(time - lastShot_) / 0.07f, 0.0f, 1.0f) : 0.0f;
-        PropDraw& d = props_[propCount_++];
-        d.mesh = kMeshLauncher;
-        d.model = translation(V3(lx, 0, 0.2f)) * scaling(V3(1.0f + kick * 0.5f, 1.0f - kick, 1.0f));
-        d.glow = 0;
-        PropDraw& l = props_[propCount_++];
-        l = d;
-        l.mesh = kMeshLens;
-        l.glow = 1.0f + (w.firing ? 0.4f : 0.0f);
-        const int core = w.core;
+        // Every lantern: the first carries the pips; the others are the same lantern at 70% width, standing forward so
+        // all the lenses are at the muzzle, and pop out of the first when they arrive (VARIETY_DESIGN 3.1, 13).
+        for (int k = 0; k < w.lanterns && k < 3; ++k) {
+            const float pop = lanternPop_[k] > 0 ? 1.0f - lanternPop_[k] : 1.0f;
+            const float grow = pop < 0.6f ? 1.15f * pop / 0.6f : 1.15f - 0.15f * (pop - 0.6f) / 0.4f;
+            const float sxz = (k == 0 ? 1.0f : 0.7f) * (k == 0 ? 1.0f : grow), sy = k == 0 ? 1.0f : grow;
+            const float x = k == 0 ? lx : lx + (w.lanternX(k) - lx) * minv(1.0f, pop * 1.4f);
+            PropDraw& d = nextProp();
+            d.mesh = kMeshLauncher;
+            d.model = translation(V3(x, 0, launcherZ_[k])) * scaling(V3(sxz * (1.0f + kick * 0.5f), sy * (1.0f - kick), sxz));
+            d.glow = 0;
+            PropDraw& l = nextProp();
+            l = d;
+            l.mesh = kMeshLens;
+            // The lens burns brighter with QUICKEN and BRIGHT; a flash runs up the barrel when one is taken.
+            l.glow = 1.0f + (w.firing ? 0.4f : 0.0f) + 1.5f * barrelRing_ + 0.3f * float(w.quicken) + 0.4f * float(w.bright);
+        }
+        const int core = int(pipsLit_ + 0.001f);
         for (int k = 0; k < 10; ++k) {
             const float a = kPi * (0.06f + 0.88f * float(k) / 9.0f);
-            PropDraw& p = props_[propCount_++];
+            PropDraw& p = nextProp();
             p.mesh = kMeshPip;
             p.model = translation(V3(lx - std::cos(a) * 1.27f, 0.0f, 0.2f - std::sin(a) * 0.93f));
             const bool on = k < core;
@@ -468,21 +573,49 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
             p.glow = on ? 0.45f : 0.0f;
         }
     }
-    for (int g = 0; g < def.gateCount && propCount_ < 60; ++g) {
+    for (int g = 0; g < def.gateCount && propCount_ < kMaxProps - 2; ++g) {
         const sim::Gate& G = def.gates[g];
         if (!G.slides) continue;
         for (float sgn : {-1.0f, 1.0f}) {
-            PropDraw& p = props_[propCount_++];
+            PropDraw& p = nextProp();
             p.mesh = G.kind == sim::kGateMul ? kMeshPostGood : kMeshPostBad;
             p.model = translation(V3(w.gateX[g] + sgn * G.hw, 0, G.z));
             p.glow = 1;
         }
     }
-    for (int i = 0; i < def.snufferCount && propCount_ < 64; ++i) {
-        PropDraw& p = props_[propCount_++];
+    for (int i = 0; i < def.snufferCount && propCount_ < kMaxProps; ++i) {
+        PropDraw& p = nextProp();
         p.mesh = kMeshSnuffer;
         p.model = translation(V3(w.snufferX[i], 0.08f * std::sin(tt * 3.0f + float(i)), def.snuffers[i].z));
         p.glow = 1.0f + 1.5f * snufferFlare_[i];
+    }
+    // Geodes: the turning shell, the badge facing the camera, the plate; one that slipped past dims and sinks.
+    for (int g = 0; g < def.geodeCount && propCount_ + 3 <= kMaxProps; ++g) {
+        const sim::Geode& G = def.geodes[g];
+        const bool alive = w.geodeState[g] == sim::kGeodeAlive;
+        const bool sinking = !alive && (geodeEnd_[g] == 2 || geodeEnd_[g] == 3) && geodeEndT_[g] < 0.5f;
+        if (!alive && !sinking) continue;
+        const float x = alive ? w.geodeX[g] : geodeEndX_[g], z = alive ? w.geodeZ[g] : geodeEndZ_[g];
+        const float e = sinking ? geodeEndT_[g] / 0.5f : 0.0f;
+        const float y = 1.4f + 0.08f * std::sin(tt * 2.0f + float(g) * 1.7f) - 1.6f * e * e;
+        const float s = 1.2f * (G.radius / 0.9f) * (1.0f + 0.5f * (punchScale(geodePunch_[g]) - 1.0f)) * (1.0f - 0.4f * e);  // drawn a little larger than it touches
+        const float dim = sinking ? (geodeEnd_[g] == 3 ? 0.35f : 0.55f) * (1.0f - e) + 0.2f : 1.0f;
+        PropDraw& sh = nextProp();
+        sh.mesh = kMeshGeode;
+        sh.model = translation(V3(x, y, z)) * rotationY(tt * 0.6f + float(g) * 0.9f) * scaling(V3(s, s, s));
+        sh.tint = V3(1, 1, 1) * (dim * (1.0f + 0.5f * geodeFlash_[g]));
+        sh.glow = dim * (1.0f + geodeFlash_[g]);
+        PropDraw& bd = nextProp();
+        bd.mesh = kMeshBadge0 + G.boon;
+        bd.model = translation(V3(x, y, z)) * scaling(V3(s, s, s));
+        bd.tint = V3(dim, dim, dim);
+        bd.glow = 1.3f * dim;
+        if (alive && w.geodeShield[g] > 0) {
+            PropDraw& pl = nextProp();
+            pl.mesh = kMeshPlate;
+            pl.model = translation(V3(x + std::sin(tt * 90.0f + float(g)) * plateShake_[g] * 0.06f, 0, z - tune.plateGap));
+            pl.glow = 1.0f + plateShake_[g];
+        }
     }
     s.props = props_;
     s.propCount = propCount_;
@@ -516,6 +649,16 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
             if (!(w.g.flags[i] & sim::kBrute)) continue;
             std::snprintf(buf, sizeof buf, "%d", int(w.g.power[i]));
             label(buf, V3(w.g.x[i], 1.75f, w.g.z[i]), 0.9f, gp->gloomRim, 0, labels);
+        }
+        for (int g = 0; g < def.geodeCount; ++g) {
+            if (w.geodeState[g] != sim::kGeodeAlive) continue;
+            const float x = w.geodeX[g], z = w.geodeZ[g];
+            formatThousands(int(w.geodeHp[g]), buf, sizeof buf);
+            label(buf, V3(x, 2.75f, z), 1.0f, V3(0.05f, 0.3f, 0.34f), geodePunch_[g], labels);
+            if (w.geodeShield[g] > 0) {
+                formatThousands(int(w.geodeShield[g]), buf, sizeof buf);
+                label(buf, V3(x, 0.75f, z - tune.plateGap - 0.3f), 0.95f, gp->spireDark, plateShake_[g], labels);
+            }
         }
         if (w.result != sim::Result::Win) {
             formatThousands(int(w.spire), buf, sizeof buf);

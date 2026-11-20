@@ -21,6 +21,9 @@ struct RunResult {
     i64 produced = 0, cancelled = 0, delivered = 0, peakTide = 0;
     int peakWisps = 0, peakGlooms = 0;
     float lowestGloomZ = 0;
+    int geodesShown = 0, geodesOpened = 0;
+    i64 spent = 0;
+    bool coreHit = false;
     float tickUs[3] = {};  // p50, p95, max
     u64 hash = 0;
     bool invalid = false;
@@ -30,6 +33,9 @@ struct RunResult {
 
 RunResult runLevel(const LevelDef& def, BotKind bot, u64 noiseSeed, const RunOptions& ro);
 LevelDef benchFloodLevel();
+// The bench rig's world (TECH_SPEC 4.5, VARIETY_TECH 11): benchFloodLevel with no clash, no damage, units wrapping, and
+// three lanterns firing with QUICKEN and BRIGHT at their limits into four geodes that never break.
+void initBenchWorld(World& w);
 
 // --sim table: a markdown table of results per level and bot.
 int bakeTable(int from, int to, const char* bots, int seeds);
@@ -40,7 +46,8 @@ int acceptIntro(int from, int to);
 // --sim flux: GAME_DESIGN 5.9's four findings, checked with the real simulation on level 5's layout and on a
 // three-row x30 layout (the cases of docs/concept/flux_model.py). Prints markdown.
 int fluxFindings();
-// --bake-levels: GAME_DESIGN 7.4 for levels from..to; writes levels_baked.h and the report.
-int bakeLevels(int from, int to, int jobs, int part, int parts, const char* out, const char* report);
+// --bake-levels: VARIETY_DESIGN 12.2 for levels from..to; writes levels_baked.h and the report. Rows before `from`, and
+// past `to` up to `keepTo`, are copied from the table this program was built with (re-baking a few levels in place).
+int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report);
 
 }  // namespace gt::sim

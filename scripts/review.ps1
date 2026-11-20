@@ -22,11 +22,11 @@ if ($Set -eq 'p4') {
     $headless = Join-Path $GT_ROOT "build\desktop-$Config\glowtide_headless.exe"
     $out = Join-Path $GT_ROOT 'captures\p4'
     New-Item -ItemType Directory -Force $out | Out-Null
-    foreach ($scene in 'ladder', 'flood', 'ui', 'win', 'lose', 'music', 'timbres') {
+    foreach ($scene in 'ladder', 'flood', 'geodes', 'ui', 'win', 'lose', 'music', 'timbres') {
         & $headless --render-audio $scene --out (Join-Path $out "$scene.wav")
         if ($LASTEXITCODE -ne 0) { Write-Host "[review] $scene FAILED"; exit 1 }
     }
-    $wavs = 'flood', 'music', 'ladder', 'ui', 'win', 'lose', 'timbres_kalimba', 'timbres_glass', 'timbres_bell' |
+    $wavs = 'flood', 'geodes', 'music', 'ladder', 'ui', 'win', 'lose', 'timbres_kalimba', 'timbres_glass', 'timbres_bell' |
         ForEach-Object { Join-Path $out "$_.wav" }
     python -I -B (Join-Path $GT_ROOT 'tools\wav_metrics.py') @wavs --ladder (Join-Path $out 'ladder.wav') --table (Join-Path $out 'metrics.md')
     exit $LASTEXITCODE
@@ -52,6 +52,12 @@ $sets = @{
         no_glow = '--picture concept --set glowStrength=0'
         bench_flood = '--scenario bench_flood --fixed-step --frames 600'
     }
+    v1 = [ordered]@{
+        geodes = '--picture geodes'
+        lanterns_3 = '--picture lanterns_3'
+        geode_strip = '--picture geode_strip --strip 8 --strip-step 5 --frames 42'
+        pan_strip = '--picture pan_strip --strip 8 --strip-step 2 --frames 70'
+    }
     p5 = [ordered]@{
         world_1 = '--picture world_1'
         world_2 = '--picture world_2'
@@ -68,6 +74,10 @@ if ($sets.ContainsKey($Set)) { foreach ($k in $sets[$Set].Keys) { $list[$k] = $s
 if ($Set -eq 'p3') {
     foreach ($s in $screens) { foreach ($r in $matrix) { $list["${s}_$r"] = "--picture $s --res $r" } }
     $list['button_strip'] = '--picture button_strip --strip 3 --strip-step 6'
+}
+if ($Set -eq 'v1') {
+    # The HUD with a full boon tray across the aspect matrix, for the layout lint (VARIETY_PLAN V1 task 7).
+    foreach ($r in $matrix) { $list["hud_boons_$r"] = "--picture hud_boons --res $r" }
 }
 if ($Set -eq 'p6') {
     $list['win_strip'] = '--picture win_strip --strip 8 --strip-step 12'

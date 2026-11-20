@@ -70,7 +70,20 @@ struct LevelMeshData {
 void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPalette& wp, const GamePalette& gp);
 
 // Meshes drawn with a model matrix: built once.
-enum PropMeshId { kMeshLauncher, kMeshLens, kMeshPip, kMeshPostGood, kMeshPostBad, kMeshSnuffer, kMeshCount };
+// Geodes (VARIETY_DESIGN 13): the faceted shell (it turns), a badge facing the camera with the boon's gold icon on a
+// dark window (one mesh a boon, in sim::Boon order), and the plate a shielded geode carries.
+enum PropMeshId {
+    kMeshLauncher,
+    kMeshLens,
+    kMeshPip,
+    kMeshPostGood,
+    kMeshPostBad,
+    kMeshSnuffer,
+    kMeshGeode,
+    kMeshBadge0,  // + sim::Boon
+    kMeshPlate = kMeshBadge0 + sim::kBoonCount,
+    kMeshCount
+};
 struct PropMeshData {
     MeshBuilder mb;
     Range part[kMeshCount], partEmit[kMeshCount];

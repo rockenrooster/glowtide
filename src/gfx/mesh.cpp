@@ -339,6 +339,123 @@ void buildPropMeshes(PropMeshData& out, const WorldPalette& wp, const GamePalett
         mb.ringE(c + V3(0, 0.02f, 0), 0.72f, 0.84f, gp.bad, 24);
     }
     end(kMeshSnuffer);
+
+    // The geode's shell: a cut gem (an octagonal table, girdle and point), aqua, centred on its origin, radius 0.9; the
+    // girdle glows so the bloom gives it a soft aqua halo.
+    begin(kMeshGeode);
+    {
+        const Ramp aqua{hexColor(0x2FC4C0), hexColor(0xA8FFF4), hexColor(0x0E5A68)};
+        const float r = 0.9f;
+        const int n = 8;
+        V3 table[n], girdle[n];
+        for (int k = 0; k < n; ++k) {
+            const float a = (float(k) + 0.5f) / float(n) * 2.0f * kPi;
+            table[k] = V3(std::cos(a) * r * 0.55f, r * 0.6f, std::sin(a) * r * 0.55f);
+            girdle[k] = V3(std::cos(a) * r, r * 0.08f, std::sin(a) * r);
+        }
+        const V3 top(0, r * 0.6f, 0), point(0, -r, 0);
+        g_center = V3(0, 0, 0);
+        for (int k = 0; k < n; ++k) {
+            const int j = (k + 1) % n;
+            mb.tri(top, table[j], table[k], aqua);
+            mb.quad(table[k], table[j], girdle[j], girdle[k], aqua);
+            mb.tri(girdle[k], girdle[j], point, aqua);
+            const V3 lo = V3(0, -0.06f, 0);
+            mb.quadE(girdle[k], girdle[j], girdle[j] + lo, girdle[k] + lo, gp.good);
+        }
+    }
+    end(kMeshGeode);
+    // Badges: a dark window and the boon's icon in gold, on the side of the shell that faces the camera (the rig looks
+    // down 43 degrees), so they are read whatever the shell's turn.
+    const float tilt = 43.4f * kPi / 180.0f;
+    const V3 face = V3(0, std::sin(tilt), -std::cos(tilt));
+    const V3 badgeC = face * 0.93f;
+    auto at = [&](float u, float v, float lift) {  // a point of the badge's plane: u right, v up (tilted to face the camera)
+        return badgeC + V3(u, v * std::cos(tilt), v * std::sin(tilt)) + face * lift;
+    };
+    const V3 gold = hexColor(0xFFD25A), ink = hexColor(0x101A3A);
+    auto disc = [&](float cu, float cv, float rad, float lift, V3 col, int sides) {
+        for (int k = 0; k < sides; ++k) {
+            const float a0 = float(k) / float(sides) * 2.0f * kPi, a1 = float(k + 1) / float(sides) * 2.0f * kPi;
+            mb.triE(at(cu, cv, lift), at(cu + std::cos(a0) * rad, cv + std::sin(a0) * rad, lift), at(cu + std::cos(a1) * rad, cv + std::sin(a1) * rad, lift),
+                    col);
+        }
+    };
+    auto rect = [&](float u0, float v0, float u1, float v1) { mb.quadE(at(u0, v0, 0.02f), at(u1, v0, 0.02f), at(u1, v1, 0.02f), at(u0, v1, 0.02f), gold); };
+    auto bar = [&](float ua, float va, float ub, float vb, float th) {  // a thick line from a to b
+        const float du = ub - ua, dv = vb - va, l = std::sqrt(du * du + dv * dv);
+        const float nu = -dv / l * th * 0.5f, nv = du / l * th * 0.5f;
+        mb.quadE(at(ua + nu, va + nv, 0.02f), at(ub + nu, vb + nv, 0.02f), at(ub - nu, vb - nv, 0.02f), at(ua - nu, va - nv, 0.02f), gold);
+    };
+    auto ring = [&](float cu, float cv, float r0, float r1, float a0, float a1, int sides) {
+        for (int k = 0; k < sides; ++k) {
+            const float p = a0 + (a1 - a0) * float(k) / float(sides), q = a0 + (a1 - a0) * float(k + 1) / float(sides);
+            mb.quadE(at(cu + std::cos(p) * r0, cv + std::sin(p) * r0, 0.02f), at(cu + std::cos(p) * r1, cv + std::sin(p) * r1, 0.02f),
+                     at(cu + std::cos(q) * r1, cv + std::sin(q) * r1, 0.02f), at(cu + std::cos(q) * r0, cv + std::sin(q) * r0, 0.02f), gold);
+        }
+    };
+    for (int b = 0; b < sim::kBoonCount; ++b) {
+        begin(PropMeshId(kMeshBadge0 + b));
+        disc(0, 0, 0.34f, 0.0f, ink, 16);
+        switch (b) {
+            case sim::kBoonLantern:  // a small lantern
+                rect(-0.13f, -0.13f, 0.13f, 0.15f);
+                rect(-0.07f, 0.15f, 0.07f, 0.23f);
+                rect(-0.17f, -0.21f, 0.17f, -0.13f);
+                break;
+            case sim::kBoonQuicken:  // two chevrons
+                for (float v : {-0.12f, 0.06f}) {
+                    bar(-0.19f, v, 0.0f, v + 0.14f, 0.075f);
+                    bar(0.0f, v + 0.14f, 0.19f, v, 0.075f);
+                }
+                break;
+            case sim::kBoonBright:  // a heavy teardrop
+                disc(0, -0.06f, 0.15f, 0.02f, gold, 14);
+                mb.triE(at(-0.135f, -0.0f, 0.02f), at(0.135f, -0.0f, 0.02f), at(0, 0.24f, 0.02f), gold);
+                break;
+            case sim::kBoonWard:  // a ring
+                ring(0, 0, 0.12f, 0.22f, 0, 2.0f * kPi, 18);
+                break;
+            case sim::kBoonKindle:  // a gate frame
+                rect(-0.2f, -0.2f, -0.12f, 0.18f);
+                rect(0.12f, -0.2f, 0.2f, 0.18f);
+                rect(-0.2f, 0.14f, 0.2f, 0.22f);
+                break;
+            case sim::kBoonComet:  // a comet
+                disc(0.09f, 0.09f, 0.11f, 0.02f, gold, 12);
+                mb.triE(at(0.02f, 0.18f, 0.02f), at(0.18f, 0.0f, 0.02f), at(-0.23f, -0.22f, 0.02f), gold);
+                break;
+            default:  // HUSH: a crescent
+                ring(0.03f, 0, 0.12f, 0.22f, 0.6f * kPi, 1.6f * kPi, 12);
+                break;
+        }
+        end(PropMeshId(kMeshBadge0 + b));
+    }
+    // The plate: a low crystal wall 3 m wide, curving slightly round its geode, with the barriers' violet and rose base.
+    begin(kMeshPlate);
+    {
+        const Ramp wall{hexColor(0x4A2884), hexColor(0x7446C4), hexColor(0x241048)};
+        const Ramp tooth{hexColor(0x7446C4), hexColor(0x9C70E0), hexColor(0x3A1C6C)};
+        const int seg = 6;
+        auto zAt = [](float x) { return 0.22f * (x / 1.5f) * (x / 1.5f); };
+        for (int s = 0; s < seg; ++s) {
+            const float xa = -1.5f + 3.0f * float(s) / float(seg), xb = -1.5f + 3.0f * float(s + 1) / float(seg), xm = (xa + xb) * 0.5f;
+            const float za = zAt(xa), zb = zAt(xb);
+            g_center = V3(xm, 0.5f, zAt(xm));
+            mb.quad(V3(xa, 0, za - 0.2f), V3(xb, 0, zb - 0.2f), V3(xb, 1.0f, zb - 0.2f), V3(xa, 1.0f, za - 0.2f), wall);
+            mb.quad(V3(xb, 0, zb + 0.2f), V3(xa, 0, za + 0.2f), V3(xa, 1.0f, za + 0.2f), V3(xb, 1.0f, zb + 0.2f), wall);
+            mb.quad(V3(xa, 1.0f, za - 0.2f), V3(xb, 1.0f, zb - 0.2f), V3(xb, 1.0f, zb + 0.2f), V3(xa, 1.0f, za + 0.2f), wall);
+            g_center = V3(xm, 1.0f, zAt(xm));
+            mb.tri(V3(xa, 1.0f, za - 0.2f), V3(xb, 1.0f, zb - 0.2f), V3(xm, 1.45f, zAt(xm)), tooth);
+            mb.tri(V3(xb, 1.0f, zb + 0.2f), V3(xa, 1.0f, za + 0.2f), V3(xm, 1.45f, zAt(xm)), tooth);
+            mb.quadE(V3(xa, 0.02f, za - 0.22f), V3(xb, 0.02f, zb - 0.22f), V3(xb, 0.12f, zb - 0.22f), V3(xa, 0.12f, za - 0.22f), gp.crack);
+        }
+        g_center = V3(-1.5f, 0.5f, zAt(-1.5f));
+        mb.quad(V3(-1.5f, 0, zAt(-1.5f) + 0.2f), V3(-1.5f, 0, zAt(-1.5f) - 0.2f), V3(-1.5f, 1.0f, zAt(-1.5f) - 0.2f), V3(-1.5f, 1.0f, zAt(-1.5f) + 0.2f), wall);
+        g_center = V3(1.5f, 0.5f, zAt(1.5f));
+        mb.quad(V3(1.5f, 0, zAt(1.5f) - 0.2f), V3(1.5f, 0, zAt(1.5f) + 0.2f), V3(1.5f, 1.0f, zAt(1.5f) + 0.2f), V3(1.5f, 1.0f, zAt(1.5f) - 0.2f), wall);
+    }
+    end(kMeshPlate);
 }
 
 }  // namespace gt

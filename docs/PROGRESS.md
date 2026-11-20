@@ -26,6 +26,7 @@ listed under "Choices" below; the owner can reverse any of them.
 | Phase | Status | Notes |
 |---|---|---|
 | V0 Baseline and tools | Done 2026-11-20 (device matrix deferred to V1's runs) | Split of `levels.cpp` proven neutral; version stamps and their test; `--sim variety`; baseline below; consecutive-level sheets; `picture-android.ps1`; stars past level 1,000 not recorded. Also the owner's barrel fix (below) |
+| V1 Geodes and boons | Done 2026-11-20 (version 0.2.0) | Geodes, plates, four boons, three lanterns, bake v2; levels 2-300 baked and accepted; step 8 missed (below); the checkpoint decided here (Choices) |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -71,6 +72,111 @@ with other numbers; nothing a player would call a different level.
 - A safety copy of version 0.1.0 is in `D:\Stuff\DevFolder\_backups\Glowtide\2026-11-20_v0.1.0` (no `keys/`, no build
   folders) and the commit is tagged `v0.1.0` locally.
 
+### V1: geodes and boons — what was built and what changed from the design
+
+Built: geodes (plain and shielded) that appear, drift, slide, slip past and open; the four boons `LANTERN`, `QUICKEN`,
+`BRIGHT`, `WARD`; up to three lanterns; `podless` and `hungry`; geodes placed in generated levels (VD 9.3) and hand-made
+levels 6 (the first geode), 11 (the first shield) and 23 (the first `WARD`); bake v2 for Siege (Pa, Pn, m, R, lines a to
+i, step 8 in `tools/band_table.py`); the shell, the badges, the plate, side lanterns, numbers, lights and effects; the
+boon tray, a banner queue, icons flying to the tray, `BOONS n/m` on the result line, three hints, two lines of advice;
+`tink`, `geode_open`, the four motifs; pictures `geodes`, `geode_strip`, `ward_strip`, `lanterns_3`, `hud_boons` (eight
+frames, layout lint), `pan_strip`; the flow test's geode steps; the bench rig's three lanterns and four geodes;
+`--sim decisions`; `scripts\simhash-android.ps1`.
+
+Changes from VARIETY_DESIGN, each forced by a measurement (the bake and `--sim decisions` traces):
+
+| Design said | Built | Why |
+|---|---|---|
+| Geode health a share of R (4-6%, plate 6-9%) | Seconds of the stream that reaches the geode's own column where the stream meets it, counting only the share of that fanned-out stream the geode (1.8 m) or its plate (3 m) is wide enough to catch: plain 2-3 s, plate 3-4 s with 1-1.5 s behind it, `WARD` 1.5-2 s | R is the best line's power. A column off the best line carries a tenth to a fiftieth of it, so a share of R took 7 s of raw fire on level 6 and was out of reach from level 30: greedy never took one. Without the fan share a plate behind three doubling gates took 8 s, not 2.4 |
+| Detours 2 m off the best line, appearing at the top of the lane | Off the best line by the stream's fan as well (each multiply gate throws clones about (0.9 + 0.5k) x 0.5 m sideways) plus the geode's radius plus 1 m; where that leaves no room at the top, the geode appears lower down, where the stream is narrower | From about level 30 the flood fans across the whole lane near the top: geodes there were cracked by spill, both bots got the boon, and there was no decision (Pa equal to Pn). With 0.4 m instead of 1 m the spill still opened a third of the detours |
+| Shields and slides on any geode | On detours only; slides from level 40, 0.5-0.9 m | A shielded geode riding the best line was a 500-health wall moving down the middle of the stream; greedy kept missing sliding geodes low on the lane |
+| Lanterns in a row centred on the aim point | The first lantern at the aim point, the second 0.9 m to its right, the third 0.9 m to its left; the side ones are the lantern at 70% width standing forward so every lens is at the muzzle | The thumb stays on the lantern with the pips, and no lantern jumps when one arrives |
+| The bot's worth of a boon: its gain over the time left | The time it saves (the spire falls in rest / (1 + g) instead of rest), with commitment: greedy finishes a geode it started unless another line is three halves better, and gives up when the stream has had 2.5 s there and taken less than a tenth; a line that would not open a geode before it slips past gains nothing from it | Without these greedy dithered between the gates and a geode (spending 218 of 230 health and leaving), refused anything that took longer than its 8 s horizon, and gave up on far geodes before its stream arrived |
+| Reliance m to 0.8 by level 66 | m to 0.6 by level 52, plus (h - 0.5) x 0.15 for the level's hardness, at most 0.7 | Sized that far for the boons, the enemy overran a greedy bot that the pressure kept from reaching them; the bake could not size those levels. With hardness moving m by plus or minus 0.15 (VD 10.2) the hard ones (h 0.8 and 1.0) failed every seed |
+| The enemy bisected on one run a step | The median of three runs a step; a seed whose bisection misses its target by 8 points is dropped before the acceptance runs | With boons a run snowballs or does not; one run sized spires of a few hundred on levels greedy then won in 10 s |
+| Acceptance: all runs, then the lines | In stages, greedy first, podless only when greedy passes, hungry only on the accepted seed; line g forecast from Pa and Pn (12%) before the enemy runs; twelve seeds, not eight, then a repair pass of 24 more for a level still not accepted | The bake took over an hour for 300 levels; most seeds fail line g, and those now cost two runs. The final bake: 12 of 299 levels needed the repair pass (accepted after 13 to 22 seeds) |
+| Line h: from level 80, on a level of hardness 0.65 or more, `podless` wins fewer than three of five | `podless` may win three of five there if it is at least 25% slower than greedy | The bake could not size the hard levels that far: an enemy strong enough to beat `podless` three times in five beat greedy too. "Twenty-five percent slower" keeps the boons worth taking there |
+| A geode 1.8 m across | Drawn 1.2 times its touch radius | Next to 3 m gates it read as a badge |
+| Level 1 spire 60 (version 0.1.0) | 66 | V0's barrel fix |
+
+### V1: measured
+
+**The bake** (generator 5, rules 3; `captures/levels/report.md`): levels 2-300 all accepted, 1,122 s at 4 jobs. Seeds
+thrown away, by the line they failed: g 807 (with no enemy greedy did not deliver 1.12 times what `podless` did), a 33,
+c 32, h 27, n 23, x 23 (the bisection missed its target), e 19, f 12. The band table (`tools/band_table.py`; columns:
+greedy's median time as a share of `T`, its median core, the cancelled share against its target, the geodes greedy
+opened of those it was shown, how much slower `podless` is (median), the levels where `hungry` is slower or loses, the
+three-geode levels where greedy leaves one, the levels where greedy loses a pip, the levels where a gloom gets past the
+first gate row, the seeds tried):
+
+| Levels | Greedy time (T) | Core | Cancelled / target | Geodes opened | Podless slower | Hungry slower or loses | 3+ geodes, one left | Pip lost | Gloom past row 1 | Seeds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2-10 | 0.91 | 10 | 14% / 14% | 5/5 | 22% | 0% | - | 0% | 22% | 15 |
+| 11-20 | 0.91 | 10 | 18% / 17% | 10/10 | 32% | 30% | - | 0% | 40% | 26 |
+| 21-30 | 0.92 | 10 | 21% / 20% | 23/25 | 55% | 70% | 40% | 0% | 20% | 18 |
+| 31-40 | 0.91 | 10 | 24% / 24% | 21/24 | 47% | 80% | 75% | 0% | 50% | 29 |
+| 41-50 | 0.93 | 10 | 26% / 26% | 22/24 | 57% | 60% | 50% | 0% | 30% | 24 |
+| 51-60 | 0.96 | 10 | 27% / 26% | 22/23 | 34% | 50% | 33% | 0% | 40% | 25 |
+| 61-70 | 0.93 | 10 | 26% / 26% | 28/32 | 44% | 80% | 44% | 0% | 10% | 40 |
+| 71-80 | 0.93 | 10 | 28% / 26% | 25/29 | 39% | 90% | 57% | 0% | 30% | 40 |
+| 81-90 | 0.92 | 10 | 28% / 28% | 22/23 | 33% | 80% | 33% | 0% | 20% | 48 |
+| 91-100 | 0.93 | 10 | 27% / 26% | 23/26 | 52% | 60% | 50% | 0% | 60% | 60 |
+| 101-110 | 0.95 | 10 | 28% / 28% | 24/26 | 31% | 80% | 33% | 0% | 40% | 37 |
+| 111-120 | 0.96 | 10 | 27% / 27% | 24/29 | 40% | 70% | 71% | 0% | 40% | 51 |
+| 121-130 | 0.93 | 10 | 27% / 27% | 22/29 | 35% | 100% | 100% | 0% | 30% | 65 |
+| 131-140 | 0.93 | 10 | 26% / 26% | 23/28 | 43% | 90% | 71% | 0% | 40% | 41 |
+| 141-150 | 0.92 | 10 | 28% / 26% | 27/31 | 37% | 80% | 57% | 0% | 30% | 50 |
+| 151-160 | 0.92 | 10 | 27% / 26% | 21/22 | 50% | 80% | 50% | 0% | 40% | 64 |
+| 161-170 | 0.93 | 10 | 26% / 26% | 28/30 | 36% | 80% | 25% | 0% | 10% | 38 |
+| 171-180 | 0.92 | 10 | 28% / 28% | 27/32 | 38% | 70% | 62% | 0% | 30% | 60 |
+| 181-190 | 0.92 | 10 | 28% / 26% | 24/28 | 52% | 90% | 57% | 0% | 40% | 68 |
+| 191-200 | 0.93 | 10 | 27% / 27% | 24/27 | 49% | 70% | 60% | 0% | 30% | 52 |
+| 201-210 | 0.93 | 10 | 27% / 27% | 26/27 | 51% | 60% | 17% | 0% | 20% | 48 |
+| 211-220 | 0.93 | 10 | 26% / 28% | 21/25 | 28% | 70% | 100% | 0% | 40% | 23 |
+| 221-230 | 0.94 | 10 | 28% / 27% | 27/28 | 39% | 70% | 17% | 0% | 30% | 35 |
+| 231-240 | 0.92 | 10 | 27% / 26% | 30/35 | 41% | 90% | 56% | 0% | 30% | 33 |
+| 241-250 | 0.93 | 10 | 28% / 27% | 25/28 | 33% | 60% | 60% | 0% | 20% | 34 |
+| 251-260 | 0.93 | 10 | 27% / 27% | 26/29 | 40% | 70% | 43% | 0% | 50% | 52 |
+| 261-270 | 0.92 | 10 | 26% / 26% | 27/30 | 48% | 80% | 38% | 0% | 20% | 51 |
+| 271-280 | 0.95 | 10 | 28% / 28% | 25/29 | 35% | 70% | 57% | 0% | 40% | 48 |
+| 281-290 | 0.95 | 10 | 26% / 26% | 23/26 | 40% | 70% | 60% | 0% | 40% | 50 |
+| 291-300 | 0.94 | 10 | 26% / 27% | 26/31 | 40% | 70% | 62% | 0% | 30% | 50 |
+
+So the boons are worth taking (without them the same player is 22% to 57% slower), greedy takes most of them (76% to
+100% per band) and `hungry`, who chases every geode, is slower or loses on 60% to 100% of the levels from 21 on: there is
+a choice, and taking every geode is the wrong one.
+
+**Step 8 missed, and why** (VARIETY_DESIGN 12.2 step 8 asks, from level 21: greedy loses a pip on 15% to 40% of the
+levels, a gloom gets past the first gate row on 40% or more, a three-geode level leaves one geode on half or more):
+
+- **Greedy never loses a pip** (0% in every band). The enemy is sized to cancel its share of the stream (the
+  cancelled share is within 2 points of target everywhere), and greedy's defend rule plus the sized flow keep the
+  glooms off the core. Raising `fight` to make greedy lose pips is the same lever that let the enemy overrun greedy
+  when the bake tried to size hard levels (see the m and line h rows above).
+- **A gloom past the first row** on 10% to 60% per band (20 of 28 bands under 40%).
+- **One geode left** on three-geode levels: 17% to 100% (10 of 26 bands under half).
+- Tried: m to 0.75 and hardness moving m by 0.15 (the bake could not size the hard levels: the enemy beat greedy),
+  detours further from the flood (that moved the "one left" share, not the pips). Not tried: a higher `fight`. The
+  levers VARIETY_DESIGN sends for exactly this are V2's (the plans: Pulse, Late surge, Early rush and Brute line put the
+  enemy's flow where the stream is not) and V3's twists; V2's band table says how far they move it.
+
+**The variety report** (`--sim variety --from 6 --to 300`): the likeness of neighbours did not fall against V0's
+baseline: levels 1-12 apart p10 / p50 / p90 0.59 / 0.66 / 0.73 (V0 0.60 / 0.64 / 0.70); 13-40 apart 84.1% above 0.60
+(V0 78.5%); a boon list twice within 8 levels 134 times. The boon term (J) went from 1 for every pair (no boons) to the
+Jaccard index of two lists drawn from the same four boons, and a geode's path down the lane fills map cells that the
+same detour columns fill in most levels. The rule still breaks everywhere, as expected with one recipe and one kind
+(V4's job).
+
+**Other checks** (PC unless named): unit tests 83 checks, 0 failed; determinism (two runs equal on every tick) on levels
+1-5 and 6, 11, 23, 47; the Moto's hashes equal the PC's on all nine (`scripts\simhash-android.ps1`): levels 1-5
+8ef4ba40c9607ee4, c2ed3023e7b5fbd0, 9a3cdfb9d736a6ee, 9f9402a54227d0c5, df6733a3f4f84515; 6 bae9e87ae7c229b0, 11
+bb65b0d61ef54ad1, 23 067fccc04f70bbce, 47 9dcc8b6e48aac4cb. Acceptance 1-5 passes. Soak 1-300 with `greedy`, `hungry`
+and `sweep` (invariants every tick): 900 runs, 0 failed. Flashing audit with the geode and `WARD` strips, with and
+without REDUCE EFFECTS: at most 2 swings in a second (limit 3). Audio (`review.ps1 -Set p4`): the flood -14.6 LUFS,
+-1.8 dBTP; the `geodes` scene (four geodes, greedy) -17.9 LUFS, -3.9 dBTP; the bell timbre's flood is -13.8 LUFS, 0.2
+over GD 12's -14 (the kalimba, which the game uses, -14.6; the glass -14.7): if the owner picks the bell, lower its
+gain by 1 dB.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -102,6 +208,8 @@ with other numbers; nothing a player would call a different level.
 | `.gitattributes` | `* text=auto` kept | Windows tools here write CRLF; the repository stays LF |
 | Public repository and releases (the owner, 2026-11-20: "public repo with the release, with an updater like raveform") | `rockenrooster/glowtide`, RAVEFORM's pipeline point for point: each push to `main` builds `build-<n>` with the APK; HOME's gold UPDATE pill opens the latest release when it is newer (`docs/RELEASE_PIPELINE.md`) | The device serials stay in the scripts (RAVEFORM's public repository lists the same ones); home-network addresses were taken out of the files; no licence file was added (RAVEFORM has none either: the owner's choice) |
 | The INTERNET permission | Added for the update check alone | Nothing else in the game uses the network |
+| V1's owner checkpoint (play 6-25, then 60 and 150; six questions) | Answered here: geodes as built (health in seconds of the stream that reaches them, plates and slides on detours only, two to four a level), boons last for their level only, two and three lanterns as built, the kalimba stays; V2 started | The owner asked for best judgment instead of questions; the band table says the decision exists (`podless` 22-57% slower, `hungry` slower or losing on most levels from 21). The questions stay open below for the owner to answer after playing |
+| V1's dev APK on the phones | `GT_APP_ID_SUFFIX=.dev` on every phone (`dev.glowtide.game.dev`) | It installs beside the owner's GitHub copy instead of replacing it (and its save) |
 
 ## Measured device facts
 
@@ -253,3 +361,7 @@ another level, every level has one goal and one enemy plan, and the greedy bot i
 5. **Sign-off (P6):** which phone do you carry? Then the icon and the name, and your own release steps in
    `docs/RELEASE_CHECKLIST.md` (the key, the store listing).
 6. **The tablet and the 12R:** attach them (USB or wireless debugging) for their rows of the matrix.
+7. **Geodes (V1):** play levels 6 to 25 of the dev build (`dev.glowtide.game.dev`), then jump to 60 and 150 with
+   SETTINGS' level stepper. Is this the upgrade you meant? Did you choose between a geode and the enemy, or was it always
+   obvious? Too many, too few, too tough, too soft, too fast? Two and three lanterns: fun, too strong? Should a boon ever
+   last past its level? (Answered by best judgment for now: Choices.)

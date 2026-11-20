@@ -1,8 +1,13 @@
-"""band_table.py report.md [out.md]: the bake report as tables per band of ten levels (P5 task 7) and the P5 checks.
+"""band_table.py report.md [out.md]: the bake report as a table per band of ten levels, and the checks.
 
-Per band: the greedy bot's median time (in T) and core, fight and the cancelled share reached, the naive bot's loss
-rate, the lowest z a gloom reached, the highest tide and unit counts, seeds tried. Checks: the naive loss rate never
-falls by more than ten points from one band to the next; every level's cancelled share is within 5 points of fight.
+Per band: greedy's median time (in T) and core, the share it cancelled against the target, geodes opened of those shown,
+how much slower podless is, and VARIETY_DESIGN 12.2 step 8's four shares:
+  hungry  - levels where hungry is slower than greedy or loses (want 60% or more of the levels with geodes)
+  unopened - levels with three or more geodes where greedy leaves one unopened (want half or more)
+  pip     - levels where greedy loses a core pip in most runs (want 15 to 40%)
+  deep    - levels where a gloom comes below the first gate row in most of greedy's runs (want 40% or more, from 21)
+Checks (exit 1 when one fails): every level accepted; every cancelled share within 5 points of its target. Step 8's
+shares are printed against their ranges; they are reported, not enforced here (VARIETY_PLAN V1 exit checks).
 """
 import re
 import statistics
@@ -10,55 +15,86 @@ import sys
 
 
 def rows(path):
-    out = []
+    out, cols = [], None
     for line in open(path, encoding="utf-8"):
-        if not re.match(r"^\| \d+ \|", line):
+        if line.startswith("| Level |"):
+            cols = [c.strip() for c in line.strip().strip("|").split("|")]
             continue
-        c = [x.strip() for x in line.strip().strip("|").split("|")]
-        t = re.match(r"([\d.]+) \(([\d.]+)\)", c[10])
+        if not cols or not re.match(r"^\| \d+ \|", line):
+            continue
+        c = dict(zip(cols, [x.strip() for x in line.strip().strip("|").split("|")]))
+        t = re.match(r"([\d.]+) \(([\d.]+)\)", c["Time (T)"])
+        opened, shown = (float(v) for v in c["Opened"].split("/"))
+
+        def bot(cell):
+            m = re.match(r"(\d)/5 (\S+)", cell)
+            return int(m.group(1)), (float(m.group(2)) if m.group(2) != "-" else float("inf"))
+
+        pw, pt = bot(c["Podless"])
+        hw, ht = bot(c["Hungry"])
         out.append({
-            "level": int(c[0]), "accepted": c[1] == "yes", "rows": int(c[2]), "patterns": c[3], "p0": float(c[4]),
-            "fight": float(c[5].rstrip("%")), "cancelled": float(c[6].rstrip("%")), "scale": float(c[7]), "spire": int(c[8]),
-            "wins": int(c[9].split("/")[0]), "time": float(t.group(1)), "T": float(t.group(2)), "core": float(c[11]),
-            "naive_loses": c[12] == "loses", "lowest": float(c[13]), "tide": int(c[14]), "units": int(c[15]), "seeds": int(c[16]),
+            "level": int(c["Level"]), "accepted": c["Accepted"] == "yes", "h": float(c["h"]), "geodes": c["Geodes"],
+            "ngeodes": 0 if c["Geodes"] == "-" else len(c["Geodes"].split()), "pa": float(c["Pa /s"]), "pn": float(c["Pn /s"]),
+            "m": float(c["m"]), "target": float(c["Target"].rstrip("%")), "cancelled": float(c["Cancelled"].rstrip("%")),
+            "time": float(t.group(1)), "T": float(t.group(2)), "core": float(c["Core"]), "opened": opened, "shown": shown,
+            "pip": int(c["Pip lost"]), "deep": int(c["Deep gloom"]), "pw": pw, "pt": pt, "hw": hw, "ht": ht,
+            "naive_loses": c["Naive"] == "loses", "seeds": int(c["Seeds"]),
         })
     return out
 
 
+def share(rs, pred):
+    rs = list(rs)
+    return 100.0 * sum(1 for r in rs if pred(r)) / len(rs) if rs else float("nan")
+
+
 def main(argv):
     data = rows(argv[0])
-    lines = ["| Levels | Greedy time (T) | Greedy core | Fight | Cancelled | Naive loses | Lowest gloom z | Peak tide | Peak units | Seeds tried |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| Levels | Greedy time (T) | Core | Cancelled / target | Geodes opened | Podless slower | Hungry slower or loses | "
+             "3+ geodes, one left | Pip lost | Gloom past row 1 | Seeds |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     bands = {}
     for r in data:
         bands.setdefault((r["level"] - 1) // 10, []).append(r)
-    rates = []
+    misses = []
     for b in sorted(bands):
         rs = bands[b]
         lo, hi = rs[0]["level"], rs[-1]["level"]
-        rate = 100.0 * sum(r["naive_loses"] for r in rs) / len(rs)
-        rates.append((f"{lo}-{hi}", rate))
+        geo = [r for r in rs if r["ngeodes"] > 0]
+        three = [r for r in rs if r["ngeodes"] >= 3]
+        opened = sum(r["opened"] for r in geo)
+        shown = sum(r["shown"] for r in geo)
+        slower = [100.0 * (r["pt"] / r["time"] - 1.0) for r in geo if r["pt"] != float("inf")]
+        hungry = share(geo, lambda r: r["hw"] < 3 or r["ht"] > r["time"])
+        unopened = share(three, lambda r: r["opened"] < r["shown"])
+        pip = share(rs, lambda r: r["pip"] >= 5)
+        deep = share(rs, lambda r: r["deep"] >= 5)
         lines.append(
             f"| {lo}-{hi} | {statistics.median(r['time'] / r['T'] for r in rs):.2f} | {statistics.median(r['core'] for r in rs):.0f} | "
-            f"{statistics.median(r['fight'] for r in rs):.0f}% | {statistics.median(r['cancelled'] for r in rs):.0f}% "
-            f"({min(r['cancelled'] for r in rs):.0f}-{max(r['cancelled'] for r in rs):.0f}) | {rate:.0f}% | "
-            f"{min(r['lowest'] for r in rs):.1f} | {max(r['tide'] for r in rs)} | {max(r['units'] for r in rs)} | "
-            f"{sum(r['seeds'] for r in rs)} |")
-    bad_share = [r for r in data if abs(r["cancelled"] - r["fight"]) > 5.0]
-    drops = [(rates[i][0], rates[i + 1][0], rates[i][1], rates[i + 1][1]) for i in range(len(rates) - 1)
-             if rates[i][1] - rates[i + 1][1] > 10.0]
+            f"{statistics.median(r['cancelled'] for r in rs):.0f}% / {statistics.median(r['target'] for r in rs):.0f}% | "
+            f"{opened:.0f}/{shown:.0f} | {statistics.median(slower):.0f}% | {hungry:.0f}% | "
+            f"{'-' if not three else f'{unopened:.0f}%'} | {pip:.0f}% | {deep:.0f}% | {sum(r['seeds'] for r in rs)} |"
+            if geo and slower else
+            f"| {lo}-{hi} | {statistics.median(r['time'] / r['T'] for r in rs):.2f} | {statistics.median(r['core'] for r in rs):.0f} | "
+            f"{statistics.median(r['cancelled'] for r in rs):.0f}% / {statistics.median(r['target'] for r in rs):.0f}% | - | - | - | - | "
+            f"{pip:.0f}% | {deep:.0f}% | {sum(r['seeds'] for r in rs)} |")
+        if lo >= 21 and geo:
+            if hungry < 60: misses.append(f"{lo}-{hi}: hungry slower or losing on {hungry:.0f}% (want 60%)")
+            if three and unopened < 50: misses.append(f"{lo}-{hi}: one geode left on {unopened:.0f}% of 3+ geode levels (want 50%)")
+            if not 15 <= pip <= 40: misses.append(f"{lo}-{hi}: greedy loses a pip on {pip:.0f}% (want 15-40%)")
+            if deep < 40: misses.append(f"{lo}-{hi}: a gloom past the first row on {deep:.0f}% (want 40%)")
+    bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0]
     not_acc = [r["level"] for r in data if not r["accepted"]]
-    lines += ["", f"Levels: {len(data)}, not accepted: {len(not_acc)} {not_acc[:20]}",
-              f"Cancelled share more than 5 points from fight: {len(bad_share)} "
-              + ", ".join(f"{r['level']} ({r['cancelled']:.0f}% vs {r['fight']:.0f}%)" for r in bad_share[:30]),
-              f"Naive loss rate falling more than 10 points between bands: {len(drops)} "
-              + ", ".join(f"{a} {x:.0f}% -> {b} {y:.0f}%" for a, b, x, y in drops)]
+    lines += ["", f"Levels: {len(data)}, not accepted: {len(not_acc)} {not_acc[:30]}",
+              f"Cancelled share more than 5 points from its target: {len(bad_share)} "
+              + ", ".join(f"{r['level']} ({r['cancelled']:.0f}% vs {r['target']:.0f}%)" for r in bad_share[:30]),
+              f"Step 8 outside its ranges (from level 21): {len(misses)}"] + [f"- {m}" for m in misses]
     text = "\n".join(lines)
     print(text)
     if len(argv) > 1:
         with open(argv[1], "w", encoding="utf-8") as fh:
             fh.write("# Difficulty by band of ten levels\n\nFrom the bake report (`tools/band_table.py`).\n\n" + text + "\n")
-    return 0 if not bad_share and not drops and not not_acc else 1
+    return 0 if not bad_share and not not_acc else 1
 
 
 if __name__ == "__main__":

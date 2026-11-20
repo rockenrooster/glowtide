@@ -52,6 +52,7 @@ public:
     int glooms() const { return world_.g.n; }
     int particles() const { return view_.particlesAlive(); }
     float lastTickSeconds() const { return lastTick_; }
+    int drawCalls() const { return renderer_.lastDrawCalls(); }
     audio::Mixer& mixer() { return mixer_; }
     // The screen's layout lint result after a picture (exit 7 when it fails).
     int lintProblems() const { return lintProblems_; }
@@ -75,6 +76,7 @@ private:
     void drawSettings(float dt);
     void drawHint();
     void showHint(int id);
+    void pushBanner(const char* text);
     void popGloomsAbove(float z);
     // Pictures and test scenes.
     bool setupPicture(const char* name);
@@ -83,7 +85,7 @@ private:
     void drawDebug(int w, int h);
     // P2 exit check: the moment strips agree with the rules by count, from the simulation's state.
     struct StripPre {
-        i64 gloomPower = 0, cancelled = 0, spawned = 0;
+        i64 gloomPower = 0, cancelled = 0, spawned = 0, spent = 0, geodeHealth = 0, warded = 0;
         i32 core = 0;
         bool active = false;
     };
@@ -140,6 +142,15 @@ private:
     bool confirmReset_ = false;
     float popWaveZ_ = 0;
     int firingTicks_ = 0, divPasses_ = 0, mulPasses_ = 0;
+    int geodeAimTicks_ = 0;  // ticks the launcher stood under a geode (the lose advice)
+    // Banners (VARIETY_DESIGN 14): one at a time for 0.9 s; the others wait their turn.
+    char bannerQueue_[4][40] = {};
+    int bannerQueued_ = 0;
+    char bannerNow_[40] = "";
+    float bannerLeft_ = 0;
+    // The boon tray's punch per boon, and the icons flying from an opened geode to it.
+    float trayPunch_[sim::kBoonCount] = {};
+    HudState::Fly fly_[4];
     char advice_[64] = "";
     bool pausePressed_ = false;
     int lintProblems_ = 0;

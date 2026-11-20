@@ -117,6 +117,43 @@ void Feedback::onTick(const sim::World& w, float t) {
                 haptic(kHapticDouble, t);
                 break;
             }
+            case sim::kEvGeodeHit:
+                if (t - lastTink_ >= 1.0f / 15.0f) {  // at most fifteen a second, stepping up the ladder as its health falls
+                    lastTink_ = t;
+                    const float full = float(maxv<i32>(1, w.def.geodes[ev.a].hp));
+                    const int note = clampv(int(10.0f * (1.0f - float(w.geodeHp[ev.a]) / full)), 0, 10);
+                    play(kSndTink, 0.4f, pan, midiHz(float(kLadderMidi[note])) / midiHz(float(kLadderMidi[0])));
+                }
+                break;
+            case sim::kEvPlateHit:
+                if (t - lastChip_ >= 0.1f) {
+                    lastChip_ = t;
+                    play(kSndChip, 0.5f, pan);
+                }
+                break;
+            case sim::kEvPlateBreak:
+                play(kSndShatterSmall, 0.8f, pan);
+                haptic(kHapticMedium, t);
+                break;
+            case sim::kEvGeodeOpen:
+                play(kSndGeodeOpen, 0.8f, pan);
+                haptic(kHapticDouble, t);
+                break;
+            case sim::kEvGeodeLost:
+                if (ev.b == 0) play(kSndPff, 0.45f, pan);
+                break;
+            case sim::kEvBoon: {
+                // The boon's motif: three ladder notes, a shape each (lantern rises, quicken hurries, bright leaps, ward is a
+                // soft chord).
+                static const int notes[4][3] = {{5, 7, 9}, {6, 6, 8}, {3, 6, 10}, {2, 4, 7}};
+                static const float gaps[4] = {0.09f, 0.05f, 0.12f, 0.0f};
+                if (ev.a >= 0 && ev.a < 4) {
+                    for (int k = 0; k < 3; ++k)
+                        play(kSndLadder0 + notes[ev.a][k], ev.a == 3 ? 0.4f : 0.55f, 0, 1.0f, 0.18f + gaps[ev.a] * float(k));
+                    if (ev.a == 3) haptic(kHapticMedium, t);
+                }
+                break;
+            }
             case sim::kEvWin:
                 play(kSndShatterBig, 1.0f, 0);
                 if (w.def.boss) play(kSndShatterBig, 0.9f, 0, 0.94f, 0.12f);

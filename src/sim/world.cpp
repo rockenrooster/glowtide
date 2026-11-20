@@ -91,6 +91,11 @@ World::~World() {
     delete[] sr_;
 }
 
+float World::lanternX(int k) const { return k == 0 ? launcherX : k == 1 ? launcherX + tune.lanternGap : launcherX - tune.lanternGap; }
+float World::aimMin() const { return -kLauncherRange + (lanterns >= 3 ? tune.lanternGap : 0.0f); }
+float World::aimMax() const { return kLauncherRange - (lanterns >= 2 ? tune.lanternGap : 0.0f); }
+float World::fireRate() const { return tune.fireRate * (1.0f + tune.quickenStep * float(quicken)); }
+
 float World::radius(int team, int i) const {
     if (team == 0) return kWispR[tierOf(w.power[i])];
     int t = tierOf(g.power[i]);
@@ -132,13 +137,23 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
         snufferX[i] = (S.xa + S.xb) * 0.5f + (S.xb - S.xa) * 0.5f * easedWave(S.phase);
     }
     for (int i = 0; i < def.emitterCount; ++i) emitterX[i] = def.emitters[i].x;
+    for (int i = 0; i < kMaxGeodes; ++i) {
+        geodeState[i] = kGeodeWaiting;
+        geodeX[i] = geodeZ[i] = geodePrevZ_[i] = 0;
+        geodeHp[i] = i < def.geodeCount ? maxv<i32>(1, def.geodes[i].hp) : 0;
+        geodeShield[i] = i < def.geodeCount ? maxv<i32>(0, def.geodes[i].shield) : 0;
+    }
+    lanterns = 1;
+    quicken = bright = 0;
+    geodesShown = geodesOpened = 0;
+    spent = 0;
     spire = spireStart = maxv<i32>(1, def.spireHealth);
     core = def.coreHealth;
     spireStage = 0;
     result = Result::None;
     endTick = -1;
     produced = cancelled = delivered = 0;
-    gloomSpawned = 0;
+    gloomSpawned = warded = 0;
     tide = peakTide = 0;
     peakWisps = peakGlooms = 0;
     lowestGloomZ = 1e9f;
@@ -163,11 +178,12 @@ void World::addEvent(u8 type, float x, float z, i32 a, i32 b) {
     if (eventCount < kMaxEvents) events[eventCount++] = {type, x, z, a, b};
 }
 
-void World::emitWisp(float x, float z, i32 power) {
+void World::emitWisp(float x, float z, i32 power, float lanternAt) {
     if (w.n >= capW_) {
-        // Past the cap the shot's power joins the most recently fired wisp still near the launcher (GAME_DESIGN 5.3).
+        // Past the cap the shot's power joins the most recently fired wisp still near the launcher (GAME_DESIGN 5.3); with
+        // more than one lantern, one fired by the same lantern, so each column keeps its stream.
         for (int i = w.n - 1; i >= 0 && i >= w.n - 64; --i) {
-            if (w.power[i] > 0 && w.bits[i] == 0) {
+            if (w.power[i] > 0 && w.bits[i] == 0 && (lanterns == 1 || std::fabs(w.x[i] - lanternAt) < 0.5f * tune.lanternGap)) {
                 w.power[i] += power;
                 produced += power;
                 return;
@@ -313,16 +329,21 @@ void World::tick(const Input& in) {
     const float len = def.len;
 
     // 1. Input.
-    const float target = clampv(in.launcherTargetX, -kLauncherRange, kLauncherRange);
+    const float target = clampv(in.launcherTargetX, aimMin(), aimMax());
     launcherX += (target - launcherX) * smooth_;
+    launcherX = clampv(launcherX, aimMin(), aimMax());  // a new lantern can narrow the range under the launcher
     firing = in.firing;
 
     // 2. Fire: a stored shot, so a press fires at once and tapping never beats holding (GAME_DESIGN 5.2).
-    shot = minv(1.0f, shot + tune.fireRate * dt);
+    shot = minv(1.0f, shot + fireRate() * dt);
     if (in.firing && shot >= 1.0f) {
         shot -= 1.0f;
-        emitWisp(launcherX + rng_.range(-0.07f, 0.07f), kMuzzleZ, 1);
-        addEvent(kEvFire, launcherX, kMuzzleZ, 0, 0);
+        // One wisp from each lantern, all on the same tick (VARIETY_DESIGN 3.1); BRIGHT makes each heavier.
+        for (int k = 0; k < lanterns; ++k) {
+            const float lx = lanternX(k);
+            emitWisp(lx + rng_.range(-0.07f, 0.07f), kMuzzleZ, shotPower(), lx);
+        }
+        addEvent(kEvFire, launcherX, kMuzzleZ, lanterns, 0);
     }
 
     // 3. Emitters (GAME_DESIGN 5.9).
@@ -370,6 +391,17 @@ void World::tick(const Input& in) {
         }
     }
 
+    // Geodes that are due appear (VARIETY_DESIGN 2.1).
+    for (int gi = 0; gi < def.geodeCount; ++gi) {
+        const Geode& G = def.geodes[gi];
+        if (geodeState[gi] != kGeodeWaiting || t < G.t) continue;
+        geodeState[gi] = kGeodeAlive;
+        geodeX[gi] = G.amp > 0 ? G.x + G.amp * easedWave(t / G.period + G.phase) : G.x;
+        geodeZ[gi] = geodePrevZ_[gi] = G.z0 > 0 ? G.z0 : len - 3.0f;
+        ++geodesShown;
+        addEvent(kEvGeodeAppear, geodeX[gi], geodeZ[gi], gi, 0);
+    }
+
     // 4. Steer and move.
     const float wispStep = tune.wispSpeed * dt;
     const float funnelZ = len - tune.funnelLen;
@@ -412,6 +444,17 @@ void World::tick(const Input& in) {
         const float span = maxv(0.1f, S.xb - S.xa);
         const float period = 2.0f * span / maxv(0.1f, S.speed);
         snufferX[i] = (S.xa + S.xb) * 0.5f + span * 0.5f * easedWave(t1 / period + S.phase);
+    }
+    for (int gi = 0; gi < def.geodeCount; ++gi) {
+        if (geodeState[gi] != kGeodeAlive) continue;
+        const Geode& G = def.geodes[gi];
+        geodePrevZ_[gi] = geodeZ[gi];
+        if (!(G.leaveAt > 0 && t1 < G.leaveAt)) geodeZ[gi] -= G.speed * dt;
+        if (G.amp > 0) geodeX[gi] = G.x + G.amp * easedWave(t1 / G.period + G.phase);
+        if (geodeZ[gi] <= tune.geodeSlipZ) {  // it slipped past: gone, at no cost
+            geodeState[gi] = kGeodeLost;
+            addEvent(kEvGeodeLost, geodeX[gi], geodeZ[gi], gi, 0);
+        }
     }
 
     // 6-7. Grid and separation.
@@ -515,6 +558,47 @@ void World::tick(const Input& in) {
         }
         if (dmg) addEvent(kEvBarrierHit, (B.x0 + B.x1) * 0.5f, B.z, b, dmg);
         if (barrierHealth[b] <= 0) addEvent(kEvBarrierBreak, (B.x0 + B.x1) * 0.5f, B.z, b, 0);
+    }
+
+    // Plates, then geodes: each takes up to the power of every wisp that touches it, like a barrier (VARIETY_DESIGN 2.1).
+    // After the barriers, so a wisp that just broke a wall still reaches the vault behind it this tick.
+    for (int gi = 0; gi < def.geodeCount; ++gi) {
+        if (geodeState[gi] != kGeodeAlive) continue;
+        const Geode& G = def.geodes[gi];
+        const float gx = geodeX[gi], gz = geodeZ[gi];
+        if (geodeShield[gi] > 0) {
+            // The plate stands plateGap below its geode and moves with it: crossed when a wisp was below its place at the
+            // start of the tick and is at or above its place now.
+            const float pz0 = geodePrevZ_[gi] - tune.plateGap, pz1 = gz - tune.plateGap, half = 0.5f * tune.plateWidth;
+            i32 dmg = 0;
+            for (int i = 0; i < w.n && geodeShield[gi] > 0; ++i) {
+                if (w.power[i] <= 0 || !(w.zp[i] < pz0 && w.z[i] >= pz1) || std::fabs(w.x[i] - gx) > half) continue;
+                const i32 give = minv(w.power[i], geodeShield[gi]);
+                geodeShield[gi] -= give;
+                w.power[i] -= give;
+                dmg += give;
+            }
+            spent += dmg;
+            if (dmg) addEvent(kEvPlateHit, gx, pz1, gi, dmg);
+            if (geodeShield[gi] <= 0) addEvent(kEvPlateBreak, gx, pz1, gi, 0);
+        }
+        if (geodeShield[gi] > 0) continue;  // while the plate stands the geode takes nothing, from any side
+        i32 dmg = 0;
+        for (int i = 0; i < w.n && geodeHp[gi] > 0; ++i) {
+            if (w.power[i] <= 0) continue;
+            const float rr = G.radius + radius(0, i);
+            const float dz = w.z[i] - gz;
+            if (dz >= rr || dz <= -rr) continue;
+            const float dx = w.x[i] - gx;
+            if (dx * dx + dz * dz >= rr * rr) continue;
+            const i32 give = minv(w.power[i], geodeHp[gi]);
+            geodeHp[gi] -= give;
+            w.power[i] -= give;
+            dmg += give;
+        }
+        spent += dmg;
+        if (dmg) addEvent(kEvGeodeHit, gx, gz, gi, dmg);
+        if (geodeHp[gi] <= 0) openGeode(gi);
     }
 
     // 11. Snuffers.
@@ -646,6 +730,38 @@ void World::tick(const Input& in) {
     }
 }
 
+// A geode at zero opens: its boon applies in this tick (VARIETY_DESIGN 2.1, 3); a choice pair's other geode dissolves.
+void World::openGeode(int gi) {
+    const Geode& G = def.geodes[gi];
+    geodeState[gi] = kGeodeOpened;
+    ++geodesOpened;
+    addEvent(kEvGeodeOpen, geodeX[gi], geodeZ[gi], gi, G.boon);
+    int held = 0;
+    switch (G.boon) {
+        case kBoonLantern: held = lanterns = minv(int(tune.lanternMax), lanterns + 1); break;
+        case kBoonQuicken: held = quicken = minv(int(tune.quickenMax), quicken + 1); break;
+        case kBoonBright: held = bright = minv(int(tune.brightMax), bright + 1); break;
+        case kBoonWard:
+            core = maxv(core, def.coreHealth);
+            for (int i = 0; i < g.n; ++i) {
+                if (g.power[i] <= 0 || g.z[i] >= tune.wardZ) continue;
+                warded += g.power[i];
+                g.power[i] = 0;
+                ++held;
+            }
+            break;
+        default: break;
+    }
+    addEvent(kEvBoon, launcherX, kMuzzleZ, G.boon, held);
+    if (!G.group) return;
+    for (int j = 0; j < def.geodeCount; ++j) {
+        if (j == gi || def.geodes[j].group != G.group) continue;
+        if (geodeState[j] != kGeodeAlive && geodeState[j] != kGeodeWaiting) continue;
+        geodeState[j] = kGeodeLost;
+        addEvent(kEvGeodeLost, geodeX[j], geodeZ[j], j, 1);
+    }
+}
+
 u64 World::hash() const {
     u64 h = 1469598103934665603ULL;
     h = fnv(h, &tickCount, sizeof tickCount);
@@ -666,6 +782,17 @@ u64 World::hash() const {
     h = fnv(h, &owed_, sizeof owed_);
     h = fnv(h, barrierHealth, sizeof barrierHealth);
     h = fnv(h, gateCarry, sizeof gateCarry);
+    if (def.geodeCount > 0) {  // levels without geodes keep the hashes they had before geodes existed
+        h = fnv(h, geodeState, sizeof geodeState);
+        h = fnv(h, geodeX, sizeof geodeX);
+        h = fnv(h, geodeZ, sizeof geodeZ);
+        h = fnv(h, geodeHp, sizeof geodeHp);
+        h = fnv(h, geodeShield, sizeof geodeShield);
+        h = fnv(h, &lanterns, sizeof lanterns);
+        h = fnv(h, &quicken, sizeof quicken);
+        h = fnv(h, &bright, sizeof bright);
+        h = fnv(h, &spent, sizeof spent);
+    }
     h = fnv(h, &rng_.state, sizeof rng_.state);
     return h;
 }

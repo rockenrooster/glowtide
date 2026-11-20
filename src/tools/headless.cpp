@@ -19,8 +19,8 @@ namespace {
 
 struct Opt {
     const char* cmd = nullptr;
-    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, part = 0, parts = 1;
-    bool levelSet = false, pairs = false;
+    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, keepTo = 0;
+    bool levelSet = false, pairs = false, noEnemy = false, unbreakable = false;
     float seconds = 0;
     char bots[64] = "greedy";
     const char* out = nullptr;
@@ -53,10 +53,11 @@ bool parse(int argc, char** argv, Opt& o) {
         else if (!std::strcmp(k, "--seed")) o.seed = u64(std::atoll(take()));
         else if (!std::strcmp(k, "--seconds")) o.seconds = float(std::atof(take()));
         else if (!std::strcmp(k, "--jobs")) o.jobs = std::atoi(take());
-        else if (!std::strcmp(k, "--part")) o.part = std::atoi(take());
-        else if (!std::strcmp(k, "--parts")) o.parts = std::atoi(take());
+        else if (!std::strcmp(k, "--keep-to")) o.keepTo = std::atoi(take());
         else if (!std::strcmp(k, "--bot") || !std::strcmp(k, "--bots")) std::snprintf(o.bots, sizeof o.bots, "%s", take());
         else if (!std::strcmp(k, "--pairs")) o.pairs = true;
+        else if (!std::strcmp(k, "--no-enemy")) o.noEnemy = true;
+        else if (!std::strcmp(k, "--unbreakable")) o.unbreakable = true;
         else if (!std::strcmp(k, "--out")) o.out = take();
         else if (!std::strcmp(k, "--report")) o.report = take();
         else if (!std::strcmp(k, "--set")) {
@@ -150,14 +151,67 @@ int cmdDeterminism(const Opt& o) {
     return failed ? 1 : 0;
 }
 
+// --sim decisions: greedy on one level, a line a second: where it aims, the geodes it sees (place, health, boon) and
+// the best line's score without and with the boons' worth (VARIETY_PLAN V1 task 3: are its choices sane?).
+int cmdDecisions(const Opt& o) {
+    const LevelDef def = levelFor(o.level);
+    static World w;
+    Bot bot;
+    w.init(def, o.seed);
+    w.enemyOff = o.noEnemy;  // the bake's Pa run
+    w.unbreakableSpire = o.noEnemy || o.unbreakable;  // its enemy runs
+    bot.init(BotKind::Greedy, o.seed);
+    std::printf("level %d: T %.0f s, spire %d, R %.0f, %d geodes\n", def.index, double(def.targetT), def.spireHealth, double(def.ref), def.geodeCount);
+    for (int g = 0; g < def.gateCount; ++g)
+        std::printf("  gate %d: %s%d at x %.1f (half-width %.1f%s), z %.1f\n", g, def.gates[g].kind == kGateMul ? "x" : "/", def.gates[g].k,
+                    double(def.gates[g].cx), double(def.gates[g].hw), def.gates[g].slides ? ", slides" : "", double(def.gates[g].z));
+    for (int b = 0; b < def.barrierCount; ++b)
+        std::printf("  wall %d: x %.1f..%.1f, z %.1f, health %d\n", b, double(def.barriers[b].x0), double(def.barriers[b].x1),
+                    double(def.barriers[b].z), def.barriers[b].health);
+    for (int g = 0; g < def.geodeCount; ++g)
+        std::printf("  geode %d: %s at x %.1f from %.1f s, %.1f m/s, health %d, plate %d\n", g, boonName(def.geodes[g].boon),
+                    double(def.geodes[g].x), double(def.geodes[g].t), double(def.geodes[g].speed), def.geodes[g].hp, def.geodes[g].shield);
+    const int ticks = int((o.seconds > 0 ? o.seconds : 2.0f * def.targetT) * 60.0f);
+    for (int t = 0; t < ticks && w.result == Result::None; ++t) {
+        const Input in = bot.think(w);
+        if (t % 60 == 0) {
+            float plain = -1, plainX = 0, rich = -1, richX = 0;
+            for (int c = 0; c <= 20; ++c) {
+                const float x = w.aimMin() + (w.aimMax() - w.aimMin()) * float(c) / 20.0f;
+                const float s = bot.score(w, x);
+                if (s > plain) plain = s, plainX = x;
+            }
+            for (int c = 0; c <= 20; ++c) {
+                const float x = w.aimMin() + (w.aimMax() - w.aimMin()) * float(c) / 20.0f;
+                const float s = bot.score(w, x, true, plain / 8.0f);
+                if (s > rich) rich = s, richX = x;
+            }
+            std::printf("%5.1f s  aim %5.2f  lanterns %d q %d b %d core %2d spire %6d | plain best x %5.2f (%.0f) | with worth x %5.2f (%.0f) |",
+                        double(w.time()), double(w.launcherX), w.lanterns, w.quicken, w.bright, w.core, w.spire, double(plainX),
+                        double(plain), double(richX), double(rich));
+            for (int g = 0; g < def.geodeCount; ++g)
+                if (w.geodeState[g] == kGeodeAlive)
+                    std::printf(" %s(%.1f,%.1f) %d/%d [%.0f/%.0f]", boonName(def.geodes[g].boon), double(w.geodeX[g]), double(w.geodeZ[g]),
+                                w.geodeHp[g], w.geodeShield[g], double(bot.score(w, w.geodeX[g])),
+                                double(bot.score(w, w.geodeX[g], true, plain / 8.0f)));
+            std::printf("\n");
+        }
+        w.tick(in);
+        for (int e = 0; e < w.eventCount; ++e) {
+            const Event& ev = w.events[e];
+            if (ev.type == kEvGeodeOpen) std::printf("%5.1f s  OPENED %s\n", double(w.time()), boonName(ev.b));
+            if (ev.type == kEvGeodeLost) std::printf("%5.1f s  lost geode %d (%s)\n", double(w.time()), ev.a, ev.b ? "dissolved" : "slipped past");
+        }
+    }
+    std::printf("result %s at %.1f s, core %d, opened %d of %d, spent %lld\n", w.result == Result::Win ? "win" : w.result == Result::Lose ? "lose" : "none",
+                double(w.time()), w.core, w.geodesOpened, w.geodesShown, (long long)w.spent);
+    return 0;
+}
+
 int cmdFlood(const Opt& o) {
     // The bench rig's simulation alone: tick time with both crowds at the caps.
     static World w;
-    LevelDef d = benchFloodLevel();
-    w.init(d, 0);
-    w.noClash = true;
-    w.noDamage = true;
-    w.wrap = true;
+    initBenchWorld(w);
     const int ticks = int((o.seconds > 0 ? o.seconds : 30.0f) * 60.0f);
     static float times[60 * 600];
     int n = 0;
@@ -184,19 +238,20 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: glowtide_headless --sim run|determinism|table|soak|accept|flood|flux|variety [--level N | --from A --to B]"
                      " [--bot B] [--seeds K] [--seconds S] [--pairs] [--set name=value]\n"
-                     "       glowtide_headless --bake-levels --from A --to B [--jobs 4] --out file.h --report file.md\n"
+                     "       glowtide_headless --bake-levels --from A --to B [--jobs 4] [--keep-to N] --out file.h --report file.md\n"
                      "       glowtide_headless --render-audio ladder|flood|ui|win|lose|music|timbres --out x.wav [--seconds S]\n");
         return 2;
     }
     if (!std::strcmp(o.cmd, "run")) return cmdRun(o);
     if (!std::strcmp(o.cmd, "determinism")) return cmdDeterminism(o);
     if (!std::strcmp(o.cmd, "flood")) return cmdFlood(o);
+    if (!std::strcmp(o.cmd, "decisions")) return cmdDecisions(o);
     if (!std::strcmp(o.cmd, "table")) return bakeTable(o.from, o.to, o.bots, o.seeds);
     if (!std::strcmp(o.cmd, "soak")) return soak(o.from, o.to, o.bots);
     if (!std::strcmp(o.cmd, "accept")) return acceptIntro(o.from, o.to);
     if (!std::strcmp(o.cmd, "flux")) return fluxFindings();
     if (!std::strcmp(o.cmd, "variety")) return varietyReport(o.from, o.to, o.pairs);
-    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.part, o.parts, o.out, o.report);
+    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.keepTo, o.out, o.report);
     if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25);
     std::fprintf(stderr, "unknown command %s\n", o.cmd);
     return 2;

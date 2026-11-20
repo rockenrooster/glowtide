@@ -50,7 +50,16 @@ enum EventType : u8 {
     kEvTideMark,     // a = mark
     kEvWin,
     kEvLose,
+    kEvGeodeAppear,  // a = geode
+    kEvGeodeHit,     // a = geode, b = damage this tick
+    kEvPlateHit,     // a = geode, b = damage this tick
+    kEvPlateBreak,   // a = geode
+    kEvGeodeOpen,    // a = geode, b = boon
+    kEvGeodeLost,    // a = geode, b = 0 slipped past, 1 dissolved (its pair was opened)
+    kEvBoon,         // a = boon, b = how many of it the stream holds now (WARD: glooms popped)
 };
+
+enum GeodeState : u8 { kGeodeWaiting, kGeodeAlive, kGeodeOpened, kGeodeLost };
 
 struct Event {
     u8 type;
@@ -72,6 +81,13 @@ public:
     u64 hash() const;
     float time() const { return float(tickCount) * kTick; }
     float radius(int team, int i) const;  // team 0 wisps, 1 glooms
+    // Lanterns (VARIETY_DESIGN 3.1): the first, with the core's pips, at the aim point; the second 0.9 m to its right, the
+    // third 0.9 m to its left. The aim point's range shrinks so no lantern leaves the rail.
+    float lanternX(int k) const;
+    float aimMin() const;
+    float aimMax() const;
+    float fireRate() const;  // shots a second, with QUICKEN
+    i32 shotPower() const { return 1 + bright; }
 
     // Switches for the bench rig (TECH_SPEC 4.5) and the bake (GAME_DESIGN 7.4).
     bool noClash = false;
@@ -93,6 +109,13 @@ public:
     float snufferX[kMaxSnuffers] = {};
     float emitterX[kMaxEmitters] = {};
     i32 spire = 0, spireStart = 0, core = 0;
+    // Geodes (VARIETY_DESIGN 2) and the boons held this level (3).
+    u8 geodeState[kMaxGeodes] = {};
+    float geodeX[kMaxGeodes] = {}, geodeZ[kMaxGeodes] = {};
+    i32 geodeHp[kMaxGeodes] = {}, geodeShield[kMaxGeodes] = {};
+    int lanterns = 1, quicken = 0, bright = 0;
+    int geodesShown = 0, geodesOpened = 0;
+    i64 spent = 0;  // power given to geodes and plates: neither delivered nor cancelled
     int spireStage = 0;
     Result result = Result::None;
     int endTick = -1;
@@ -100,6 +123,7 @@ public:
     // Totals (the bake and the result screen).
     i64 produced = 0, cancelled = 0, delivered = 0;
     i64 gloomSpawned = 0;  // power of every gloom made (bookkeeping for checks; not in the hash)
+    i64 warded = 0;        // power of the glooms WARD popped (bookkeeping, not in the hash)
     i64 tide = 0, peakTide = 0;
     int peakWisps = 0, peakGlooms = 0;
     float lowestGloomZ = 1e9f;
@@ -109,7 +133,8 @@ public:
     int eventCount = 0;
 
 private:
-    void emitWisp(float x, float z, i32 power);
+    void emitWisp(float x, float z, i32 power, float lanternAt);
+    void openGeode(int g);
     void emitGloom(float x, i32 power, bool brute);
     void addEvent(u8 type, float x, float z, i32 a, i32 b);
     void buildGrid(const Units& u, int* start, int* order);
@@ -122,6 +147,7 @@ private:
     int emitterNext_ = 0;
     int burstStart_[kMaxBursts] = {};
     int tideMark_ = 0;
+    float geodePrevZ_[kMaxGeodes] = {};
     int capW_ = 2400, capG_ = 1000, reserve_ = 64;
     float smooth_ = 0.3f, fanKeep_ = 0.97f;
     // Grid: 0.8 m cells over x in [-6, 6] and z in [-4, len + 4].

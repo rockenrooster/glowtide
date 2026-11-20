@@ -200,9 +200,14 @@ int Ui::lint(const Layout& lay) const {
         }
         for (int j = i + 1; j < prevCount_; ++j) {
             const UiControl& d = prev_[j];
-            if (!c.interactive || !d.interactive) continue;
             const float gx = maxv(d.r.x - (c.r.x + c.r.w), c.r.x - (d.r.x + d.r.w));
             const float gy = maxv(d.r.y - (c.r.y + c.r.h), c.r.y - (d.r.y + d.r.h));
+            if (!c.interactive && !d.interactive && c.label[0] == '#' && d.label[0] == '#' && maxv(gx, gy) < lay.px(4)) {
+                GT_WARN("lint: %s and %s overlap", c.label, d.label);
+                ++problems;
+                continue;
+            }
+            if (!c.interactive || !d.interactive) continue;
             if (maxv(gx, gy) < gapPx) {
                 GT_WARN("lint: %s and %s are closer than 8 dp", c.label, d.label);
                 ++problems;

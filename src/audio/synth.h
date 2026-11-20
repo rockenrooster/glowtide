@@ -10,6 +10,8 @@ namespace gt::audio {
 enum SoundId {
     kSndPip, kSndTick, kSndPff, kSndChip, kSndShatterSmall, kSndShatterBig, kSndThump, kSndCrack, kSndPopLow, kSndCoreHit,
     kSndWinChord, kSndStar0, kSndStar1, kSndStar2, kSndLose, kSndUiTap, kSndPulse,
+    kSndTink,        // a geode hit: a short glass pluck at C5, played up the ladder as its health falls
+    kSndGeodeOpen,   // a bright crack and three glass notes rising
     kSndLadder0,  // eleven ladder notes: C4 D4 E4 G4 A4 C5 D5 E5 G5 A5 C6
     kSndPluck0 = kSndLadder0 + 11,  // the music's plucks: the same eleven notes, softer
     kSndCount = kSndPluck0 + 11

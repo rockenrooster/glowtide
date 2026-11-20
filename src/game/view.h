@@ -73,6 +73,17 @@ private:
     float snufferFlare_[sim::kMaxSnuffers] = {};
     float barrierShake_[sim::kMaxBarriers] = {};
     float barrierPunch_[sim::kMaxBarriers] = {};
+    // Geodes (VARIETY_DESIGN 13): the number's punch (at most every 80 ms), the shell's flash, the plate's shake, and
+    // what is left to show once a geode has opened or gone (it bursts, or dims and sinks).
+    float geodePunch_[sim::kMaxGeodes] = {}, geodeFlash_[sim::kMaxGeodes] = {}, plateShake_[sim::kMaxGeodes] = {};
+    double geodePunchAt_[sim::kMaxGeodes] = {};
+    u8 geodeEnd_[sim::kMaxGeodes] = {};  // 0 none, 1 opened, 2 slipped past, 3 dissolved
+    float geodeEndT_[sim::kMaxGeodes] = {}, geodeEndX_[sim::kMaxGeodes] = {}, geodeEndZ_[sim::kMaxGeodes] = {};
+    float lanternPop_[3] = {};  // a new lantern pops out of the old one
+    float wardRing_ = 0;        // WARD's gold ring spreading up the lane
+    float barrelRing_ = 0;      // QUICKEN or BRIGHT: a ring runs up the barrel
+    float pipsLit_ = 10;        // the pips relight one by one
+    float launcherZ_[3] = {0.2f, 0.896f, 0.896f};  // side lanterns stand forward so every lens is at the muzzle
 
     struct Flash {
         float x, z, r, t0, life;
@@ -98,7 +109,8 @@ private:
     ParticleInstance particles_[kParticles];
     int particleHead_ = 0;
     int spawnedThisFrame_ = 0;
-    PropDraw props_[64];
+    static constexpr int kMaxProps = 128;
+    PropDraw props_[kMaxProps];
     int propCount_ = 0;
 };
 

@@ -36,6 +36,16 @@
     X(emitterDelay, 1.5f)                                                                                            \
     X(rampStart, 1.5f)          /* times the target time */                                                         \
     X(rampSlope, 20.0f)                                                                                              \
+    /* ---- geodes and boons (VARIETY_DESIGN 2, 3) ---- */                                                           \
+    X(geodeSlipZ, 2.5f)         /* an unopened geode below this slips past */                                        \
+    X(plateGap, 1.2f)           /* the plate stands this far below its geode */                                      \
+    X(plateWidth, 3.0f)                                                                                              \
+    X(lanternGap, 0.9f)         /* m between lanterns */                                                             \
+    X(lanternMax, 3.0f)                                                                                              \
+    X(quickenStep, 0.25f)       /* of the base rate, per QUICKEN */                                                  \
+    X(quickenMax, 3.0f)                                                                                              \
+    X(brightMax, 2.0f)          /* extra power per wisp at most */                                                   \
+    X(wardZ, 14.0f)             /* WARD pops every gloom below this */                                               \
     /* ---- art and feel ---- */                                                                                     \
     X(glowStrength, 1.0f)                                                                                            \
     X(glowUnit, 0.34f)          /* alpha of a unit's disc in the glow buffer */                                      \

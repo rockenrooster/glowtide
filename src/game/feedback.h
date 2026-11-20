@@ -32,7 +32,7 @@ private:
     audio::Mixer* mixer_ = nullptr;
     bool sound_ = true, haptics_ = true;
     float gateNoteAt_[sim::kMaxGates] = {};
-    float lastTick_ = -1, lastThump_ = -1, lastChip_ = -1, lastGateHaptic_ = -1, lastPulseHaptic_ = -1;
+    float lastTick_ = -1, lastThump_ = -1, lastChip_ = -1, lastGateHaptic_ = -1, lastPulseHaptic_ = -1, lastTink_ = -1;
     double hapticTimes_[12] = {};  // wall clock, seconds
     int hapticHead_ = 0;
     int pending_[16] = {};
