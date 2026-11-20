@@ -17,6 +17,7 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | Screenshot of a device's panel (GLOWTIDE in front only) | `scripts\capture-android.ps1 -Serial moto [-Out x.png] [-Small]` |
 | 20 background/foreground cycles | `scripts\lifecycle-android.ps1 -Serial moto [-Cycles 20] [-AppArgs '...']` |
 | Picture sets with contact sheets (`levels`: 60 top-down level thumbnails; `p4`: audio renders and their table) | `scripts\review.ps1 -Set p1\|p2\|p3\|p4\|p5\|p6\|levels [-Only a,b] [-Lint]` |
+| Connect a phone on wireless debugging when mDNS finds nothing (scans its address, `adb connect`s the adbd port) | `scripts\find-wireless-adb.ps1 [-Ip 192.168.137.112,192.168.137.169]` |
 | Every device check on one device (install, flow, back key, save, cold start, lifecycle, both benches, refresh rate) -> `captures\matrix\<serial>.md` | `scripts\matrix-android.ps1 -Serial tablet\|op12r\|moto [-NoInstall]` |
 | Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
 | Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |
