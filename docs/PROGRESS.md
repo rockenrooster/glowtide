@@ -116,6 +116,11 @@ How the tablet and the 12R were looked for (2026-11-20, at the end of P6):
   37567, 46888 and 47888 open and the tablet 44171, and each closes the connection on adb's first packet with no TLS
   handshake, so none is the debugging port. Wireless debugging is switched off on both (Android turns it off on a
   reboot or a change of network). A third host, .167:38975, behaves the same way.
+- **Every other host** on 192.168.137.x, scanned over 30000-61000 too: the open ports on .147, .151, .167, .180 and
+  .200 all close on adb's first packet; no adbd answers anywhere but on the Moto.
+- **On the PC instead:** the screens are rendered and linted at the 12R's own panel (1264x2780 at 450 dpi, now in the
+  layout matrix of `review.ps1 -Set p3`) and at the tablet's (1200x1920): every screen passes, nothing clipped. That
+  checks layout only, not the devices.
 
 To fill the open rows (one command runs every device check, each with the lock and the foreground check, and writes
 `captures\matrix\<serial>.md`; on the Moto all ten checks passed: `captures\matrix\ZY22BXMJG3.md`):

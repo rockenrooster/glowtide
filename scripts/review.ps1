@@ -57,7 +57,7 @@ $sets = @{
         elements = '--picture elements'
     }
 }
-$matrix = @('1080x2400', '540x1200', '1080x2640', '1080x1920', '600x1024', '1200x1920', '1080x1440')
+$matrix = @('1080x2400', '540x1200', '1080x2640', '1080x1920', '600x1024', '1200x1920', '1080x1440', '1264x2780')
 $screens = @('home', 'hud', 'pause', 'win', 'lose', 'settings')
 $list = [ordered]@{}
 if ($sets.ContainsKey($Set)) { foreach ($k in $sets[$Set].Keys) { $list[$k] = $sets[$Set][$k] } }

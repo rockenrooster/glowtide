@@ -20,7 +20,7 @@ namespace {
 float matrixDpScale(int w, int h) {
     struct Row { int w, h; float dp; };
     static const Row rows[] = {{1080, 2400, 2.5f}, {540, 1200, 1.25f}, {1080, 2640, 2.625f}, {1080, 1920, 2.625f},
-                               {600, 1024, 1.0f},  {1200, 1920, 1.5f}, {1080, 1440, 2.0f}};
+                               {600, 1024, 1.0f},  {1200, 1920, 1.5f}, {1080, 1440, 2.0f}, {1264, 2780, 2.8125f}};  // the last: the OnePlus 12R (450 dpi)
     for (const Row& r : rows)
         if (r.w == w && r.h == h) return r.dp;
     return float(w) / 432.0f;
