@@ -436,15 +436,32 @@ void Game::flowStep() {
             bool* vals[5] = {&save_.sound, &save_.music, &save_.haptics, &save_.autoFire, &save_.reduceEffects};
             const int k = flowStep_ - 10;
             static bool before = false;
+            // MUSIC stays off for a second: the bed must be silent by then (P4, end to end in P6).
+            const int offFor = k == 1 ? 64 : 4;
             if (flowWait_ == 2) {
                 check(screen_ == Screen::Settings, "SETTINGS is open");
                 before = *vals[k];
                 check(tapLabel(names[k]), names[k]);
-            } else if (flowWait_ == 6) {
+            } else if (flowWait_ == 2 + offFor) {
                 check(*vals[k] != before, "a switch changes its setting");
+                if (k == 0 && !save_.sound) {
+                    const int pushed = mixer_.pushed();
+                    feedback_.uiTap();
+                    feedback_.star(0);
+                    check(mixer_.pushed() == pushed, "SOUND off: no command reaches the mixer");
+                }
+                if (k == 1 && !save_.music) {
+                    if (mixer_.mixCalls() > 0) check(mixer_.musicLevel() < 0.01f, "MUSIC off: the bed is silent within a second");
+                    else GT_TAG("FLOW", "skip MUSIC level check: no audio device");
+                }
                 tapLabel(names[k]);
-            } else if (flowWait_ == 10) {
+            } else if (flowWait_ == 6 + offFor) {
                 check(*vals[k] == before, "and changes it back");
+                if (k == 0 && save_.sound) {
+                    const int pushed = mixer_.pushed();
+                    feedback_.uiTap();
+                    check(mixer_.pushed() > pushed, "SOUND on: the tap reaches the mixer");
+                }
                 next();
             }
             break;

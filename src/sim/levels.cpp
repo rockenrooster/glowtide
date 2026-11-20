@@ -282,14 +282,14 @@ LevelDef generate(int index, u64 seed) {
                 best = special;
                 break;
             }
-            default: {  // Crossing sliders
+            default: {  // Crossing sliders, 1.6 m apart in z so they pass each other instead of through each other
                 const float period = r.range(3.5f, 5.5f), phase = r.f01();
-                Gate a = mul(0, 1.4f, z, plain, row);
+                Gate a = mul(0, 1.4f, z + 0.8f, plain, row);
                 a.slides = 1;
                 a.amp = 2.6f;
                 a.period = period;
                 a.phase = phase;
-                Gate d = divg(0, 1.4f, z, 2, row);
+                Gate d = divg(0, 1.4f, z - 0.8f, 2, row);
                 d.slides = 1;
                 d.amp = 2.6f;
                 d.period = period;

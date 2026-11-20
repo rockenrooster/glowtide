@@ -36,6 +36,7 @@ public:
     float timeScale = 1;      // slow motion
     bool reduceEffects = false;
     bool showLabels = true;
+    bool topDown = false;  // level thumbnails (P5)
 
     Camera cam;
     const WorldPalette* wp = nullptr;

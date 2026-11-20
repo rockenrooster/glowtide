@@ -38,7 +38,11 @@ bool Game::init(const Args& args, const GameEnv& env) {
         }
     }
     if (args.reduceEffects) save_.reduceEffects = true;
-    mixer_.init(48000, 0);
+    {
+        const double t0 = nowSeconds();
+        mixer_.init(48000, 0);  // synthesizes every sound (P4: measured on the Moto)
+        GT_LOG("audio: sound bank built in %.0f ms", (nowSeconds() - t0) * 1000.0);
+    }
     feedback_.init(&mixer_);
     mixer_.setTone(args.tone);
     applySettings();
@@ -128,10 +132,15 @@ void Game::enterLevel(int index, bool fade) {
         return;
     }
     level_ = maxv(1, index);
+    // Level load time (P5: at most 50 ms on the Moto): generate, then the meshes.
+    const double t0 = nowSeconds();
     const sim::LevelDef def = sim::levelFor(level_);
     world_.init(def, args_.seed >= 0 ? u64(args_.seed) : 0u);
     view_.setLevel(def, args_.world);
+    const double t1 = nowSeconds();
     if (graphicsReady_) renderer_.setLevel(def, *view_.wp, *view_.gp);
+    GT_LOG("level %d loaded in %.1f ms (generate %.1f ms, meshes %.1f ms)", level_, (nowSeconds() - t0) * 1000.0, (t1 - t0) * 1000.0,
+           (nowSeconds() - t1) * 1000.0);
     target_ = 0;
     worldTicks_ = false;
     fingerCount_ = 0;

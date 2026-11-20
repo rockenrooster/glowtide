@@ -15,6 +15,7 @@ try {
     for ($i = 1; $i -le $Runs; ++$i) {
         if (-not (Wait-GtDeviceIdle $Serial -QuietSeconds 2 -TimeoutSeconds 120)) { throw "$Serial stayed busy" }
         Stop-GtApp $Serial
+        Invoke-GtWake $Serial
         Start-Sleep -Seconds 2
         $since = (& $GT_ADB -s $Serial shell 'date +%m-%d\ %H:%M:%S.000').Trim()
         $out = & $GT_ADB -s $Serial shell "am start -W -n $GT_ACTIVITY"

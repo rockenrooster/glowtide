@@ -24,6 +24,8 @@ struct Camera {
     bool fit(float laneLen, int width, int height, const SafeArea& safe, float dpScale);
     // Final placement: lateral follow (metres) and a shake offset.
     void place(float followX, V3 shake);
+    // From straight above (a hair behind, so 'up' stays defined), the whole lane in the frame: level thumbnails.
+    void topDown(float laneLen);
     // World -> frame pixels (top-left origin); returns the view depth (negative behind the camera).
     float project(V3 p, float& sx, float& sy) const;
     float pixelsPerMetre(V3 p) const;  // at that point, horizontally

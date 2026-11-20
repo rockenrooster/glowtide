@@ -93,6 +93,111 @@ void testDivide() {
     GT_CHECK_MSG(tideOf(w) == in / 3 && w.gateCarry[0] == in % 3, "exactly a third of a mixed stream gets through");
 }
 
+// P5 rules: a snuffer takes a wisp it touches and nothing else.
+void testSnuffer() {
+    static World w;
+    LevelDef d = emptyLevel();
+    Snuffer sn;
+    sn.xa = -0.05f;
+    sn.xb = 0.05f;
+    sn.z = 12;
+    d.snuffers[d.snufferCount++] = sn;
+    w.init(d, 1);
+    place(w.w, w.snufferX[0], 11.9f, 5);
+    place(w.w, 3.5f, 11.9f, 7);
+    Input in;
+    w.tick(in);
+    GT_CHECK_MSG(w.w.n == 1 && w.w.power[0] == 7, "a snuffer takes the wisp it touches, and only that one");
+}
+
+// Sliding gates follow cx + amp * wave(t / period + phase), the position at the end of each tick.
+void testSliders() {
+    static World w;
+    LevelDef d = emptyLevel();
+    Gate g;
+    g.cx = 0.5f;
+    g.hw = 1.4f;
+    g.z = 14;
+    g.slides = 1;
+    g.amp = 2.0f;
+    g.period = 4.0f;
+    g.phase = 0.25f;
+    d.gates[d.gateCount++] = g;
+    Gate h = g;
+    h.phase = 0.75f;  // the crossing partner, in opposite phase
+    h.z = 15.6f;
+    d.gates[d.gateCount++] = h;
+    w.init(d, 1);
+    Input in;
+    for (int t = 0; t < 77; ++t) w.tick(in);
+    const float t1 = 77.0f / 60.0f;
+    const float want = g.cx + g.amp * easedWave(t1 / g.period + g.phase);
+    const float wantH = h.cx + h.amp * easedWave(t1 / h.period + h.phase);
+    GT_CHECK_MSG(std::fabs(w.gateX[0] - want) < 1e-4f && std::fabs(w.gateX[1] - wantH) < 1e-4f, "sliders follow their wave");
+    GT_CHECK_MSG(std::fabs((w.gateX[0] - g.cx) + (w.gateX[1] - h.cx)) < 1e-3f, "crossing sliders move in opposite phase");
+}
+
+// Time bursts double the enemy's flow for their duration; health bursts start when the spire falls to their share and
+// bring their brutes; brutes have the level's brute power.
+void testBursts() {
+    static World w;
+    LevelDef d = emptyLevel();
+    d.targetT = 1000;  // no pressure ramp in this window
+    d.baseFlow = 12;
+    d.emitters[d.emitterCount++] = {0, 0, 5, 0};
+    Burst b;
+    b.t = 3.0f;
+    b.mult = 2.0f;
+    b.dur = 3.0f;
+    d.bursts[d.burstCount++] = b;
+    w.init(d, 1);
+    Input in;
+    auto runTo = [&](float seconds) {
+        while (float(w.tickCount) / 60.0f < seconds) w.tick(in);
+        return w.gloomSpawned;
+    };
+    const i64 a = runTo(3.0f), mid = runTo(6.0f), end = runTo(9.0f);
+    const i64 during = mid - a, after = end - mid;
+    GT_CHECK_MSG(during >= 2 * after - 2 && during <= 2 * after + 2, "a time burst doubles the flow for its duration");
+
+    LevelDef e = emptyLevel();
+    e.targetT = 1000;
+    e.baseFlow = 6;
+    e.brutePower = 24;
+    e.emitters[e.emitterCount++] = {0, 0, 5, 0};
+    Burst hb;
+    hb.t = -1;
+    hb.healthFrac = 0.66f;
+    hb.mult = 2;
+    hb.dur = 4;
+    hb.brutes = 2;
+    e.bursts[e.burstCount++] = hb;
+    w.init(e, 1);
+    runTo(2.0f);
+    auto brutes = [&]() {
+        int n = 0;
+        for (int i = 0; i < w.g.n; ++i) n += (w.g.flags[i] & kBrute) ? 1 : 0;
+        return n;
+    };
+    GT_CHECK_MSG(brutes() == 0, "no brutes before the spire falls");
+    w.spire = i32(0.60f * float(w.spireStart));
+    w.tick(in);
+    int power = 0;
+    for (int i = 0; i < w.g.n; ++i)
+        if (w.g.flags[i] & kBrute) power = w.g.power[i];
+    GT_CHECK_MSG(brutes() == 2 && power == 24, "a health burst starts at its share and brings two brutes of the level's power");
+
+    LevelDef f = emptyLevel();
+    f.targetT = 1000;
+    f.baseFlow = 6;
+    f.bruteEvery = 2.0f;
+    f.brutePower = 30;
+    f.emitters[f.emitterCount++] = {0, 0, 5, 0};
+    w.init(f, 1);
+    runTo(1.5f + 2.0f * 3 + 0.05f);
+    GT_CHECK_MSG(brutes() == 3, "a brute every bruteEvery seconds after the emitters start");
+}
+
 void testClashAndBarrier() {
     static World w;
     LevelDef d = emptyLevel();
@@ -268,6 +373,9 @@ void runSimTests() {
     testMultiply(100);
     testDivide();
     testClashAndBarrier();
+    testSnuffer();
+    testSliders();
+    testBursts();
     testBumper();
     testNoAllocation();
     testGenerator();

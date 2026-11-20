@@ -30,6 +30,37 @@ struct OnePole {
         y += (x - y) * a;
         return y;
     }
+    // A fixed cutoff: the coefficient computed once.
+    float runA(float x, float a) {
+        y += (x - y) * a;
+        return y;
+    }
+};
+
+// A sine by rotation (double precision: no drift over a whole buffer) and an exponential decay by multiplication.
+struct Osc {
+    double c, s, cr, sr;
+    Osc(double hz, double rate, double phase = 0) : c(std::cos(phase)), s(std::sin(phase)) {
+        const double w = 6.283185307179586 * hz / rate;
+        cr = std::cos(w);
+        sr = std::sin(w);
+    }
+    float next() {
+        const float out = float(s);
+        const double nc = c * cr - s * sr;
+        s = s * cr + c * sr;
+        c = nc;
+        return out;
+    }
+};
+struct Decay {
+    double v = 1, r;
+    Decay(double seconds, double rate) : r(std::exp(-1.0 / (seconds * rate))) {}
+    float next() {
+        const float out = float(v);
+        v *= r;
+        return out;
+    }
 };
 
 std::vector<float> buffer(float seconds, int rate) { return std::vector<float>(size_t(seconds * float(rate)) + 1, 0.0f); }
@@ -45,21 +76,40 @@ void normalize(std::vector<float>& b, float peak) {
 // A plucked tone in one of three timbres; amplitude 1 peak before normalization.
 void pluck(std::vector<float>& b, int rate, float f, int timbre, float decay, float start = 0, float gain = 1.0f) {
     Noise n;
+    const double R = double(rate);
     const int s0 = int(start * float(rate));
+    // Partials (ratio, level, decay seconds) per timbre.
+    struct Partial {
+        double ratio;
+        float level;
+        double decay;
+    };
+    Partial parts[4];
+    int np = 0;
+    if (timbre == 1) {         // glass: inharmonic, bright, long
+        parts[np++] = {1.0, 1.0f, double(decay) * 1.8};
+        parts[np++] = {2.76, 0.35f, 0.15};
+        parts[np++] = {5.4, 0.15f, 0.07};
+    } else if (timbre == 2) {  // bell
+        parts[np++] = {1.0, 1.0f, double(decay) * 2.6};
+        parts[np++] = {2.0, 0.45f, 0.3};
+        parts[np++] = {3.01, 0.25f, 0.2};
+        parts[np++] = {4.2, 0.12f, 0.12};
+    } else {                   // kalimba: fundamental, a quiet fourth harmonic, a 2 ms click
+        parts[np++] = {1.0, 1.0f, double(decay)};
+        parts[np++] = {4.0, 0.25f, 0.06};
+    }
+    Osc osc[4] = {Osc(f * parts[0].ratio, R), Osc(f * parts[1].ratio, R), Osc(np > 2 ? f * parts[2].ratio : 1.0, R),
+                  Osc(np > 3 ? f * parts[3].ratio : 1.0, R)};
+    Decay env[4] = {Decay(parts[0].decay, R), Decay(parts[1].decay, R), Decay(np > 2 ? parts[2].decay : 1.0, R),
+                    Decay(np > 3 ? parts[3].decay : 1.0, R)};
+    const int attack = int(0.002 * R);
     for (size_t i = size_t(s0); i < b.size(); ++i) {
-        const float t = float(i - size_t(s0)) / float(rate);
-        float v;
-        const float att = std::fmin(1.0f, t / 0.002f);
-        if (timbre == 1) {         // glass: inharmonic, bright, long
-            v = std::sin(kTwoPi * f * t) * std::exp(-t / (decay * 1.8f)) + 0.35f * std::sin(kTwoPi * f * 2.76f * t) * std::exp(-t / 0.15f) +
-                0.15f * std::sin(kTwoPi * f * 5.4f * t) * std::exp(-t / 0.07f);
-        } else if (timbre == 2) {  // bell
-            v = std::sin(kTwoPi * f * t) * std::exp(-t / (decay * 2.6f)) + 0.45f * std::sin(kTwoPi * f * 2.0f * t) * std::exp(-t / 0.3f) +
-                0.25f * std::sin(kTwoPi * f * 3.01f * t) * std::exp(-t / 0.2f) + 0.12f * std::sin(kTwoPi * f * 4.2f * t) * std::exp(-t / 0.12f);
-        } else {                   // kalimba: fundamental, a quiet fourth harmonic, a 2 ms click
-            v = std::sin(kTwoPi * f * t) * std::exp(-t / decay) + 0.25f * std::sin(kTwoPi * f * 4.0f * t) * std::exp(-t / 0.06f);
-            if (t < 0.002f) v += n.next() * 0.3f * (1.0f - t / 0.002f);
-        }
+        const int j = int(i - size_t(s0));
+        float v = 0;
+        for (int k = 0; k < np; ++k) v += parts[k].level * osc[k].next() * env[k].next();
+        const float att = j < attack ? float(j) / float(attack) : 1.0f;
+        if (timbre == 0 && j < attack) v += n.next() * 0.3f * (1.0f - float(j) / float(attack));
         b[i] += v * att * gain;
     }
 }
@@ -216,28 +266,41 @@ void Bank::build(int rate, int timbre) {
     const int len = int(loop * R);
     padDark_.assign(size_t(len), 0.0f);
     padBright_.assign(size_t(len), 0.0f);
-    const int chords[2][5] = {{48, 52, 55, 59, 62}, {45, 48, 52, 55, 59}};  // C maj9, A min9
+    // C maj9 and A min9 voiced from C4 and A3: a phone speaker has no bass, so the pad lives above 200 Hz.
+    const int chords[2][5] = {{60, 64, 67, 71, 74}, {57, 60, 64, 67, 71}};
     for (int bright = 0; bright < 2; ++bright) {
         std::vector<float>& out = bright ? padBright_ : padDark_;
         OnePole lp;
-        for (int i = 0; i < len; ++i) {
-            const float t = float(i) / R;
-            const float half = loop * 0.5f;
-            const int c = t < half ? 0 : 1;
-            const float local = c == 0 ? t : t - half;
-            // Crossfade 0.6 s around each chord change (and the loop's seam).
-            const float fadeIn = std::fmin(1.0f, local / 0.6f), fadeOut = std::fmin(1.0f, (half - local) / 0.6f);
-            float v = 0;
+        const float a = 1.0f - std::exp(-kTwoPi * (bright ? 3000.0f : 900.0f) / R);
+        const float half = loop * 0.5f;
+        const int halfLen = len / 2;
+        const float h2 = bright ? 0.35f : 0.12f, h3 = bright ? 0.18f : 0.04f;
+        for (int c = 0; c < 2; ++c) {
+            // Each chord's partials as rotating phasors, started where the time-based formula would be.
+            const double t0 = c == 0 ? 0.0 : double(halfLen) / double(R);
+            std::vector<Osc> osc;
+            osc.reserve(30);
             for (int k = 0; k < 5; ++k) {
-                const float f = midiHz(float(chords[c][k]));
+                const double f = double(midiHz(float(chords[c][k])));
                 for (int d = 0; d < 2; ++d) {
-                    const float ff = f * (d ? 1.003f : 0.997f);
-                    v += std::sin(kTwoPi * ff * t + float(k)) + (bright ? 0.35f : 0.12f) * std::sin(kTwoPi * ff * 2.0f * t) +
-                         (bright ? 0.18f : 0.04f) * std::sin(kTwoPi * ff * 3.0f * t);
+                    const double ff = f * (d ? 1.003 : 0.997);
+                    osc.emplace_back(ff, double(R), 6.283185307179586 * ff * t0 + double(k));
+                    osc.emplace_back(ff * 2.0, double(R), 6.283185307179586 * ff * 2.0 * t0);
+                    osc.emplace_back(ff * 3.0, double(R), 6.283185307179586 * ff * 3.0 * t0);
                 }
             }
-            v *= 0.5f + 0.5f * std::sin(kTwoPi * t / beat * 0.25f) * 0.2f;
-            out[size_t(i)] = lp.run(v, bright ? 3000.0f : 900.0f, R) * fadeIn * fadeOut;
+            Osc swell(1.0 / double(beat) * 0.25, double(R), 6.283185307179586 * t0 / double(beat) * 0.25);
+            const int i0 = c == 0 ? 0 : halfLen, i1 = c == 0 ? halfLen : len;
+            for (int i = i0; i < i1; ++i) {
+                const float t = float(i) / R;
+                const float local = c == 0 ? t : t - half;
+                // Crossfade 0.6 s around each chord change (and the loop's seam).
+                const float fadeIn = std::fmin(1.0f, local / 0.6f), fadeOut = std::fmax(0.0f, std::fmin(1.0f, (half - local) / 0.6f));
+                float v = 0;
+                for (size_t o = 0; o < osc.size(); o += 3) v += osc[o].next() + h2 * osc[o + 1].next() + h3 * osc[o + 2].next();
+                v *= 0.5f + 0.5f * swell.next() * 0.2f;
+                out[size_t(i)] = lp.runA(v, a) * fadeIn * fadeOut;
+            }
         }
         normalize(out, 0.5f);
     }

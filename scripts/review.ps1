@@ -12,6 +12,21 @@ param(
 . "$PSScriptRoot\env.ps1"
 if (-not $NoBuild) { & "$PSScriptRoot\build-desktop.ps1" -Config $Config }
 $exe = Join-Path $GT_ROOT "build\desktop-$Config\glowtide.exe"
+
+if ($Set -eq 'p4') {
+    # Sound (P4): offline renders through the headless tool (never a device), then one table of their numbers.
+    $headless = Join-Path $GT_ROOT "build\desktop-$Config\glowtide_headless.exe"
+    $out = Join-Path $GT_ROOT 'captures\p4'
+    New-Item -ItemType Directory -Force $out | Out-Null
+    foreach ($scene in 'ladder', 'flood', 'ui', 'win', 'lose', 'music', 'timbres') {
+        & $headless --render-audio $scene --out (Join-Path $out "$scene.wav")
+        if ($LASTEXITCODE -ne 0) { Write-Host "[review] $scene FAILED"; exit 1 }
+    }
+    $wavs = 'flood', 'music', 'ladder', 'ui', 'win', 'lose', 'timbres_kalimba', 'timbres_glass', 'timbres_bell' |
+        ForEach-Object { Join-Path $out "$_.wav" }
+    python -I -B (Join-Path $GT_ROOT 'tools\wav_metrics.py') @wavs --ladder (Join-Path $out 'ladder.wav') --table (Join-Path $out 'metrics.md')
+    exit $LASTEXITCODE
+}
 $out = Join-Path $GT_ROOT "captures\$Set"
 New-Item -ItemType Directory -Force $out | Out-Null
 
@@ -56,6 +71,10 @@ if ($Set -eq 'p6') {
     $list['lose_strip'] = '--picture lose_strip --strip 8 --strip-step 8'
     $list['next_strip'] = '--picture next_strip --strip 8 --strip-step 4'
 }
+if ($Set -eq 'levels') {
+    # P5 level sheets: every fifth level from straight above with its labels.
+    for ($n = 5; $n -le 300; $n += 5) { $list[('level_{0:D3}' -f $n)] = "--picture level_top --level $n --no-hud --frames 4 --res 540x1200" }
+}
 if ($Set -eq 'p2') {
     $list['gate_strip'] = '--picture gate_strip --strip 8 --strip-step 3'
     $list['clash_strip'] = '--picture clash_strip --strip 8 --strip-step 4'
@@ -83,6 +102,10 @@ foreach ($name in $list.Keys) {
     if ($a -match '--strip') { python -I -B (Join-Path $GT_ROOT 'tools\contact.py') strip (Join-Path $out "${name}_sheet.png") $png | Out-Null }
     Write-Host "[review] $name"
 }
-if ($smalls.Count) { python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact.png') @smalls --cols 5 --height 560 }
+if ($smalls.Count -and $Set -eq 'levels') {
+    # Sixty thumbnails: two sheets of thirty, readable at review size.
+    python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact_1.png') @($smalls | Select-Object -First 30) --cols 10 --height 520
+    python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact_2.png') @($smalls | Select-Object -Skip 30) --cols 10 --height 520
+} elseif ($smalls.Count) { python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact.png') @smalls --cols 5 --height 560 }
 if ($failed.Count) { Write-Host "[review] $($failed.Count) failed: $($failed -join ', ')"; exit 1 }
 exit 0

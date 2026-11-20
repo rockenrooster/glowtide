@@ -141,13 +141,15 @@ else()
   target_link_options(glowtide PRIVATE ${GT_STATIC_LINK})
   add_dependencies(glowtide gt_shaders)
 
-  add_executable(glowtide_headless ${GT_ROOT}/src/tools/headless.cpp ${GT_ROOT}/src/tools/audio_render.cpp)
+  add_executable(glowtide_headless ${GT_ROOT}/src/tools/headless.cpp ${GT_ROOT}/src/tools/audio_render.cpp
+    ${GT_ROOT}/src/game/feedback.cpp)
   target_link_libraries(glowtide_headless PRIVATE gt_sim gt_audio gt_core)
   target_compile_options(glowtide_headless PRIVATE ${GT_WARN})
   target_link_options(glowtide_headless PRIVATE ${GT_STATIC_LINK})
 
   add_executable(glowtide_tests ${GT_ROOT}/src/tools/tests.cpp ${GT_ROOT}/src/tools/tests_sim.cpp ${GT_ROOT}/src/gfx/palette.cpp
-    ${GT_ROOT}/src/gfx/camera.cpp ${GT_ROOT}/src/gfx/text.cpp ${GT_ROOT}/src/game/save.cpp)
+    ${GT_ROOT}/src/gfx/camera.cpp ${GT_ROOT}/src/gfx/text.cpp ${GT_ROOT}/src/game/save.cpp
+    ${GT_ROOT}/src/game/feedback.cpp)
   target_link_libraries(glowtide_tests PRIVATE gt_sim gt_audio gt_core)
   target_compile_options(glowtide_tests PRIVATE ${GT_WARN})
   target_link_options(glowtide_tests PRIVATE ${GT_STATIC_LINK})

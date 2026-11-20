@@ -96,6 +96,14 @@ bool Camera::fit(float laneLen, int width, int height, const SafeArea& safe, flo
     return true;
 }
 
+void Camera::topDown(float laneLen) {
+    const float aspect = float(w) / float(h);
+    const float halfV = std::tan(fovY * 0.5f), halfH = halfV * aspect;
+    // Height that fits the lane's length (plus the spire and the lantern) and its 10 m width (plus rails).
+    const float hgt = std::fmax((laneLen * 0.5f + 4.0f) / halfV, 6.5f / halfH);
+    build(V3(0, hgt, laneLen * 0.5f - 0.05f), V3(0, 0, laneLen * 0.5f));
+}
+
 void Camera::place(float followX, V3 shake) { build(eye + V3(followX, 0, 0) + shake, target + V3(followX, 0, 0) + shake * 0.5f); }
 
 }  // namespace gt

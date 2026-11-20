@@ -66,6 +66,9 @@ void AudioOut::close() {
         const AudioStats s = stats();
         GT_LOG("audio: %d callbacks, fill p99 %.2f max %.2f ms, gap max %.1f ms, %d late, period %.1f ms", s.callbacks,
                double(s.fillMs[1]), double(s.fillMs[2]), double(s.gapMs[2]), s.late, double(s.periodMs));
+        if (silent_)
+            GT_LOG("audio: silent: peak before the mute %.3f, %lld non-zero samples handed to the device", double(s.peakBeforeMute),
+                   s.nonZeroHanded);
         SDL_DestroyAudioStream(stream_);
     }
     stream_ = nullptr;
@@ -93,6 +96,7 @@ AudioStats AudioOut::stats() const {
     s.gapMs[1] = histPercentile(gapHist_, kBins, 0.99f);
     s.gapMs[2] = maxGap_ * 1000.0f;
     s.peakBeforeMute = peakBeforeMute_;
+    s.nonZeroHanded = nonZeroHanded_;
     return s;
 }
 
@@ -127,6 +131,7 @@ void AudioOut::callback(void* user, SDL_AudioStream* stream, int additional, int
             for (int i = 0; i < n * 2; ++i) peak = std::fmax(peak, std::fabs(self->buf_[i]));
             if (peak > self->peakBeforeMute_) self->peakBeforeMute_ = peak;
             std::memset(self->buf_, 0, sizeof(float) * 2 * size_t(n));
+            for (int i = 0; i < n * 2; ++i) self->nonZeroHanded_ += self->buf_[i] != 0.0f;  // the proof, not an assumption
         }
         SDL_PutAudioStreamData(stream, self->buf_, int(sizeof(float) * 2 * size_t(n)));
         frames -= n;

@@ -78,7 +78,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
             if (!need() || !toInt(v, iv) || iv < 1) return false;
             a.frames = int(iv);
         } else if (!std::strcmp(k, "--strip")) {
-            if (!need() || !toInt(v, iv) || iv < 1 || iv > 64) return false;
+            if (!need() || !toInt(v, iv) || iv < 1 || iv > 600) return false;  // the flashing audit takes every frame
             a.strip = int(iv);
         } else if (!std::strcmp(k, "--strip-step")) {
             if (!need() || !toInt(v, iv) || iv < 1) return false;

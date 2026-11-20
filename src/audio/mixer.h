@@ -28,6 +28,10 @@ public:
     void setIntensity(float x) { intensity_.store(x); }
     void setTone(bool on) { tone_.store(on); }
     int dropped() const { return dropped_.load(); }
+    int pushed() const { return int(head_.load()); }  // commands accepted since init (tests)
+    // The music bed's current level (0 silent .. 1) and how many times the audio thread has mixed (checks).
+    float musicLevel() const { return musicLevelOut_.load(std::memory_order_relaxed); }
+    int mixCalls() const { return mixCalls_.load(std::memory_order_relaxed); }
     int voicesInUse() const { return voicesInUse_.load(); }
     // Audio thread.
     void mix(float* stereo, int frames);
@@ -42,6 +46,7 @@ private:
         u32 age = 0;
     };
     void start(const Command& c);
+    void mixChunk(float* out, int frames);
     void musicStep(int frames);
 
     Bank bank_;
@@ -54,7 +59,7 @@ private:
     std::atomic<float> intensity_{0};
     std::atomic<bool> tone_{false};
     bool effectsOn_ = true, musicOn_ = true;
-    float musicGain_ = 0.35f;  // 9 dB under the effects
+    float musicGain_ = 0.54f;  // the music render sits 9 dB under the flood render (P4 measurements)
     float duck_ = 1, duckTarget_ = 1, duckHold_ = 0;
     double padPos_ = 0;
     double musicClock_ = 0;  // seconds
@@ -64,6 +69,11 @@ private:
     u32 voiceAge_ = 0;
     double tonePhase_ = 0;
     float intensityNow_ = 0;
+    static constexpr int kChunk = 1024;
+    float musicLevel_ = 1;
+    std::atomic<float> musicLevelOut_{1};
+    std::atomic<int> mixCalls_{0};
+    float musicEnv_[kChunk] = {};
 };
 
 }  // namespace gt::audio

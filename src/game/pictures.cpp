@@ -160,6 +160,15 @@ bool Game::setupPicture(const char* name) {
             if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
         }
     };
+    if (!std::strcmp(name, "level_top")) {
+        // A level from straight above with its labels (P5 level sheets); --level picks it.
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        enterLevel(args_.level > 0 ? args_.level : 1, false);
+        coldStart_ = false;
+        view_.topDown = true;
+        setScreen(Screen::Play);
+        return true;
+    }
     const struct {
         const char* name;
         int level;
@@ -253,6 +262,7 @@ bool Game::setupPicture(const char* name) {
         s.phase = 0.25f;
         def.gates[def.gateCount++] = s;
         def.gates[def.gateCount++] = gate(2.6f, 1.5f, 22, 4, true, 2);
+        def.gates[def.gateCount++] = gate(2.7f, 1.2f, 14.8f, 3, false, 1);  // a divide-by-three
         def.barriers[def.barrierCount++] = {1.0f, 4.2f, 20.0f, 40};
         def.bumpers[def.bumperCount++] = {-3.1f, 21.0f, 0.7f};
         def.snuffers[def.snufferCount++] = {-3.6f, -0.6f, 26.5f, 3.0f, 0.25f};

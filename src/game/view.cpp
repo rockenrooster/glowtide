@@ -354,7 +354,11 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     // Camera with follow and shake.
     const float shakeAmt = reduceEffects ? 0.0f : trauma * trauma * tune.shakeMax;
     const float tt = float(time);
-    cam.place(followX_, V3(wobble(tt, 1.3f) * shakeAmt, wobble(tt, 7.7f) * shakeAmt * 0.6f, 0));
+    if (topDown) {
+        cam.topDown(def.len);
+    } else {
+        cam.place(followX_, V3(wobble(tt, 1.3f) * shakeAmt, wobble(tt, 7.7f) * shakeAmt * 0.6f, 0));
+    }
 
     FrameUniforms& fu = s.fu;
     std::memcpy(fu.viewProj, cam.viewProj.m, sizeof fu.viewProj);

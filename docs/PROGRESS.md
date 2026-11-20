@@ -12,8 +12,8 @@ just do what you think is best and let me know your choices."
 | P1 Look and performance | Done 2026-11-20 | `bench_flood` inside the contract on the Moto after a 180 s soak; review set `captures/p1/contact.png` |
 | P2 Core gameplay | Done 2026-11-20 | Tests, determinism (PC = Moto), acceptance 1-5, strips with count checks, flux findings (GAME_DESIGN 5.9 corrected) |
 | P3 Game loop and UI | Done 2026-11-20 | Flow test on PC and Moto, lint over 43 renders, save, lifecycle, cold start 1.1 s; the tablet's back-key check waits for the tablet |
-| P4 Audio | Not started | |
-| P5 Content | Not started | |
+| P4 Audio | Done 2026-11-20 | Renders in `captures/p4/` (three ladder timbres through the flood); 10 min of `bench_flood` with sound on the Moto: no late callback. The tablet's run waits for the tablet |
+| P5 Content | Done 2026-11-20 | Levels 2-300 baked and accepted (4 min, 4 jobs); band tables in `captures/levels/bands.md`; 60 thumbnails reviewed; heaviest level (87) inside the contract on the Moto |
 | P6 Polish and release | Not started | |
 
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
@@ -32,6 +32,11 @@ just do what you think is best and let me know your choices."
 | `bench_play` after a result | Starts the same level again 3 s later | The measured window is play, wins and level loads, not a still result screen |
 | A dev-only level stepper | In SETTINGS of Debug and RelWithDebInfo builds (`GT_DEV`); not in Release | P3 task 12: the owner's playtest jumps between levels |
 | Device test scripts | `flow-android.ps1`, `save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1` | Repeatable P3 checks on any device, with the lock and the foreground checks |
+| Mix levels (P4) | Effects at 0.33, music at 0.54 of full gain, limiter holding samples at -1.5 dBFS | The flood render lands at -14.9 LUFS and -2.6 dBTP; the music sits 9-10 dB under it |
+| The pad's voicing (P4) | An octave up (from C4 and A3) | A phone speaker has no bass: 11% of the bed's energy was above 300 Hz, now 45% |
+| Synthesis cost (P4) | Oscillators by rotation and decays by multiplication instead of sin() and exp() per sample | The bank took 849 ms on the Moto (limit 150 ms); now 117 ms, no worker thread needed; cold start fell to 0.43 s |
+| Acceptance of a baked level (P5) | Two lines added to GAME_DESIGN 7.4 step 5: the cancelled share within 5 points of `fight`, and from level 21 the naive bot must lose; up to two corrections of the rate scale before the next seed | The first full bake passed 7.4 but 13 levels cancelled 6-9 points over `fight` and three bands let the naive bot win twice |
+| Crossing sliders (P5) | The two gates 1.6 m apart in z | At the same z they passed through each other (labels on top of each other, panels fighting for the same depth) |
 
 ## Measured device facts
 
@@ -49,6 +54,8 @@ just do what you think is best and let me know your choices."
 | 2026-11-20 | Moto | bench_play level 5, 90 s | 0.90% | 34.8 ms | 17.14 ms | 3.68 ms | 0.11 ms | 0 | P2/P3, sound on: audio 0 late callbacks, fill p99 0.38 ms of a 20 ms period; haptics at most 12 a second |
 | 2026-11-20 | Moto | bench_flood 60 s after 180 s | 0.76% | 34.7 ms | 16.97 ms | 4.20 ms | 1.47 ms | 0 | P3 regression check against P1: +2.9% CPU (limit 10%) |
 | 2026-11-20 | PC | bench_play level 5 | — | — | — | — | 0.028 ms | 0 | P2: simulation P95 under 0.5 ms |
+| 2026-11-20 | Moto | bench_flood 600 s with sound | 0.54% | 35.6 ms | 16.96 ms | 4.23 ms | 1.48 ms | 0 | P4: 30,000 callbacks, fill p99 0.33 ms of a 20 ms period, gap max 33.7 ms, 0 late |
+| 2026-11-20 | Moto | bench_play level 87, 90 s | 0.79% | 33.9 ms | 17.00 ms | 4.57 ms | 1.90 ms | 0 | P5: the heaviest baked level (3,080 units at peak): 2,323 wisps, 757 glooms |
 
 Other measurements (Moto unless named):
 
@@ -64,6 +71,12 @@ Other measurements (Moto unless named):
 | Cold start to the first frame (launch request to first swap) | Median 1.14 s, worst 1.33 s (target 2 s) |
 | Back key | Moto: play to pause to play, HOME leaves the app |
 | Strips: counts from the simulation for the captured ticks | 0 disagreements (gate: k out per one in; glooms lose power only to clashes and the lantern) |
+| Audio renders (`review.ps1 -Set p4`, table in `captures/p4/metrics.md`) | Flood -14.9 LUFS, -2.6 dBTP, 0 clipped, DC 0.0004, 0% silence; music -25.4 LUFS (10.5 dB under), largest jump 0.033; ladder within 0.06 cents |
+| Silence on the PC | With `--silent`: peak 0.534 before the mute, 0 non-zero samples handed to the device |
+| Sound bank build | Moto 117 ms (was 849 ms) |
+| Level bake | 299 levels accepted, 0 seeds rejected beyond the first try in most bands; determinism on 10 baked levels; soak 1-300 (greedy and sweep, invariants every tick): 600 runs, 0 failed |
+| Level load (generate + meshes) on the Moto | 0.8 ms (limit 50 ms) |
+| Flashing audit (`flash-audit.ps1`) | Win, boss win, lose and core hit, with and without REDUCE EFFECTS: at most 2 swings of 10% in any second (limit 3) |
 
 ## Deviations from the specs
 

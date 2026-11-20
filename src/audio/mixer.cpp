@@ -28,7 +28,7 @@ int categoryOf(int s) {
 
 bool isMusic(int s) { return s == kSndPulse || (s >= kSndPluck0 && s < kSndPluck0 + 11); }
 
-constexpr float kEffectsGain = 0.75f;
+constexpr float kEffectsGain = 0.33f;  // the flood render lands near -17 LUFS (GAME_DESIGN 12: -20 to -14)
 constexpr float kBeat = 60.0f / 76.0f;
 constexpr float kStep = kBeat * 0.5f;  // eighth notes
 
@@ -177,13 +177,33 @@ void Mixer::mix(float* out, int frames) {
         ++t;
     }
     tail_.store(t, std::memory_order_release);
+    // Any length (the offline renders ask for seconds at once): chunks of at most kChunk frames.
+    for (int done = 0; done < frames; done += kChunk) mixChunk(out + done * 2, minv(kChunk, frames - done));
+    musicLevelOut_.store(musicLevel_, std::memory_order_relaxed);
+    mixCalls_.fetch_add(1, std::memory_order_relaxed);
+}
 
+void Mixer::mixChunk(float* out, int frames) {
     std::memset(out, 0, sizeof(float) * 2 * size_t(frames));
     // Music events in blocks of 64 frames, then every voice.
     for (int base = 0; base < frames; base += 64) musicStep(minv(64, frames - base));
+    // The music's level glides to the MUSIC switch in about 0.1 s, so switching it off stops the bed without a
+    // click; once silent the music voices are let go.
+    const float glide = 1.0f - std::exp(-1.0f / (0.1f * float(rate_)));
+    const float target = musicOn_ ? 1.0f : 0.0f;
+    for (int i = 0; i < frames; ++i) {
+        musicLevel_ += (target - musicLevel_) * glide;
+        musicEnv_[i] = musicLevel_;
+    }
+    const bool musicSilent = !musicOn_ && musicLevel_ < 1e-3f;
     int inUse = 0;
     for (Voice& v : voices_) {
         if (v.sound < 0) continue;
+        const bool music = isMusic(v.sound);
+        if (music && musicSilent) {
+            v.sound = -1;
+            continue;
+        }
         ++inUse;
         const Sound& s = bank_.get(v.sound);
         int i = 0;
@@ -199,7 +219,7 @@ void Mixer::mix(float* out, int frames) {
                 break;
             }
             const float f = v.pos - float(k);
-            const float x = s.data[k] + (s.data[k + 1] - s.data[k]) * f;
+            const float x = (s.data[k] + (s.data[k + 1] - s.data[k]) * f) * (music ? musicEnv_[i] : 1.0f);
             out[i * 2] += x * v.gl;
             out[i * 2 + 1] += x * v.gr;
             v.pos += v.step;
@@ -207,7 +227,7 @@ void Mixer::mix(float* out, int frames) {
     }
     voicesInUse_.store(inUse);
     // The pad, crossfaded dark to bright with the tide; ducked under the win and lose.
-    if (musicOn_) {
+    if (!musicSilent) {
         const float* dark = bank_.padDark();
         const float* bright = bank_.padBright();
         const int n = bank_.padLength();
@@ -215,7 +235,7 @@ void Mixer::mix(float* out, int frames) {
         const float b = intensityNow_;
         for (int i = 0; i < frames; ++i) {
             const int k = int(padPos_);
-            const float x = (dark[k] + (bright[k] - dark[k]) * b) * g;
+            const float x = (dark[k] + (bright[k] - dark[k]) * b) * g * musicEnv_[i];
             out[i * 2] += x;
             out[i * 2 + 1] += x;
             padPos_ += 1.0;
@@ -232,8 +252,9 @@ void Mixer::mix(float* out, int frames) {
             out[i * 2 + 1] += s;
         }
     }
-    // A soft limiter holds the output at -1 dBFS: instant attack, ~100 ms release.
-    const float thr = 0.891f;
+    // A soft limiter holds the output under -1 dBFS true peak: samples held at -1.5 dBFS leave room for the overs
+    // between samples. Instant attack, ~100 ms release.
+    const float thr = 0.841f;
     const float release = 1.0f - std::exp(-1.0f / (0.1f * float(rate_)));
     for (int i = 0; i < frames; ++i) {
         const float peak = std::fmax(std::fabs(out[i * 2]), std::fabs(out[i * 2 + 1]));

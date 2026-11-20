@@ -9,6 +9,8 @@
 #include "core/png.h"
 #include "core/rng.h"
 #include "core/tuning.h"
+#include "audio/mixer.h"
+#include "game/feedback.h"
 #include "game/save.h"
 #include "tests_sim.h"
 
@@ -128,6 +130,68 @@ static void testSave(const char* dir) {
     GT_CHECK(!loadSave(path, z) && z.level == 1);
 }
 
+// Audio (P4): a flood of commands never takes more than 32 voices and the overflow is counted; with SOUND off the
+// feedback sends the mixer nothing; with MUSIC off the bed is silent within a second, without a jump.
+static void testAudio() {
+    static audio::Mixer m;
+    m.init(48000, 0);
+    m.setEnabled(true, false);
+    static float buf[2 * 1024];
+    for (int k = 0; k < 200; ++k) m.play(k % audio::kSndCount, 0.5f, 0);
+    m.mix(buf, 512);
+    GT_CHECK(m.voicesInUse() <= audio::Mixer::kVoices && m.dropped() == 0);
+    for (int k = 0; k < 600; ++k) m.play(audio::kSndTick, 0.5f, 0);  // more than the ring holds before a mix
+    GT_CHECK(m.dropped() == 600 - 512);  // the ring holds 512
+    m.mix(buf, 512);
+    GT_CHECK(m.voicesInUse() <= audio::Mixer::kVoices);
+
+    // SOUND off: no command from the feedback reaches the mixer.
+    static audio::Mixer m2;
+    m2.init(48000, 0);
+    static sim::World w;
+    w.init(sim::levelFor(3), 1);
+    Feedback fb;
+    fb.init(&m2);
+    fb.setEnabled(false, false);
+    const int before = m2.pushed();
+    const u8 types[] = {sim::kEvFire, sim::kEvGateMul, sim::kEvClashCount, sim::kEvSpireHit, sim::kEvCoreHit, sim::kEvWin};
+    for (int k = 0; k < 60; ++k) {
+        w.eventCount = 0;
+        for (u8 t : types) w.events[w.eventCount++] = {t, 0, 10, 0, 3};
+        fb.onTick(w, float(k) / 60.0f);
+    }
+    fb.uiTap();
+    fb.star(1);
+    GT_CHECK(m2.pushed() == before);
+    fb.setEnabled(true, false);
+    fb.onTick(w, 2.0f);
+    GT_CHECK(m2.pushed() > before);
+
+    // MUSIC off: silent within a second, no sample-to-sample jump on the way down.
+    static audio::Mixer m3;
+    m3.init(48000, 0);
+    m3.setEnabled(false, true);
+    m3.setIntensity(1.0f);
+    float peak = 0, prevL = 0, jump = 0;
+    for (int k = 0; k < 96; ++k) m3.mix(buf, 1000);  // 2 s of music
+    for (int k = 0; k < 1024 * 2; ++k) peak = peak > std::fabs(buf[k]) ? peak : std::fabs(buf[k]);
+    GT_CHECK(peak > 0.01f);
+    prevL = buf[2 * 999];
+    m3.setEnabled(false, false);
+    for (int k = 0; k < 48; ++k) {  // the next second
+        m3.mix(buf, 1000);
+        for (int i = 0; i < 1000; ++i) {
+            jump = jump > std::fabs(buf[i * 2] - prevL) ? jump : std::fabs(buf[i * 2] - prevL);
+            prevL = buf[i * 2];
+        }
+    }
+    float after = 0;
+    m3.mix(buf, 1000);
+    for (int i = 0; i < 2000; ++i) after = after > std::fabs(buf[i]) ? after : std::fabs(buf[i]);
+    GT_CHECK(after < 1e-4f);
+    GT_CHECK(jump < 0.2f);
+}
+
 int main(int argc, char** argv) {
     const char* dir = argc > 1 ? argv[1] : ".";
     testRng();
@@ -135,6 +199,7 @@ int main(int argc, char** argv) {
     testArgs();
     testPng(dir);
     testSave(dir);
+    testAudio();
     gt::test::runSimTests();
     std::printf("tests: %d checks, %d failed\n", gt::test::g_checks, gt::test::g_failures);
     return gt::test::g_failures ? 1 : 0;

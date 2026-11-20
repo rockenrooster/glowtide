@@ -121,12 +121,12 @@ void Feedback::onTick(const sim::World& w, float t) {
                 play(kSndShatterBig, 1.0f, 0);
                 if (w.def.boss) play(kSndShatterBig, 0.9f, 0, 0.94f, 0.12f);
                 play(kSndWinChord, 0.9f, 0, 1.0f, 0.35f);
-                if (mixer_) mixer_->duck(1.5f);
+                if (mixer_ && sound_) mixer_->duck(1.5f);  // nothing to duck under with SOUND off
                 haptic(kHapticWin, t);
                 break;
             case sim::kEvLose:
                 play(kSndLose, 0.9f, 0);
-                if (mixer_) mixer_->duck(1.5f);
+                if (mixer_ && sound_) mixer_->duck(1.5f);  // nothing to duck under with SOUND off
                 haptic(kHapticLose, t);
                 break;
             default:

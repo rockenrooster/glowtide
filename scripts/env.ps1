@@ -222,16 +222,21 @@ function Stop-GtApp {
 }
 
 # Starts the activity fresh and returns its PID. Refuses when another app is in front.
-function Start-GtApp {
-    param([Parameter(Mandatory)][string]$Serial, [string]$AppArgs = '')
-    if (-not (Test-GtDeviceFree $Serial)) {
-        throw "$Serial is in use by another app ($(Get-GtForegroundPackage $Serial)); not launching over it"
-    }
+# Screen on and keyguard (without a PIN) out of the way, so a launch is shown (and `am start -W` returns).
+function Invoke-GtWake {
+    param([Parameter(Mandatory)][string]$Serial)
     & $GT_ADB -s $Serial shell input keyevent KEYCODE_WAKEUP | Out-Null
     if ((& $GT_ADB -s $Serial shell 'dumpsys window') | Select-String 'isKeyguardShowing=true' -Quiet) {
         & $GT_ADB -s $Serial shell wm dismiss-keyguard | Out-Null
         Start-Sleep -Milliseconds 800
     }
+}
+function Start-GtApp {
+    param([Parameter(Mandatory)][string]$Serial, [string]$AppArgs = '')
+    if (-not (Test-GtDeviceFree $Serial)) {
+        throw "$Serial is in use by another app ($(Get-GtForegroundPackage $Serial)); not launching over it"
+    }
+    Invoke-GtWake $Serial
     Stop-GtApp $Serial
     $cmd = "am start -W -n $GT_ACTIVITY"
     if ($AppArgs) { $cmd += " --es args '$AppArgs'" }

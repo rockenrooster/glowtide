@@ -262,6 +262,10 @@ Acceptance accept(const LevelDef& def) {
         std::snprintf(a.why, sizeof a.why, "greedy's median time %.1f s outside %.1f-%.1f", double(a.medTime), double(0.7f * T), double(1.3f * T));
     else if (def.index >= 8 && a.naiveLosses < 2 && a.naiveTime < 1.6f * a.medTime)
         std::snprintf(a.why, sizeof a.why, "naive won in %.1f s (greedy %.1f s)", double(a.naiveTime), double(a.medTime));
+    else if (def.index >= 21 && a.naiveLosses < 2)
+        std::snprintf(a.why, sizeof a.why, "naive won from level 21 on (%.1f s)", double(a.naiveTime));
+    else if (def.index > 5 && std::fabs(a.medShare - def.fight) > 0.05f)
+        std::snprintf(a.why, sizeof a.why, "cancelled %.0f%% against a fight of %.0f%%", double(a.medShare * 100), double(def.fight * 100));
     else if (!a.idleLoses) std::snprintf(a.why, sizeof a.why, "idle did not lose");
     else a.ok = true;
     return a;
@@ -315,8 +319,16 @@ BakeOut bakeOne(int index) {
         }
         // Step 4: the spire.
         def.spireHealth = twoSignificant(0.85f * delivered);
-        // Step 5: acceptance.
-        const Acceptance acc = accept(def);
+        // Step 5: acceptance. The bisection's runs keep the spire whole for T; the real runs end at the win, which
+        // cancels a few points more: up to two corrections of the scale toward fight before the next seed.
+        Acceptance acc = accept(def);
+        for (int fix = 0; fix < 2 && !hand && std::fabs(acc.medShare - def.fight) > 0.04f && acc.medShare > 0.01f; ++fix) {
+            scale *= def.fight / acc.medShare;
+            def.baseFlow = def.fight * p0 * scale;
+            const RunResult r = runLevel(def, BotKind::Greedy, 2, er);
+            def.spireHealth = twoSignificant(0.85f * float(r.delivered));
+            acc = accept(def);
+        }
         b.seed = seed;
         b.spire = def.spireHealth;
         b.baseFlow = def.baseFlow;

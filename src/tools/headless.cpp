@@ -19,6 +19,7 @@ namespace {
 struct Opt {
     const char* cmd = nullptr;
     int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, part = 0, parts = 1;
+    bool levelSet = false;
     float seconds = 0;
     char bots[64] = "greedy";
     const char* out = nullptr;
@@ -44,7 +45,7 @@ bool parse(int argc, char** argv, Opt& o) {
         else if (!std::strcmp(k, "--render-audio")) {
             o.cmd = "audio";
             o.scene = take();
-        } else if (!std::strcmp(k, "--level")) o.level = o.from = o.to = std::atoi(take());
+        } else if (!std::strcmp(k, "--level")) o.level = o.from = o.to = std::atoi(take()), o.levelSet = true;
         else if (!std::strcmp(k, "--from")) o.from = std::atoi(take());
         else if (!std::strcmp(k, "--to")) o.to = std::atoi(take());
         else if (!std::strcmp(k, "--seeds")) o.seeds = std::atoi(take());
@@ -193,7 +194,7 @@ int main(int argc, char** argv) {
     if (!std::strcmp(o.cmd, "accept")) return acceptIntro(o.from, o.to);
     if (!std::strcmp(o.cmd, "flux")) return fluxFindings();
     if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.part, o.parts, o.out, o.report);
-    if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds);
+    if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25);
     std::fprintf(stderr, "unknown command %s\n", o.cmd);
     return 2;
 }

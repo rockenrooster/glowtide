@@ -20,6 +20,7 @@ struct AudioStats {
     float fillMs[3] = {};  // p50, p99, max
     float gapMs[3] = {};   // p50, p99, max
     float peakBeforeMute = 0;
+    long long nonZeroHanded = 0;  // --silent: samples handed to the device that were not zero (must stay 0)
 };
 
 class AudioOut {
@@ -45,6 +46,7 @@ private:
     // Written by the audio thread only; read approximately by the main thread when a benchmark ends.
     u32 fillHist_[kBins] = {}, gapHist_[kBins] = {};
     float maxFill_ = 0, maxGap_ = 0, peakBeforeMute_ = 0;
+    long long nonZeroHanded_ = 0;
     int late_ = 0, calls_ = 0;
     float buf_[2 * 4096];
 };
