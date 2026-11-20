@@ -4,13 +4,17 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "core/log.h"
 
 #if defined(__ANDROID__)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <fcntl.h>
 #include <jni.h>
+#include <sched.h>
+#include <unistd.h>
 #endif
 
 namespace gt::platform {
@@ -45,6 +49,58 @@ void enableTimestamps() {
 }  // namespace
 
 bool isAndroid() { return true; }
+
+namespace {
+u64 readNumber(const char* path) {
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    char buf[32];
+    const ssize_t n = read(fd, buf, sizeof buf - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    u64 v = 0;
+    for (const char* c = buf; *c >= '0' && *c <= '9'; ++c) v = v * 10 + u64(*c - '0');
+    return v;
+}
+}  // namespace
+
+int pinToFastCores(char* desc, size_t cap) {
+    if (cap) desc[0] = 0;
+    constexpr int kMax = 32;
+    const long configured = sysconf(_SC_NPROCESSORS_CONF);
+    const int n = configured <= 0 ? 0 : (configured < kMax ? int(configured) : kMax);
+    u64 score[kMax] = {};
+    for (const char* source : {"cpu_capacity", "cpufreq/cpuinfo_max_freq"}) {
+        bool complete = n > 0;
+        for (int c = 0; c < n; ++c) {
+            char path[96];
+            std::snprintf(path, sizeof path, "/sys/devices/system/cpu/cpu%d/%s", c, source);
+            score[c] = readNumber(path);
+            complete = complete && score[c] != 0;
+        }
+        if (complete) break;
+    }
+    u64 lo = ~0ull, hi = 0;
+    for (int c = 0; c < n; ++c) {
+        if (!score[c]) continue;
+        lo = score[c] < lo ? score[c] : lo;
+        hi = score[c] > hi ? score[c] : hi;
+    }
+    if (hi == 0 || lo == hi) return 0;
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    int count = 0;
+    size_t used = 0;
+    for (int c = 0; c < n; ++c) {
+        if (score[c] <= lo) continue;
+        CPU_SET(c, &set);
+        ++count;
+        if (used + 4 < cap) used += size_t(std::snprintf(desc + used, cap - used, "%s%d", used ? "," : "", c));
+    }
+    if (sched_setaffinity(0, sizeof set, &set) != 0) return 0;
+    return count;
+}
 
 void init(SDL_Window*) {
     JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
@@ -157,6 +213,10 @@ int presentCollect(double* out, int max) {
 #else  // desktop
 
 bool isAndroid() { return false; }
+int pinToFastCores(char* desc, size_t cap) {
+    if (cap) desc[0] = 0;
+    return 0;
+}
 void init(SDL_Window*) {}
 void haptic(int) {}
 float refreshRateHz(SDL_Window* window) {

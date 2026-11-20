@@ -1,21 +1,69 @@
 #pragma once
-// The mixer (TECH_SPEC 6): voices of synthesized sounds, the music bed, a soft limiter. Pure code: no SDL.
-// P0: a test tone only; P4 fills it in.
+// The mixer (TECH_SPEC 6): up to 32 voices of baked sounds, the music bed, a soft limiter at -1 dBFS. Pure code: no
+// SDL. The game thread sends commands through a lock-free single-producer single-consumer ring; the audio thread
+// mixes. The callback never locks, allocates or logs.
 
-#include "core/types.h"
+#include <atomic>
+
+#include "audio/synth.h"
 
 namespace gt::audio {
 
+struct Command {
+    u8 type = 0;   // 0 play, 1 duck, 2 settings
+    u8 sound = 0;
+    float gain = 1, pan = 0, pitch = 1, delay = 0;  // delay in seconds
+    float a = 0, b = 0;
+};
+
 class Mixer {
 public:
-    void init(int sampleRate);
-    void setTone(bool on) { tone_ = on; }
+    static constexpr int kVoices = 32;
+    void init(int sampleRate, int timbre);
+    // Game thread.
+    bool push(const Command& c);  // false if the ring is full (the command is dropped and counted)
+    void play(int sound, float gain, float pan, float pitch = 1.0f, float delay = 0.0f);
+    void duck(float seconds);
+    void setEnabled(bool effects, bool music);
+    void setIntensity(float x) { intensity_.store(x); }
+    void setTone(bool on) { tone_.store(on); }
+    int dropped() const { return dropped_.load(); }
+    int voicesInUse() const { return voicesInUse_.load(); }
+    // Audio thread.
     void mix(float* stereo, int frames);
+    const Bank& bank() const { return bank_; }
 
 private:
+    struct Voice {
+        int sound = -1;
+        float pos = 0, step = 1;
+        float gl = 0, gr = 0;
+        int delay = 0;
+        u32 age = 0;
+    };
+    void start(const Command& c);
+    void musicStep(int frames);
+
+    Bank bank_;
     int rate_ = 48000;
-    bool tone_ = false;
-    double phase_ = 0;
+    Voice voices_[kVoices];
+    static constexpr int kRing = 512;
+    Command ring_[kRing];
+    std::atomic<u32> head_{0}, tail_{0};
+    std::atomic<int> dropped_{0}, voicesInUse_{0};
+    std::atomic<float> intensity_{0};
+    std::atomic<bool> tone_{false};
+    bool effectsOn_ = true, musicOn_ = true;
+    float musicGain_ = 0.35f;  // 9 dB under the effects
+    float duck_ = 1, duckTarget_ = 1, duckHold_ = 0;
+    double padPos_ = 0;
+    double musicClock_ = 0;  // seconds
+    int nextStep_ = 0;
+    u32 pluckRng_ = 0x9E3779B9u;
+    float limGain_ = 1;
+    u32 voiceAge_ = 0;
+    double tonePhase_ = 0;
+    float intensityNow_ = 0;
 };
 
 }  // namespace gt::audio

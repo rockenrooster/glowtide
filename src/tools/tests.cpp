@@ -9,6 +9,7 @@
 #include "core/png.h"
 #include "core/rng.h"
 #include "core/tuning.h"
+#include "game/save.h"
 #include "tests_sim.h"
 
 namespace gt::test {
@@ -78,12 +79,62 @@ static void testPng(const char* dir) {
     GT_CHECK(writePng(path, px, 3, 2, false));
 }
 
+// The save: a round trip keeps everything; a missing, damaged or binary file gives defaults and never crashes.
+static void testSave(const char* dir) {
+    char path[512];
+    std::snprintf(path, sizeof path, "%s/test_save.txt", dir);
+    SaveData s;
+    s.level = 37;
+    s.stars[0] = 3;
+    s.stars[35] = 2;
+    s.music = false;
+    s.autoFire = true;
+    s.hints = 0x15;
+    GT_CHECK(writeSave(path, s));
+    GT_CHECK(writeSave(path, s));  // over an existing file
+    SaveData r;
+    GT_CHECK(loadSave(path, r));
+    GT_CHECK(r.level == 37 && r.stars[0] == 3 && r.stars[35] == 2 && r.stars[1] == 0 && r.totalStars() == 5);
+    GT_CHECK(!r.music && r.sound && r.autoFire && r.hints == 0x15u);
+
+    auto writeRaw = [&](const void* data, size_t n) {
+        FILE* f = std::fopen(path, "wb");
+        if (f) {
+            std::fwrite(data, 1, n, f);
+            std::fclose(f);
+        }
+    };
+    const char* damaged[] = {"version=1\nlevel=abc\n", "level=12\nstars=39x\n", "level=0\n", "sound=yes\n",
+                             "level=99999999999999999999\n"};
+    for (const char* d : damaged) {
+        writeRaw(d, std::strlen(d));
+        SaveData x;
+        x.level = 5;
+        GT_CHECK(!loadSave(path, x));
+        GT_CHECK(x.level == 1 && x.totalStars() == 0 && x.sound);
+    }
+    unsigned char junk[3000];
+    u32 h = 2166136261u;
+    for (unsigned char& c : junk) {
+        h = (h ^ 0x5Bu) * 16777619u;
+        c = (unsigned char)(h >> 13);
+    }
+    writeRaw(junk, sizeof junk);
+    SaveData y;
+    loadSave(path, y);  // any result, as long as it is sane
+    GT_CHECK(y.level >= 1 && y.level <= 100000);
+    std::remove(path);
+    SaveData z;
+    GT_CHECK(!loadSave(path, z) && z.level == 1);
+}
+
 int main(int argc, char** argv) {
     const char* dir = argc > 1 ? argv[1] : ".";
     testRng();
     testPercentile();
     testArgs();
     testPng(dir);
+    testSave(dir);
     gt::test::runSimTests();
     std::printf("tests: %d checks, %d failed\n", gt::test::g_checks, gt::test::g_failures);
     return gt::test::g_failures ? 1 : 0;

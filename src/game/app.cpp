@@ -50,6 +50,8 @@ int App::run(int argc, char** argv) {
     }
     platform::init(window_);
     platform::presentInit(window_);
+    char cpus[64];
+    if (platform::pinToFastCores(cpus, sizeof cpus)) GT_LOG("cpu: main thread pinned to the fast cores %s", cpus);
     refreshHz_ = platform::refreshRateHz(window_);
     readFrameGeometry();
     GT_LOG("frame %dx%d px, dp scale %.3f, safe top %.0f bottom %.0f px, refresh %.1f Hz", frameW_, frameH_, dpScale_,
@@ -60,6 +62,11 @@ int App::run(int argc, char** argv) {
         GT_ERR("start-up failed");
         SDL_Quit();
         return 1;
+    }
+    if (!args_.noAudio) {
+        audio_.open(
+            args_.silent, [](void* user, float* stereo, int frames) { static_cast<App*>(user)->game_.mixer().mix(stereo, frames); },
+            this);
     }
     SDL_AddEventWatch(&App::eventWatch, this);
 
@@ -158,6 +165,7 @@ int App::run(int argc, char** argv) {
         bf.cpu = float(threadCpuSeconds() - c0);
         double presents[64];
         const int np = platform::presentCollect(presents, 64);
+        if (frameIndex_ == 1) GT_TAG("GTLIFE", "first frame swapped %.0f ms after main", (t6 - startTime_) * 1000.0);
         if (firstFrameAfterResume_) {
             GT_TAG("GTLIFE", "first frame after resume (frame %d)", frameIndex_);
             firstFrameAfterResume_ = false;
@@ -166,6 +174,7 @@ int App::run(int argc, char** argv) {
         if (benchScenario) {
             if (!benchStarted_ && now - startTime_ >= double(args_.warmup)) {
                 bench_.begin(args_.scenario, args_.seconds, now);
+                audio_.resetStats();
                 benchStarted_ = true;
                 GT_LOG("bench: measuring %s for %.0f s", args_.scenario, double(args_.seconds));
             }
@@ -190,6 +199,12 @@ int App::run(int argc, char** argv) {
     }
 
     SDL_RemoveEventWatch(&App::eventWatch, this);
+    audio_.close();
+    GT_LOG("haptics: %d sent, at most %d in one second", game_.hapticsSent(), game_.hapticPeakPerSecond());
+    if (exitCode_ == 0 && game_.lintRan() && game_.lintProblems() > 0) {
+        GT_ERR("layout lint: %d problems", game_.lintProblems());
+        exitCode_ = 7;
+    }
     if (exitCode_ == 0 && glDebugMessageCount() > 0) {
         GT_ERR("%d GL errors or debug messages were reported", glDebugMessageCount());
         exitCode_ = 3;
@@ -339,6 +354,7 @@ bool SDLCALL App::eventWatch(void* user, SDL_Event* e) {
             GT_TAG("GTLIFE", "will enter background");
             self->background_ = true;
             self->game_.background();
+            self->audio_.pause(true);
             if (self->bench_.active()) {
                 self->bench_.focusLost();
                 GT_WARN("bench: the app went to the background; the run is invalid");
@@ -355,6 +371,7 @@ bool SDLCALL App::eventWatch(void* user, SDL_Event* e) {
             self->background_ = false;
             self->firstFrameAfterResume_ = true;
             self->game_.foreground();
+            self->audio_.pause(false);
             break;
         default:
             break;
@@ -473,8 +490,16 @@ bool App::captureFrame() {
 }
 
 void App::finishBench() {
-    char extra[256];
-    std::snprintf(extra, sizeof extra, ",\"frame\":\"%dx%d\",\"dp_scale\":%.3f", frameW_, frameH_, dpScale_);
+    char extra[512];
+    const AudioStats a = audio_.stats();
+    std::snprintf(extra, sizeof extra,
+                  ",\"frame\":\"%dx%d\",\"dp_scale\":%.3f,\"audio\":{\"open\":%s,\"silent\":%s,\"callbacks\":%d,"
+                  "\"period_ms\":%.2f,\"fill_ms\":[%.3f,%.3f,%.3f],\"gap_ms\":[%.2f,%.2f,%.2f],\"late\":%d},"
+                  "\"haptics\":{\"sent\":%d,\"peak_per_s\":%d}",
+                  frameW_, frameH_, dpScale_, audio_.isOpen() ? "true" : "false", args_.silent ? "true" : "false",
+                  a.callbacks, double(a.periodMs), double(a.fillMs[0]), double(a.fillMs[1]), double(a.fillMs[2]),
+                  double(a.gapMs[0]), double(a.gapMs[1]), double(a.gapMs[2]), a.late, game_.hapticsSent(),
+                  game_.hapticPeakPerSecond());
     bench_.finish(device_, glRenderer_, glVersion_, refreshHz_, extra);
     if (!bench_.valid()) exitCode_ = 4;
 }

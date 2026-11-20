@@ -222,23 +222,29 @@ The simulation's clock starts at its first tick. The game does not tick a level 
 first touch (section 4), so for a player the clock starts when they do. Emitters start 1.5 s after the
 clock. A player who then never fires loses within about twenty seconds.
 
-**What this contest is like.** `concept/flux_model.py` is a toy model of these rules (a three-row ×30
-level, `T` = 30 s), run while planning. Its findings, which P2 must confirm with the real simulation:
+**What this contest is like.** `concept/flux_model.py` (a toy model) predicted four findings while
+planning; P2 tested them with the real simulation (`glowtide_headless --sim flux`, level 5's layout and a
+three-row ×30 layout with `T` = 30 s; the table is in `PROGRESS.md`). What holds:
 
-1. With `rateScale` near 1 the enemy cancels about what `fight` asks: 14%, 19% and 32% of the player's
-   output for a `fight` of 13%, 18% and 30%. The front line stays within four metres of the spire's
-   foot and no gloom reaches the lantern, bursts included. A full-strength player finishes at about
-   0.9 `T`.
-2. It is a contest with a sharp edge. Against an enemy flow held at 0.9 times the flood's own size the
-   player still wins, slowly. At 1.2 times the level stalls. At 1.5 times the enemy's line passes the
-   gates, the flood stops being multiplied, and everything comes down at once: losing is a collapse,
-   not a trickle.
-3. So `fight` sets how much of a competent player's output a player needs. With `fight` at 13% or 18%
-   a player who makes only half the flood still wins, at about 1.8 `T` and 2.0 `T`. At 30% that player
-   loses, and slowly (about 3 `T`), while a player who makes two thirds of the flood wins at 1.5 `T`.
-4. A player who wins is not hit: the core is what a collapse destroys, not a bar that wears down. The
-   skill shows in the time (and so in the stars, 5.11); tension comes from bursts, brutes, the clock,
-   and the line creeping down while the stream is wasted.
+1. With the bake's rate scale the enemy cancels about what `fight` asks, a few points over: 14–16%,
+   20–21% and 29–35% of the player's output for a `fight` of 13%, 18% and 30%. No gloom reaches the
+   lantern, bursts included, and a full-strength player finishes at 0.85–0.91 `T`. The front is not a
+   line at the spire's foot, though: single glooms drift down the sides of the lane, the deepest
+   10–12 m below the spire on level 5 and 18–23 m on the ×30 layout, still above the first gate row.
+2. It is a contest with a sharper edge than the model said. On level 5 an enemy flow held at 0.9 times
+   the flood's own size still loses, slowly (3 `T`); at 1.2 times the player collapses within 0.75 `T`.
+   On the ×30 layout the collapse comes already at 0.9 times: the glooms that reach the low stream
+   cancel wisps before they are multiplied, so the root of the stream is what the enemy wins. There is
+   no stalled middle: past the edge, losing is a collapse, not a trickle.
+3. `fight` sets how much of a competent player's output a player needs, and the pressure ramp (5.9)
+   decides the slow cases. On the ×30 layout a player who makes only half the flood still wins at a
+   `fight` of 13% or 18% (1.85 `T`, 2.5 `T`) and collapses at 30% (1.1 `T`). On level 5 the half player
+   loses at every `fight` (2.3–3.6 `T`: past 1.5 `T` the ramp finishes them). A player who makes two
+   thirds of the flood wins everywhere, at 1.4–2.0 `T`.
+4. A player who wins is not hit: every win in the table ends with the core at 10, every loss at 0. The
+   core is what a collapse destroys, not a bar that wears down. The skill shows in the time (and so in
+   the stars, 5.11); tension comes from bursts, brutes, the clock, and the glooms slipping down the
+   sides while the stream is wasted.
 
 If the owner wants more threat than that after playing, or finds a slow loss dull, 5.12 lists the
 levers and the ramp is one number.
@@ -493,7 +499,7 @@ World colours (backdrop from far to near, lane far and near, rail accent, prop b
 | 1 Violet Dusk | `#8458AC` `#403080` `#18184C` `#0A0A26` | `#3C4488` / `#1E2254` | `#60F4E8` | `#2E3C72` / `#5C70B2` / `#1A2048` |
 | 2 Deep Teal | `#2E8C9A` `#14506E` `#0A2844` `#04101E` | `#1C5066` / `#0E2C42` | `#7CE0FF` | `#1E4A66` / `#4E90AC` / `#102A40` |
 | 3 Rose Dawn | `#E89C8C` `#B0608E` `#5A3278` `#1E1440` | `#5E4078` / `#2C1C48` | `#FFD9A0` | `#5A3A78` / `#A070B0` / `#2E1E4A` |
-| 4 Emerald Aurora | `#5AD2A0` `#1E7882` `#102E5A` `#080E28` | `#1E5460` / `#122848` | `#B4FF9C` | `#1E5068` / `#4A9A9C` / `#102C44` |
+| 4 Emerald Aurora | `#48B48A` `#1E7882` `#102E5A` `#080E28` | `#1E5460` / `#122848` | `#B4FF9C` | `#1E5068` / `#4A9A9C` / `#102C44` |
 | 5 Ember | `#F08A50` `#B43C5A` `#46184E` `#140A26` | `#6E3458` / `#2A1840` | `#FFC878` | `#5A2A58` / `#A85A7C` / `#2C1638` |
 
 Worlds 2 to 5 are the planner's untested guesses; P1 renders 1 to 3 for the owner and P5 the rest.
@@ -559,7 +565,8 @@ Always on: the camera follows 12% of the launcher's `x` on a spring; each unit h
 the spire's heart pulses once a second; lane lanterns flicker; gate panels shimmer.
 
 UI motion: a screen eases in over 220 ms (scale 0.92 → 1, fade). A pressed button shrinks to 0.94 and
-inverts (white fill, ink text); it springs back in 120 ms. Between levels the picture fades out and in
+inverts: an ink button turns white with ink text, the gold primary turns deep amber (#8A4E0C) with white
+text (white on gold would be only 1.6:1); it springs back in 120 ms. Between levels the picture fades out and in
 through its colour grade, 150 ms each way.
 
 ---

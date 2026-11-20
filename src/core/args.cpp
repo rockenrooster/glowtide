@@ -47,7 +47,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
         float fv = 0;
         if (!std::strcmp(k, "--scenario")) {
             if (!need() || !copyStr(a.scenario, sizeof a.scenario, v)) return false;
-            const char* ok[] = {"play", "touch_test", "bench_idle", "bench_flood", "bench_play"};
+            const char* ok[] = {"play", "touch_test", "bench_idle", "bench_flood", "bench_play", "sim_hash"};
             bool known = false;
             for (const char* s : ok) known = known || !std::strcmp(s, a.scenario);
             if (!known) {

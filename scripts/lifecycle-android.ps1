@@ -28,7 +28,8 @@ try {
     $fronts = @($log | Select-String 'first frame after resume').Count
     $lost = @($log | Select-String 'context was lost').Count
     $errors = @($log | Select-String ' E GLOWTIDE').Count
-    Write-Host "[lifecycle] $Cycles cycles: $fronts first frames after resume, $lost context rebuilds, $errors errors"
+    $paused = @($log | Select-String 'resumed on PAUSE').Count
+    Write-Host "[lifecycle] $Cycles cycles: $fronts first frames after resume, $paused resumed on PAUSE, $lost context rebuilds, $errors errors"
     Stop-GtApp $Serial
     if ($fronts -lt $Cycles -or $errors -gt 0) { exit 1 }
 } finally {

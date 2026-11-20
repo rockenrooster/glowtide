@@ -4,11 +4,15 @@
 
 #include <cstddef>
 
+#include "core/types.h"
+
 struct SDL_Window;
 
 namespace gt::platform {
 
 bool isAndroid();
+// Pins the calling thread to the CPUs with the highest capacity (Android big cores); returns how many (0: none).
+int pinToFastCores(char* desc, size_t cap);
 void init(SDL_Window* window);
 
 // Haptic kinds (GAME_DESIGN 13): 0 light tick, 1 medium, 2 strong, 3 win pattern, 4 lose buzz, 5 double tick.

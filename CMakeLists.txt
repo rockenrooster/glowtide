@@ -15,6 +15,10 @@ endif()
 
 # Sanitizer build of the tests and the headless tool (P6): no counted operator new, dynamic link.
 option(GT_SANITIZE "AddressSanitizer + UBSan build of the tests and the headless tool" OFF)
+# Development builds (Debug, RelWithDebInfo) keep the dev-only tools such as the level stepper; Release drops them.
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+  add_compile_definitions(GT_DEV=1)
+endif()
 set(GT_STATIC_LINK -static)
 if(GT_SANITIZE)
   add_compile_definitions(GT_SANITIZE=1)
@@ -137,12 +141,13 @@ else()
   target_link_options(glowtide PRIVATE ${GT_STATIC_LINK})
   add_dependencies(glowtide gt_shaders)
 
-  add_executable(glowtide_headless ${GT_ROOT}/src/tools/headless.cpp)
+  add_executable(glowtide_headless ${GT_ROOT}/src/tools/headless.cpp ${GT_ROOT}/src/tools/audio_render.cpp)
   target_link_libraries(glowtide_headless PRIVATE gt_sim gt_audio gt_core)
   target_compile_options(glowtide_headless PRIVATE ${GT_WARN})
   target_link_options(glowtide_headless PRIVATE ${GT_STATIC_LINK})
 
-  add_executable(glowtide_tests ${GT_ROOT}/src/tools/tests.cpp ${GT_ROOT}/src/tools/tests_sim.cpp)
+  add_executable(glowtide_tests ${GT_ROOT}/src/tools/tests.cpp ${GT_ROOT}/src/tools/tests_sim.cpp ${GT_ROOT}/src/gfx/palette.cpp
+    ${GT_ROOT}/src/gfx/camera.cpp ${GT_ROOT}/src/gfx/text.cpp ${GT_ROOT}/src/game/save.cpp)
   target_link_libraries(glowtide_tests PRIVATE gt_sim gt_audio gt_core)
   target_compile_options(glowtide_tests PRIVATE ${GT_WARN})
   target_link_options(glowtide_tests PRIVATE ${GT_STATIC_LINK})

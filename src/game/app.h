@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 
 #include "core/args.h"
+#include "game/audio_out.h"
 #include "game/bench.h"
 #include "game/game.h"
 #include "gfx/target.h"
@@ -38,6 +39,7 @@ private:
 
     Game game_;
     Bench bench_;
+    AudioOut audio_;
     bool running_ = true;
     int exitCode_ = 0;
     bool background_ = false, firstFrameAfterResume_ = false;

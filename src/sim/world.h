@@ -99,6 +99,7 @@ public:
 
     // Totals (the bake and the result screen).
     i64 produced = 0, cancelled = 0, delivered = 0;
+    i64 gloomSpawned = 0;  // power of every gloom made (bookkeeping for checks; not in the hash)
     i64 tide = 0, peakTide = 0;
     int peakWisps = 0, peakGlooms = 0;
     float lowestGloomZ = 1e9f;
@@ -135,6 +136,9 @@ private:
     float* pushX_ = nullptr;
     float* pushZ_ = nullptr;
     int* cursor_ = nullptr;
+    float* sx_ = nullptr;  // cell-ordered scratch for the separation
+    float* sz_ = nullptr;
+    float* sr_ = nullptr;
     bool allocated_ = false;
 };
 

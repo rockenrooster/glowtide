@@ -86,6 +86,9 @@ World::~World() {
     delete[] pushX_;
     delete[] pushZ_;
     delete[] cursor_;
+    delete[] sx_;
+    delete[] sz_;
+    delete[] sr_;
 }
 
 float World::radius(int team, int i) const {
@@ -107,6 +110,9 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
         pushX_ = new float[kMaxWisps];
         pushZ_ = new float[kMaxWisps];
         cursor_ = new int[cells];
+        sx_ = new float[kMaxWisps];
+        sz_ = new float[kMaxWisps];
+        sr_ = new float[kMaxWisps];
         allocated_ = true;
     }
     def = d;
@@ -132,6 +138,7 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
     result = Result::None;
     endTick = -1;
     produced = cancelled = delivered = 0;
+    gloomSpawned = 0;
     tide = peakTide = 0;
     peakWisps = peakGlooms = 0;
     lowestGloomZ = 1e9f;
@@ -196,6 +203,7 @@ void World::emitGloom(float x, i32 power, bool brute) {
     g.flags[i] = brute ? kBrute : 0;
     g.seed[i] = u8(rng_.next());
     g.clashed[i] = 0;
+    gloomSpawned += power;
 }
 
 int World::cellOf(float x, float z) const {
@@ -214,51 +222,74 @@ void World::buildGrid(const Units& u, int* start, int* order) {
 }
 
 void World::separate(Units& u, const int* start, const int* order, int team) {
+    // Pairs within 0.96 of their radii push apart (GAME_DESIGN 5.5). Positions are copied in cell order so the inner
+    // loops read contiguous memory, and each pair is visited once (the cell itself, then E, NW, N and NE).
     const float k = tune.sepRadius;
     const float maxPush = tune.sepSpeed * kTick;
-    for (int i = 0; i < u.n; ++i) pushX_[i] = pushZ_[i] = 0;
-    for (int i = 0; i < u.n; ++i) {
-        const float ri = radius(team, i);
-        const float xi = u.x[i], zi = u.z[i];
-        const int c = cellOf(xi, zi);
-        const int cx = c % kGridW, cz = c / kGridW;
-        const int range = ri > 0.4f ? 2 : 1;
-        float px = 0, pz = 0;
-        for (int zz = maxv(0, cz - range); zz <= minv(gridH_ - 1, cz + range); ++zz) {
-            for (int xx = maxv(0, cx - range); xx <= minv(kGridW - 1, cx + range); ++xx) {
-                const int cell = zz * kGridW + xx;
-                for (int s = start[cell]; s < start[cell + 1]; ++s) {
-                    const int j = order[s];
-                    if (j == i) continue;
-                    const float dx = xi - u.x[j], dz = zi - u.z[j];
-                    const float minD = (ri + radius(team, j)) * k;
+    const int n = u.n;
+    for (int s = 0; s < n; ++s) {
+        const int i = order[s];
+        sx_[s] = u.x[i];
+        sz_[s] = u.z[i];
+        sr_[s] = radius(team, i);
+        pushX_[s] = pushZ_[s] = 0;
+    }
+    const int W = kGridW;
+    for (int cz = 0; cz < gridH_; ++cz) {
+        for (int cx = 0; cx < W; ++cx) {
+            const int c = cz * W + cx;
+            const int a0 = start[c], a1 = start[c + 1];
+            if (a0 == a1) continue;
+            int rb[4], re[4], nr = 0;
+            if (cx + 1 < W) {
+                rb[nr] = start[c + 1];
+                re[nr++] = start[c + 2];
+            }
+            if (cz + 1 < gridH_) {
+                const int x0 = maxv(0, cx - 1), x1 = minv(W - 1, cx + 1);
+                rb[nr] = start[c + W + (x0 - cx)];  // the next row's cells x0..x1 are contiguous
+                re[nr++] = start[c + W + (x1 - cx) + 1];
+            }
+            for (int s = a0; s < a1; ++s) {
+                const float xi = sx_[s], zi = sz_[s], ri = sr_[s];
+                float px = 0, pz = 0;
+                auto pair = [&](int t) {
+                    const float dx = xi - sx_[t], dz = zi - sz_[t];
+                    const float minD = (ri + sr_[t]) * k;
                     const float d2 = dx * dx + dz * dz;
-                    if (d2 >= minD * minD) continue;
+                    if (d2 >= minD * minD) return;
                     if (d2 < 1e-8f) {
-                        px += (i < j ? 0.5f : -0.5f) * minD;
-                        continue;
+                        px += 0.25f * minD;
+                        pushX_[t] -= 0.25f * minD;
+                        return;
                     }
                     const float d = std::sqrt(d2);
                     const float o = (minD - d) * 0.5f / d;
                     px += dx * o;
                     pz += dz * o;
-                }
+                    pushX_[t] -= dx * o;
+                    pushZ_[t] -= dz * o;
+                };
+                for (int t = s + 1; t < a1; ++t) pair(t);
+                for (int r = 0; r < nr; ++r)
+                    for (int t = rb[r]; t < re[r]; ++t) pair(t);
+                pushX_[s] += px;
+                pushZ_[s] += pz;
             }
         }
-        pushX_[i] = px;
-        pushZ_[i] = pz;
     }
-    for (int i = 0; i < u.n; ++i) {
-        float px = pushX_[i], pz = pushZ_[i];
+    for (int s = 0; s < n; ++s) {
+        const int i = order[s];
+        float px = pushX_[s], pz = pushZ_[s];
         if (team == 0 && pz < 0) pz = 0;  // never backwards down its lane
         if (team == 1 && pz > 0) pz = 0;
         const float l2 = px * px + pz * pz;
         if (l2 > maxPush * maxPush) {
-            const float s = maxPush / std::sqrt(l2);
-            px *= s;
-            pz *= s;
+            const float sc = maxPush / std::sqrt(l2);
+            px *= sc;
+            pz *= sc;
         }
-        const float r = radius(team, i);
+        const float r = sr_[s];
         u.x[i] = clampv(u.x[i] + px, -kHW + r, kHW - r);
         u.z[i] += pz;
     }
@@ -385,8 +416,8 @@ void World::tick(const Input& in) {
 
     // 6-7. Grid and separation.
     buildGrid(w, wStart_, wOrder_);
-    separate(w, wStart_, wOrder_, 0);
     buildGrid(g, gStart_, gOrder_);
+    separate(w, wStart_, wOrder_, 0);
     separate(g, gStart_, gOrder_, 1);
 
     // 8. Bumpers: units slide round them (sideways only, so nothing is pushed back down its lane).

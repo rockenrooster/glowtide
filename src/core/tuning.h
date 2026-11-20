@@ -40,7 +40,7 @@
     X(frenzy, 0.0f)             /* GAME_DESIGN 5.12, off */                                                          \
     /* ---- art and feel ---- */                                                                                     \
     X(glowStrength, 1.0f)                                                                                            \
-    X(glowUnit, 0.42f)          /* alpha of a unit's disc in the glow buffer */                                      \
+    X(glowUnit, 0.34f)          /* alpha of a unit's disc in the glow buffer */                                      \
     X(glowUnitSize, 1.7f)       /* radii */                                                                          \
     X(lightUnit, 0.13f)         /* alpha of a unit's disc in the light map */                                        \
     X(lightRadius, 0.9f)        /* m, plus 0.3 per tier */                                                           \
@@ -52,6 +52,7 @@
     X(hopRate, 5.0f)                                                                                                 \
     X(labelMinFrac, 0.03f)      /* a label's minimum height, of the frame */                                         \
     X(particleBudget, 220.0f)   /* particles spawned at most per frame */                                            \
+    X(labels, 1.0f)             /* 0 hides world labels (measurements) */                                            \
     X(debugReadout, 0.0f)
 
 namespace gt {
