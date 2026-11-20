@@ -10,7 +10,7 @@ void main() {
     bool gloom = (flags & 1) != 0;
     float r = unitRadius(gloom, tier) * uParams2.w;
     vec2 xz = aPos - aStep * (1.0 / 4096.0) * (1.0 - uTime.y);
-    vec3 centre = vec3(xz.x, r * 0.55, xz.y);
+    vec3 centre = vec3(xz.x, r * 0.55 + (gloom ? 0.0 : muzzleLift(xz.y)), xz.y);
     vec2 c = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec3 wp = centre + uCamRight.xyz * (c.x * r) + uCamUp.xyz * (c.y * r);
     gl_Position = uViewProj * vec4(wp, 1.0);

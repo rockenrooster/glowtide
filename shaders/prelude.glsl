@@ -21,8 +21,17 @@ layout(std140) uniform Frame {
     highp vec4 uSpire;        // rgb crack glow, a heart pulse 0..1
     highp vec4 uParams;       // x glow strength, y unit glow alpha, z light-map alpha, w hop height
     highp vec4 uParams2;      // x hop rate, y light radius, z lane light add, w unit glow size (radii)
-    highp vec4 uSpireScreen;  // xy spire top on screen (0..1, y up), z glow radius, w unused
+    highp vec4 uSpireScreen;  // xy spire top on screen (0..1, y up), z glow radius, w the muzzle's z (sim::kMuzzleZ)
 };
+
+#ifndef GT_FRAG
+// A wisp leaves the lantern's lens (1.4 m up at the muzzle) and drops to the lane in an arc that lands 4.5 m on: its
+// height above its place on the lane, from its z. Flat at the lens, so the shot is seen to leave the barrel's tip.
+float muzzleLift(float z) {
+    float d = max(z - uSpireScreen.w, 0.0) / 4.5;
+    return d < 1.0 ? 1.13 * (1.0 - d * d) : 0.0;
+}
+#endif
 
 #ifdef GT_FRAG
 // Colour grade, applied by every scene shader: dawn, loss of colour, fade, vignette (TECH_SPEC 5.3).

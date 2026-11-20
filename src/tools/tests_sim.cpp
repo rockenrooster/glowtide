@@ -369,6 +369,8 @@ void testFont() {
 }  // namespace
 
 void runSimTests() {
+    GT_CHECK_MSG(bakedGeneratorVersion() == kGeneratorVersion && bakedRulesVersion() == kRulesVersion,
+                 "the level table was baked by this generator and these rules (bake again: CLAUDE.md)");
     testMultiply(4000);
     testMultiply(100);
     testDivide();

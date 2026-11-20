@@ -8,6 +8,7 @@
 #include "core/tuning.h"
 #include "sim/bake.h"
 #include "sim/bots.h"
+#include "sim/fingerprint.h"
 #include "sim/world.h"
 #include "tools/audio_render.h"
 
@@ -19,7 +20,7 @@ namespace {
 struct Opt {
     const char* cmd = nullptr;
     int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, part = 0, parts = 1;
-    bool levelSet = false;
+    bool levelSet = false, pairs = false;
     float seconds = 0;
     char bots[64] = "greedy";
     const char* out = nullptr;
@@ -55,6 +56,7 @@ bool parse(int argc, char** argv, Opt& o) {
         else if (!std::strcmp(k, "--part")) o.part = std::atoi(take());
         else if (!std::strcmp(k, "--parts")) o.parts = std::atoi(take());
         else if (!std::strcmp(k, "--bot") || !std::strcmp(k, "--bots")) std::snprintf(o.bots, sizeof o.bots, "%s", take());
+        else if (!std::strcmp(k, "--pairs")) o.pairs = true;
         else if (!std::strcmp(k, "--out")) o.out = take();
         else if (!std::strcmp(k, "--report")) o.report = take();
         else if (!std::strcmp(k, "--set")) {
@@ -180,8 +182,8 @@ int main(int argc, char** argv) {
     Opt o;
     if (!parse(argc, argv, o)) {
         std::fprintf(stderr,
-                     "usage: glowtide_headless --sim run|determinism|table|soak|accept|flood|flux [--level N | --from A --to B] [--bot B]"
-                     " [--seeds K] [--seconds S] [--set name=value]\n"
+                     "usage: glowtide_headless --sim run|determinism|table|soak|accept|flood|flux|variety [--level N | --from A --to B]"
+                     " [--bot B] [--seeds K] [--seconds S] [--pairs] [--set name=value]\n"
                      "       glowtide_headless --bake-levels --from A --to B [--jobs 4] --out file.h --report file.md\n"
                      "       glowtide_headless --render-audio ladder|flood|ui|win|lose|music|timbres --out x.wav [--seconds S]\n");
         return 2;
@@ -193,6 +195,7 @@ int main(int argc, char** argv) {
     if (!std::strcmp(o.cmd, "soak")) return soak(o.from, o.to, o.bots);
     if (!std::strcmp(o.cmd, "accept")) return acceptIntro(o.from, o.to);
     if (!std::strcmp(o.cmd, "flux")) return fluxFindings();
+    if (!std::strcmp(o.cmd, "variety")) return varietyReport(o.from, o.to, o.pairs);
     if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.part, o.parts, o.out, o.report);
     if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25);
     std::fprintf(stderr, "unknown command %s\n", o.cmd);

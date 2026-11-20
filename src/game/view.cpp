@@ -128,7 +128,7 @@ void View::onTick(const sim::World& w) {
         switch (ev.type) {
             case sim::kEvFire:
                 lastShot_ = time;
-                spawn(V3(w.launcherX, 1.55f, 2.45f), V3(0, 0, 0), gp->wispLight, 0.75f, 0.42f, 0.12f, 4);
+                spawn(V3(w.launcherX, 1.42f, sim::kMuzzleZ + 0.05f), V3(0, 0, 0), gp->wispLight, 0.75f, 0.42f, 0.12f, 4);  // at the lens
                 break;
             case sim::kEvGateMul: {
                 const int g = ev.a;
@@ -404,7 +404,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     fu.params2 = V4(tune.hopRate, tune.lightRadius, tune.laneLightAdd, tune.glowUnitSize);
     float sx, sy;
     cam.project(V3(0, 4.0f, def.len + 1.4f), sx, sy);
-    fu.spireScreen = V4(sx / float(env_.w), 1.0f - sy / float(env_.h), 0.33f, 0);
+    fu.spireScreen = V4(sx / float(env_.w), 1.0f - sy / float(env_.h), 0.33f, sim::kMuzzleZ);
 
     buildUnits(w);
     s.units = units_;

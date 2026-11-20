@@ -103,6 +103,7 @@ private:
     sim::World world_;
     sim::Bot bot_;
     bool useBot_ = false;
+    bool panScript_ = false;  // the pan_strip picture: fast swings across the lane while firing
     View view_;
     Renderer renderer_;
     Scene scene_;

@@ -555,11 +555,13 @@ int bakeLevels(int from, int to, int jobs, int part, int parts, const char* out,
                              b.accepted ? "" : " (not accepted)");
             } else {
                 const LevelDef d = levelFor(level);
-                std::fprintf(f, "    {%lluull, %d, %.3ff},  // %d\n", (unsigned long long)d.seed, level == 1 ? 60 : d.spireHealth,
+                std::fprintf(f, "    {%lluull, %d, %.3ff},  // %d\n", (unsigned long long)d.seed, d.spireHealth,
                              double(d.baseFlow), level);
             }
         }
-        std::fprintf(f, "};\nstatic const int kBakedCount = %d;\n", to);
+        std::fprintf(f, "};\nstatic const int kBakedGeneratorVersion = %d;\nstatic const int kBakedRulesVersion = %d;\n", kGeneratorVersion,
+                     kRulesVersion);
+        std::fprintf(f, "static const int kBakedCount = %d;\n", to);
         std::fclose(f);
     }
     if (report) {

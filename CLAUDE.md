@@ -22,7 +22,10 @@ of level, recipes, a calendar, no repeated levels). Read `docs/VARIETY_PLAN.md` 
 | 20 background/foreground cycles | `scripts\lifecycle-android.ps1 -Serial moto [-Cycles 20] [-AppArgs '...']` |
 | Picture sets with contact sheets (`levels`: 60 top-down level thumbnails; `p4`: audio renders and their table) | `scripts\review.ps1 -Set p1\|p2\|p3\|p4\|p5\|p6\|levels [-Only a,b] [-Lint]` |
 | Connect a phone on wireless debugging when mDNS finds nothing (scans its address, `adb connect`s the adbd port) | `scripts\find-wireless-adb.ps1 -Ip <address>[,<address>]` |
-| Every device check on one device (install, flow, back key, save, cold start, lifecycle, both benches, refresh rate) -> `captures\matrix\<serial>.md` | `scripts\matrix-android.ps1 -Serial tablet\|op12r\|moto [-NoInstall]` |
+| Every device check on one device (install, flow, picture checks, back key, save, cold start, lifecycle, both benches, refresh rate) -> `captures\matrix\<serial>.md` | `scripts\matrix-android.ps1 -Serial tablet\|op12r\|moto [-NoInstall] [-Pictures concept,geodes]` |
+| The device picture check: a phone's render of a picture against the PC's at the phone's frame (VARIETY_TECH 10) | `scripts\picture-android.ps1 -Serial moto [-Picture concept] [-Against elements] [-Install]` |
+| The variety report: likeness of levels, the no-repeat rule, counts per hundred levels (exit 1 if the rule breaks) | `glowtide_headless --sim variety --from 1 --to 300 [--pairs]` |
+| Level sheets from above: thirty consecutive levels, or a list | `scripts\review.ps1 -Set levels -Config dev -From 40 -Count 30`, `-Levels 12,40,77` |
 | Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
 | Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |
 | Heat soak: 20 min of `bench_play` on the heaviest level, temperature and memory per minute | `scripts\soak-android.ps1 -Serial moto [-Minutes 20] [-Level 87]` |

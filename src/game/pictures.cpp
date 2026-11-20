@@ -82,7 +82,7 @@ void conceptCrowd(sim::World& w, int wispTarget, Rng& r) {
         const i32 p = tier == 2 ? 20 : tier == 1 ? 6 : 1;
         addUnit(w.w, sim::kMaxWisps, clampv(x, -sim::kHW + 0.3f, sim::kHW - 0.3f), z, p, 0, r);
     };
-    for (float z = 1.3f; z < 8.0f; z += 0.62f) wisp(kLX + r.range(-0.07f, 0.07f), z, 0);
+    for (float z = sim::kMuzzleZ + 0.1f; z < 8.0f; z += 0.62f) wisp(kLX + r.range(-0.07f, 0.07f), z, 0);
     for (float z = 8.3f; z < 16.0f; z += 0.62f)
         for (int k = 0; k < 2; ++k) wisp(kLX + (float(k) - 0.5f) * 0.8f + r.range(-0.15f, 0.15f), z + r.range(-0.2f, 0.2f), 0);
     for (float z = 16.3f; z < 24.0f; z += 0.62f)
@@ -211,6 +211,18 @@ bool Game::setupPicture(const char* name) {
             return true;
         }
     }
+    if (!std::strcmp(name, "pan_strip")) {
+        // The thumb flicks the lantern across the lane every half second while it fires: every shot must leave the
+        // barrel's tip, wherever the lantern has gone since (VARIETY_PLAN work, 2026-11-20).
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        enterLevel(3, false);
+        coldStart_ = false;
+        useBot_ = false;
+        panScript_ = true;
+        startPlaying();
+        worldTicks_ = true;
+        return true;
+    }
     const struct {
         const char* name;
         int level;
@@ -300,7 +312,7 @@ bool Game::setupPicture(const char* name) {
         }
         addUnit(world_.g, sim::kMaxGlooms, 2.6f, 29.0f, 30, sim::kBrute, r);
         if (!std::strcmp(name, "elements")) {
-            for (int k = 0; k < 40; ++k) addUnit(world_.w, sim::kMaxWisps, kLX + r.range(-0.4f, 0.4f), r.range(1.2f, 7.5f), 1, 0, r);
+            for (int k = 0; k < 40; ++k) addUnit(world_.w, sim::kMaxWisps, kLX + r.range(-0.4f, 0.4f), r.range(sim::kMuzzleZ + 0.1f, 7.5f), 1, 0, r);
             for (int k = 0; k < 30; ++k) addUnit(world_.g, sim::kMaxGlooms, r.range(-3, 3), r.range(31, 35), 1, 0, r);
         }
     } else {

@@ -1,5 +1,6 @@
 # Renders a phase's picture set into captures\<set>\ with small copies and a contact sheet (TECH_SPEC 8.1).
 #   scripts\review.ps1 -Set p1|p2|p3|p5|p6 [-Only a,b] [-Config dev|debug] [-NoBuild] [-Lint]
+#   scripts\review.ps1 -Set levels [-From N -Count M | -Levels a,b,c]   (levels from above; default every fifth to 300)
 # Each picture is one run of the desktop app (silent, off screen). Screens are also rendered across the aspect matrix
 # (TECH_SPEC 5.2) when the set asks for it. Exit 1 if any run failed (GL messages: exit 3; a lint: exit 7).
 param(
@@ -7,7 +8,10 @@ param(
     [string[]]$Only = @(),
     [ValidateSet('debug', 'dev')][string]$Config = 'debug',
     [switch]$NoBuild,
-    [switch]$Lint
+    [switch]$Lint,
+    [int]$From = 0,
+    [int]$Count = 30,
+    [int[]]$Levels = @()
 )
 . "$PSScriptRoot\env.ps1"
 if (-not $NoBuild) { & "$PSScriptRoot\build-desktop.ps1" -Config $Config }
@@ -72,8 +76,10 @@ if ($Set -eq 'p6') {
     $list['next_strip'] = '--picture next_strip --strip 8 --strip-step 4'
 }
 if ($Set -eq 'levels') {
-    # P5 level sheets: every fifth level from straight above with its labels.
-    for ($n = 5; $n -le 300; $n += 5) { $list[('level_{0:D3}' -f $n)] = "--picture level_top --level $n --no-hud --frames 4 --res 540x1200" }
+    # Level sheets from straight above with their labels: every fifth level (P5), thirty consecutive levels from -From
+    # (VARIETY_PLAN 7: sameness the variety report cannot see), or the levels listed.
+    $nums = if ($Levels.Count) { $Levels } elseif ($From -gt 0) { $From..($From + $Count - 1) } else { (1..60) | ForEach-Object { $_ * 5 } }
+    foreach ($n in $nums) { $list[('level_{0:D3}' -f $n)] = "--picture level_top --level $n --no-hud --frames 4 --res 540x1200" }
 }
 if ($Set -eq 'p2') {
     $list['gate_strip'] = '--picture gate_strip --strip 8 --strip-step 3'
@@ -102,7 +108,10 @@ foreach ($name in $list.Keys) {
     if ($a -match '--strip') { python -I -B (Join-Path $GT_ROOT 'tools\contact.py') strip (Join-Path $out "${name}_sheet.png") $png | Out-Null }
     Write-Host "[review] $name"
 }
-if ($smalls.Count -and $Set -eq 'levels') {
+if ($smalls.Count -and $Set -eq 'levels' -and ($From -gt 0 -or $Levels.Count)) {
+    $sheet = if ($Levels.Count) { 'sheet_levels.png' } else { "sheet_${From}_$($From + $Count - 1).png" }
+    python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out $sheet) @smalls --cols ([math]::Min(10, $smalls.Count)) --height 520
+} elseif ($smalls.Count -and $Set -eq 'levels') {
     # Sixty thumbnails: two sheets of thirty, readable at review size.
     python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact_1.png') @($smalls | Select-Object -First 30) --cols 10 --height 520
     python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out 'contact_2.png') @($smalls | Select-Object -Skip 30) --cols 10 --height 520

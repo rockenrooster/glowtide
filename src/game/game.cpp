@@ -198,8 +198,8 @@ void Game::finishLevel(bool won) {
     if (won) {
         const float t = world_.time(), T = world_.def.targetT;
         stars_ = t <= T ? 3 : t <= 1.3f * T ? 2 : 1;  // GAME_DESIGN 5.11: stars are for speed
-        const int idx = clampv(level_ - 1, 0, int(sizeof save_.stars) - 1);
-        if (save_.stars[idx] < stars_) save_.stars[idx] = u8(stars_);
+        const int idx = level_ - 1;  // levels past the array keep no stars (they replay earlier ones)
+        if (idx >= 0 && idx < int(sizeof save_.stars) && save_.stars[idx] < stars_) save_.stars[idx] = u8(stars_);
         save_.level = maxv(save_.level, level_ + 1);
         setScreen(Screen::Win);
     } else {
@@ -398,6 +398,9 @@ void Game::tick() {
     sim::Input in;
     if (mode_ == Mode::BenchFlood) {
         in.launcherTargetX = 3.6f * sim::easedWave(world_.time() / 5.0f);
+        in.firing = true;
+    } else if (panScript_) {
+        in.launcherTargetX = (world_.tickCount / 30) % 2 ? sim::kLauncherRange : -sim::kLauncherRange;
         in.firing = true;
     } else if (useBot_) {
         in = bot_.think(world_);

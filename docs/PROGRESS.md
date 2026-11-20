@@ -16,6 +16,61 @@ just do what you think is best and let me know your choices."
 | P5 Content | Done 2026-11-20 | Levels 2-300 baked and accepted (4 min, 4 jobs); band tables in `captures/levels/bands.md`; 60 thumbnails reviewed; heaviest level (87) inside the contract on the Moto |
 | P6 Polish and release | Done 2026-11-20 | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; device matrix on the Moto, the tablet and the OnePlus 12R: every check passes on all three |
 
+## Variety and content pass (`VARIETY_PLAN.md`)
+
+Executor: Claude (Opus 5.5), coding directly, from 2026-11-20. The owner set the goal again for this plan: "Implement the
+plan to completion. No subagents. Use moto and tablet for testing, should also work on 12R. If you have questions, just
+do what you think is best and let me know your choices." So the owner checkpoints of the subplans are decided here and
+listed under "Choices" below; the owner can reverse any of them.
+
+| Phase | Status | Notes |
+|---|---|---|
+| V0 Baseline and tools | Done 2026-11-20 (device matrix deferred to V1's runs) | Split of `levels.cpp` proven neutral; version stamps and their test; `--sim variety`; baseline below; consecutive-level sheets; `picture-android.ps1`; stars past level 1,000 not recorded. Also the owner's barrel fix (below) |
+
+### V0: the baseline (version 0.1.0's table, levels 6 to 300)
+
+`glowtide_headless --sim variety --from 6 --to 300 --pairs` (`captures/variety_baseline.md`): every level is Siege,
+"Terraces", Steady, one length class, no boons.
+
+| Levels apart | Pairs | Limit | Above it | Likeness p10 / p50 / p90 | Most alike |
+|---|---|---|---|---|---|
+| 1-12 | 3,462 | 0.45 | 3,462 (100%) | 0.60 / 0.64 / 0.70 | 251 and 254 (0.87) |
+| 13-40 | 7,518 | 0.60 | 5,902 (78.5%) | 0.60 / 0.64 / 0.69 | 74 and 108 (0.88) |
+| 41+ | 32,385 | 0.85 | 14 | - | 220 and 284 (0.92) |
+
+Counts: a recipe twice within 6 levels 1,460 times; a (recipe, kind) pair twice within 30 levels 8,120 times; the
+longest run of one kind and one recipe is all 295 levels. The rule breaks 18,958 times (exit 1, as expected). The five
+most alike neighbours (251/254, 260/262, 8/15, 13/16, 226/236) are in `captures/levels/sheet_levels.png`; the two
+"before" sheets of thirty consecutive levels are `captures/levels/sheet_40_69.png` and `sheet_200_229.png`. Looked at
+one by one: from level 40 every lane is four rows of one or two gates with the spire's number on top, the same grammar
+with other numbers; nothing a player would call a different level.
+
+### V0: what else changed
+
+- **Shots leave the barrel's tip** (the owner, 2026-11-20: "they should spawn at the tip of the barrel, not at turret
+  origin", most visible when panning fast). The simulation's muzzle moved from `z` 1.0 (the lantern's base) to 2.55
+  (the lens at the barrel's end); a fresh wisp is drawn leaving the lens 1.13 m up and dropping to the lane in an arc
+  that lands 4.5 m on (`muzzleLift` in `shaders/prelude.glsl`, the glow pass too); the shot's flash is at the lens.
+  The `pan_strip` picture swings the lantern across the lane every half second while it fires
+  (`captures/variety/barrel_tip_fix.png`). Rules version 2; levels 2-300 baked again (all accepted, 7 new seeds).
+  Level 1's spire went from 60 to 66: shots arrive 0.2 s sooner and greedy won in 5.8 s, under GAME_DESIGN 8's 6 s
+  (now 6.1 s). New determinism hashes, levels 1-5: 8ef4ba40c9607ee4, c2ed3023e7b5fbd0, 9a3cdfb9d736a6ee,
+  39e10af4e915d968, df6733a3f4f84515 (the Moto's to be compared in V1).
+- `levels.cpp` split into `levels_hand.cpp`, `recipes.cpp` ("Terraces"), `calendar.cpp` and `levels.cpp`, with the
+  builder helpers in `level_build.h`. Proof: a bake of 2-300 after the split equalled the committed table byte for byte,
+  and the report too; the determinism hashes of levels 1-5 did not move.
+- `kGeneratorVersion` and `kRulesVersion` (`level.h`) are written into `levels_baked.h`; a unit test fails while they
+  differ (seen failing on the bumped rules version before the bake). The bake does not write its date into the table
+  (VARIETY_TECH 5 asked for it): a date would make two bakes of one state differ, and git has the date.
+- `review.ps1 -Set levels -From N -Count M` and `-Levels a,b,c`; `--sim variety [--from --to --pairs]`.
+- **The device picture check** (`scripts/picture-android.ps1`, `tools/picture_compare.py`, in `matrix-android.ps1`):
+  the tablet's `concept` against the PC's at the tablet's frame (1200x1920, dp 1.5, insets 30/48 dp): gold 5.07% / 5.07%,
+  violet 24.60% / 24.62%, mean difference 0.1. Against the PC's `elements` it fails (gold 5.07% / 2.33%); that picture
+  scored a mean difference of 11.6, so the limit is 4, not the 12 first set.
+- Stars are not recorded past the save's thousand levels (they were written into the last slot).
+- A safety copy of version 0.1.0 is in `D:\Stuff\DevFolder\_backups\Glowtide\2026-11-20_v0.1.0` (no `keys/`, no build
+  folders) and the commit is tagged `v0.1.0` locally.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |

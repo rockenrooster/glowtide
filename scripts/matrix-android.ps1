@@ -1,12 +1,13 @@
 # The device matrix (P6 task 11) on one device: every device check in a row, results in captures\matrix\<id>.md.
-#   scripts\matrix-android.ps1 -Serial tablet|op12r|moto|<serial> [-NoInstall]
-# Runs: install, flow test, back key, save through a force-stop, cold start, 20 lifecycle cycles, bench_flood,
+#   scripts\matrix-android.ps1 -Serial tablet|op12r|moto|<serial> [-NoInstall] [-Pictures concept,geodes]
+# Runs: install, flow test, the device picture checks, back key, save through a force-stop, cold start, 20 lifecycle cycles, bench_flood,
 # bench_play on the heaviest level (87), and reads the panel's refresh rate and the mode the game asked for.
 # Each step takes the device lock and checks the foreground app itself (PLAN 3.3); a step that fails does not stop
 # the others.
 param(
     [Parameter(Mandatory)][string]$Serial,
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [string[]]$Pictures = @('concept')  # device picture checks (scripts\picture-android.ps1)
 )
 . "$PSScriptRoot\env.ps1"
 
@@ -42,6 +43,11 @@ if (-not $NoInstall) {
 }
 $r = Invoke-Step 'flow-android.ps1' @('-Serial', $Serial, '-NoInstall')
 Add-Row 'Flow test' ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match '\[flow\]' } | Select-Object -Last 1))"
+# The phone draws what the PC draws (VARIETY_TECH 12, trap 1: a phone once passed everything with no crowd on screen).
+foreach ($p in $Pictures) {
+    $r = Invoke-Step 'picture-android.ps1' @('-Serial', $Serial, '-Picture', $p)
+    Add-Row "Picture $p against the PC" ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match 'gold .*violet' } | Select-Object -Last 1))"
+}
 $r = Invoke-Step 'backkey-android.ps1' @('-Serial', $Serial)
 Add-Row 'Back key (play -> pause -> play, HOME leaves)' ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match '\[back\]' }) -join '; ')"
 $r = Invoke-Step 'save-android.ps1' @('-Serial', $Serial)

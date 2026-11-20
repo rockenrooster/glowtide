@@ -29,7 +29,7 @@ void main() {
     }
     vec2 xz = aPos - aStep * (1.0 / 4096.0) * (1.0 - uTime.y);
     float rr = r * pop;
-    vec3 centre = vec3(xz.x, rr * 1.02 + hop, xz.y);
+    vec3 centre = vec3(xz.x, rr * 1.02 + hop + (gloom ? 0.0 : muzzleLift(xz.y)), xz.y);
     vec2 c = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
     vec2 local = vec2(mix(-1.3, 1.3, c.x), mix(-1.25, gloom ? 1.7 : 2.15, c.y));
     float sx = 1.0 + (1.0 - sy) * 0.6;
