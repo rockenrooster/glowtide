@@ -11,8 +11,10 @@ $GT_GIT      = 'C:\Program Files\Git\cmd\git.exe'                          # PAT
 $GT_SDK      = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:LOCALAPPDATA\Android\Sdk" }
 $GT_NDK      = Join-Path $GT_SDK 'ndk\29.0.14206865'
 $GT_ADB      = Join-Path $GT_SDK 'platform-tools\adb.exe'
-$GT_APP_ID   = 'dev.glowtide.game'
-$GT_ACTIVITY = 'dev.glowtide.game/.GlowtideActivity'
+# GT_APP_ID_SUFFIX (e.g. .dev, as android/app/build.gradle reads it): the device scripts drive a dev build installed beside
+# a GitHub build (another signature) instead of replacing it.
+$GT_APP_ID   = 'dev.glowtide.game' + $env:GT_APP_ID_SUFFIX
+$GT_ACTIVITY = "$GT_APP_ID/dev.glowtide.game.GlowtideActivity"
 $GT_LOCKS    = 'D:\Stuff\DevFolder\Android_Games\Raveform\captures\locks'  # shared with RAVEFORM's sessions (PLAN 3.3)
 
 foreach ($p in @($GT_JDK, $GT_CMAKE, $GT_GIT, $GT_NDK, $GT_ADB)) {

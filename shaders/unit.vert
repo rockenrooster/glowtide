@@ -6,14 +6,12 @@ out vec2 vLocal;
 flat out int vFlags;
 out float vSeed;
 out float vPx;      // pixels per unit radius (edge antialiasing)
-const float kWispR[4] = float[4](0.26, 0.36, 0.50, 0.65);
-const float kGloomR[4] = float[4](0.29, 0.40, 0.55, 0.72);
 void main() {
     int flags = int(aInfo.x + 0.5);
     float seed = aInfo.y / 255.0;
     int tier = int(aInfo.w + 0.5);
     bool gloom = (flags & 1) != 0;
-    float r = gloom ? kGloomR[tier] : kWispR[tier];
+    float r = unitRadius(gloom, tier);
     float age = (aInfo.z + uTime.y) / 60.0;
     // A clone pops 0.3 -> 1.15 -> 1 in 180 ms; a fired wisp (flag 4) grows 0.5 -> 1 in 90 ms (GAME_DESIGN 10).
     float pop = (flags & 4) != 0 ? (age < 0.09 ? mix(0.5, 1.0, age / 0.09) : 1.0)

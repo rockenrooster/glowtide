@@ -50,6 +50,8 @@ android {
         dev {
             debuggable true
             signingConfig signingConfigs.debug
+            // GT_APP_ID_SUFFIX (e.g. .dev): a dev build that installs beside a GitHub build on a device (another signature).
+            applicationIdSuffix providers.environmentVariable('GT_APP_ID_SUFFIX').orNull ?: ''
             externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo' } }
         }
         // Native Release, not debuggable, no app arguments; signed with the release key GT_KEYSTORE names (the GitHub

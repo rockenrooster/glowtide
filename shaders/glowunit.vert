@@ -4,13 +4,11 @@ layout(location = 1) in vec2 aStep;
 layout(location = 2) in vec4 aInfo;
 out vec2 vLocal;
 out vec4 vColor;
-const float kWispR[4] = float[4](0.26, 0.36, 0.50, 0.65);
-const float kGloomR[4] = float[4](0.29, 0.40, 0.55, 0.72);
 void main() {
     int flags = int(aInfo.x + 0.5);
     int tier = int(aInfo.w + 0.5);
     bool gloom = (flags & 1) != 0;
-    float r = (gloom ? kGloomR[tier] : kWispR[tier]) * uParams2.w;
+    float r = unitRadius(gloom, tier) * uParams2.w;
     vec2 xz = aPos - aStep * (1.0 / 4096.0) * (1.0 - uTime.y);
     vec3 centre = vec3(xz.x, r * 0.55, xz.y);
     vec2 c = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
