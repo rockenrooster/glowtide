@@ -98,14 +98,31 @@ Other measurements (Moto unless named):
 | Device | Reached | Result |
 |---|---|---|
 | Moto One 5G Ace (`ZY22BXMJG3`, the floor phone) | Yes, over Wi-Fi | Inside the contract everywhere: `bench_flood` 0.90% late / 35.4 ms worst on the final build (and 600 s with sound: 0.54%, 0 late audio callbacks); `bench_play` level 5 0.90%, level 87 (the heaviest) 0.79%; the 20-minute soak; flow test 45/45; lifecycle 20/20 back on PAUSE; cold start 0.43 s; back key; save through a force-stop; determinism equal to the PC; the release APK |
-| Samsung tablet (`R5GL362BEHX` and its other serials) | No: not attached over USB and not advertised over Wi-Fi during the session | Open: `bench_flood` and `bench_play`, the back key, the 90 Hz panel and the fallback |
-| OnePlus 12R (`a0e622a5`) | No | Open: the 120 Hz panel and the fallback, the matrix row |
+| Samsung tablet (`R5GL362BEHX` and its other serials) | No: not on USB, no wireless-debugging answer (see below) | Open: `bench_flood` and `bench_play`, the back key, the 90 Hz panel and the fallback |
+| OnePlus 12R (`a0e622a5`) | No: not on USB; possibly the unpaired endpoint 192.168.137.167:38975 (see below) | Open: the 120 Hz panel and the fallback, the matrix row |
 | Fire 7 (`GN41WE04450600BJ`) | No | Open: a report only (TECH_SPEC 5.10) |
 
-To fill the open rows once a device is attached (each script takes the lock and checks the foreground app):
-`scripts\deploy-android.ps1 -Serial tablet -NoLaunch`, then `bench-android.ps1 -Serial tablet -Scenario bench_flood`,
-`bench-android.ps1 -Serial tablet -Scenario bench_play -AppArgs '--level 87'`, `backkey-android.ps1 -Serial tablet`,
-`flow-android.ps1 -Serial tablet` (the same with `op12r`).
+How the tablet and the 12R were looked for (2026-11-20, at the end of P6):
+
+- **USB:** nothing but the Moto in `adb devices` all session.
+- **Wireless debugging by mDNS** (how RAVEFORM finds the OnePlus): `adb mdns services` and a plain mDNS query from
+  this PC got no answer from any device, the Moto included, so discovery does not work from here today.
+- **Legacy `adb tcpip` (port 5555)** on the ten hosts of 192.168.137.x with phone-style (randomized) MAC addresses:
+  every one refused.
+- **A scan of 30000-50000** (where wireless debugging listens; the Moto is on 38215) on those hosts found one more
+  adb endpoint, **192.168.137.167:38975**. It refuses this PC's adb key (the TLS handshake fails), which is what a
+  device does once its wireless-debugging trust has lapsed (Android drops it after about seven days unused). It is
+  probably the 12R or a tablet; only its own screen can re-pair it.
+
+To fill the open rows (one command runs every device check, each with the lock and the foreground check, and writes
+`captures\matrix\<serial>.md`; on the Moto all ten checks passed: `captures\matrix\ZY22BXMJG3.md`):
+
+1. On the device: Developer options, Wireless debugging, **Pair device with pairing code**; on the PC
+   `adb pair <ip>:<pairing port> <code>`, then `adb connect <ip>:<port>` (or plug the tablet into USB).
+2. `scripts\matrix-android.ps1 -Serial tablet` (or `op12r`, or the `ip:port`). It installs the dev APK and runs the flow
+   test, the back key, the save, cold start, 20 lifecycle cycles, `bench_flood`, `bench_play` on level 87, and records
+   the panel's modes and the rate the game asked for (90 Hz on the tablet, 120 Hz on the 12R; the 60 Hz fallback logs
+   `refresh:` if it trips).
 
 ## Deviations from the specs
 
