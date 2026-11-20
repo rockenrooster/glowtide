@@ -11,7 +11,7 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | Build desktop (`debug` = Debug + GL debug context, `dev` = RelWithDebInfo; `-Sanitize`: ASan/UBSan tests + headless) | `scripts\build-desktop.ps1 [-Config debug\|dev] [-Clean] [-Sanitize]` |
 | Run desktop (silent and off screen unless `-Sound` / `-Watch`) | `scripts\run-desktop.ps1 [-Config dev] [-NoBuild] [-AppArgs '...'] [-Screenshot x.png] [-Frames N] [-Res WxH] [-Small]` |
 | Tests (unit tests, PNG check, headless determinism; `-Quick` skips the long bot runs) | `scripts\test.ps1 [-Config dev] [-NoBuild] [-Quick]` |
-| Build the APK (`dev` is the benchmarked build) | `scripts\build-android.ps1 [-Config dev\|debug\|release] [-Offline] [-Clean]` |
+| Build the APK (`dev` is the benchmarked build; with `$env:GT_APP_ID_SUFFIX = '.dev'` the dev APK is `dev.glowtide.game.dev`, installs beside a GitHub build, and every device script drives it) | `scripts\build-android.ps1 [-Config dev\|debug\|release] [-Offline] [-Clean]` |
 | Install and launch on a device | `scripts\deploy-android.ps1 -Serial moto\|tablet\|op12r\|<serial> [-NoBuild] [-AppArgs '...']` |
 | Benchmark on a device (lock, foreground checks, pulls `captures\bench\*.json`, grades the contract) | `scripts\bench-android.ps1 -Serial moto -Scenario bench_idle\|bench_flood\|bench_play [-Seconds 60] [-Warmup 180] [-AppArgs '...'] [-Deploy]` |
 | Screenshot of a device's panel (GLOWTIDE in front only) | `scripts\capture-android.ps1 -Serial moto [-Out x.png] [-Small]` |

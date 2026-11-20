@@ -12,7 +12,13 @@ Assert-GtDevice $Serial
 $lock = Enter-GtDeviceLock $Serial 'glowtide-lifecycle'
 try {
     if (-not (Wait-GtDeviceIdle $Serial -QuietSeconds 3 -TimeoutSeconds 120)) { Write-Host "[lifecycle] $Serial busy: not verified"; exit 3 }
+    Assert-GtUnlocked $Serial
     $appPid = Start-GtApp $Serial $AppArgs
+    # The app's lines are streamed to a file as they are written: a small log buffer (the 12R's holds about a minute)
+    # would have dropped the early cycles' lines by the end of the run.
+    $logFile = Join-Path ([IO.Path]::GetTempPath()) "glowtide_lifecycle_$PID.txt"
+    $logcat = Start-Process -FilePath $GT_ADB -ArgumentList @('-s', $Serial, 'logcat', '--pid', $appPid, '-s', 'GTLIFE:I', 'GLOWTIDE:E') `
+        -RedirectStandardOutput $logFile -NoNewWindow -PassThru
     Start-Sleep -Seconds 3
     for ($i = 1; $i -le $Cycles; ++$i) {
         if (-not (Test-GtDeviceFree $Serial)) { Write-Host "[lifecycle] another app came to the front: stopping"; exit 3 }
@@ -24,7 +30,10 @@ try {
         if ($now -ne $appPid) { Write-Host "[lifecycle] cycle ${i}: the process changed ($appPid -> '$now'): crash?"; exit 1 }
     }
     Start-Sleep -Seconds 2
-    $log = & $GT_ADB -s $Serial logcat -d --pid=$appPid -s GTLIFE:I GLOWTIDE:E
+    Stop-Process -Id $logcat.Id -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 300
+    $log = @(Get-Content $logFile -ErrorAction SilentlyContinue)
+    Remove-Item $logFile -ErrorAction SilentlyContinue
     $fronts = @($log | Select-String 'first frame after resume').Count
     $lost = @($log | Select-String 'context was lost').Count
     $errors = @($log | Select-String ' E GLOWTIDE').Count

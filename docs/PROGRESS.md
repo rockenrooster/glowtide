@@ -14,7 +14,7 @@ just do what you think is best and let me know your choices."
 | P3 Game loop and UI | Done 2026-11-20 | Flow test on PC, Moto and tablet, lint over 43 renders, save, lifecycle, cold start 0.43 s (1.1 s before the P4 synthesis fix), back key on the Moto and the tablet |
 | P4 Audio | Done 2026-11-20 | Renders in `captures/p4/` (three ladder timbres through the flood); 10 min of `bench_flood` with sound on the Moto and on the tablet: no late callback on either |
 | P5 Content | Done 2026-11-20 | Levels 2-300 baked and accepted (4 min, 4 jobs); band tables in `captures/levels/bands.md`; 60 thumbnails reviewed; heaviest level (87) inside the contract on the Moto |
-| P6 Polish and release | Done 2026-11-20 | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; device matrix on the Moto and the tablet (all checks pass); the OnePlus 12R skipped at the owner's word |
+| P6 Polish and release | Done 2026-11-20 | Strips reviewed, flashing audit, greyscale sheet, 20-minute soak, sanitizers, release APK; device matrix on the Moto, the tablet and the OnePlus 12R: every check passes on all three |
 
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
@@ -104,7 +104,7 @@ Other measurements (Moto unless named):
 |---|---|---|
 | Moto One 5G Ace (`ZY22BXMJG3`, the floor phone) | Yes, over Wi-Fi | Inside the contract everywhere: `bench_flood` 0.90% late / 35.4 ms worst on the final build (and 600 s with sound: 0.54%, 0 late audio callbacks); `bench_play` level 5 0.90%, level 87 (the heaviest) 0.79%; the 20-minute soak; flow test 45/45; lifecycle 20/20 back on PAUSE; cold start 0.43 s; back key; save through a force-stop; determinism equal to the PC; the release APK |
 | Galaxy Tab A11+ SM-X230 (`R5GL362BEHX`), Android 16, 1200x1920 at 240 dpi | Yes, over Wi-Fi (the owner switched Wireless debugging on) | All ten checks pass (`captures/matrix/R5GL362BEHX.md`): flow test 45/45, back key, save through a force-stop, cold start 0.52 s, lifecycle 20/20 back on PAUSE, `bench_flood` 0.00% late / 16.7 ms worst, `bench_play` level 87 0.00% late / 16.9 ms worst, CPU p95 5.3 ms. It ran at 60 Hz: the panel has a 90 Hz mode, but the tablet's Motion smoothness is set to Standard (`refresh_rate_mode` 0), which offers apps 60 Hz only; the game asked for the highest rate offered. 90 Hz needs that setting on Adaptive (the owner's to change), then `matrix-android.ps1 -Serial tablet` again |
-| OnePlus 12R (`a0e622a5`) | Skipped by the owner on 2026-11-20 (its Wireless debugging was off) | Not run. Its screen (1264x2780 at 450 dpi) is in the layout matrix and passes the lint on the PC; the 120 Hz panel and the fallback are untested on a device. `matrix-android.ps1 -Serial op12r` runs it all |
+| OnePlus 12R CPH2611 (`a0e622a5`), Android 16, Adreno 740, 1080x2376 at 2.55 dp | Yes, over Wi-Fi (the owner switched Wireless debugging on after first skipping it) | All ten checks pass on a dev build beside the owner's GitHub copy (`GT_APP_ID_SUFFIX=.dev`; `captures/matrix/a0e622a5.md`): flow test 45/45, back key, save through a force-stop, cold start 0.41 s, lifecycle 20/20 back on PAUSE, `bench_flood` 0.00% late / 16.6 ms worst, `bench_play` level 87 0.00% late / 16.6 ms worst, CPU p95 4.9 ms. The owner's report that the crowds were invisible there was a driver bug (Deviations), fixed in `build-14`. It ran at 60 Hz: the phone's screen-rate setting offers apps 60 Hz only (`peak_refresh_rate` 60); 120 Hz needs that setting raised |
 | Fire 7 (`GN41WE04450600BJ`) | No | Open: a report only (TECH_SPEC 5.10) |
 
 How the tablet and the 12R were looked for (2026-11-20, at the end of P6):
@@ -154,6 +154,14 @@ To fill the open rows (one command runs every device check, each with the lock a
 - **GAME_DESIGN 5.9 corrected after P2** (`glowtide_headless --sim flux`, table in `captures/flux_findings.md`): the
   toy model's findings 1 and 4 hold; the edge (finding 2) is sharper (a three-row x30 layout collapses already at an
   enemy flow of 0.9 times the flood) and the pressure ramp finishes a half-strength player on level 5 (finding 3).
+- **Device runs keep the phone awake** (the owner: a phone that sleeps locks): `Assert-GtUnlocked` before a run, and
+  `Start-GtKeepAwake` wakes the screen and sends a Shift key every 8 s while GLOWTIDE or the launcher is in front (no
+  settings change); the lifecycle check streams the app's log to a file during the run (the 12R's 256 KiB log buffer
+  holds about a minute).
+- **No const arrays indexed by a varying value in the shaders** (2026-11-20): on the OnePlus 12R (Adreno 740, driver
+  V@0676, Android 16) a `const float[4]` indexed by a tier read from an attribute gave no usable radius, so every wisp
+  and gloom had no size and the crowds were invisible (the owner's report: "12r doesn't show bullets"). Found on the
+  device by elimination; the radius is chosen by selects in `prelude_vert.glsl` (`unitRadius`). Fixed in `build-14`.
 - **The clash strip** on level 5 shows little clashing (its `fight` is 15%): the P6 strips use later levels.
 
 ## Copied from RAVEFORM

@@ -60,7 +60,8 @@ any other key cannot update an installed copy.
 one every run. Android installs an update only when it is signed with the same key as the installed app, so such an APK
 installs only where GLOWTIDE is not installed: uninstall first, and the phone's progress goes with it. The release notes and
 the run's summary say which key signed each build. This PC's builds (`deploy-android.ps1`) stay debug-signed with this PC's
-own key, so a GitHub build and a deployed build replace each other only through an uninstall.
+own key, so a GitHub build and a deployed build replace each other only through an uninstall; to test beside a GitHub
+build instead, build the dev APK with `GT_APP_ID_SUFFIX=.dev` (package `dev.glowtide.game.dev`).
 
 ## The updater
 

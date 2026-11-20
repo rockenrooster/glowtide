@@ -233,6 +233,39 @@ function Invoke-GtWake {
         Start-Sleep -Milliseconds 800
     }
 }
+# Awake and unlocked, or a clear error: a phone with a PIN cannot be unlocked from here (the owner unlocks it).
+function Assert-GtUnlocked {
+    param([Parameter(Mandatory)][string]$Serial)
+    Invoke-GtWake $Serial
+    $awake = [bool]((& $GT_ADB -s $Serial shell 'dumpsys power') | Select-String 'mWakefulness=Awake' -Quiet)
+    $locked = [bool]((& $GT_ADB -s $Serial shell 'dumpsys window') | Select-String 'isKeyguardShowing=true' -Quiet)
+    if (-not $awake -or $locked) { throw "$Serial stays asleep or locked (a PIN?): unlock it by hand, then run again" }
+}
+
+# Keeps a phone from sleeping (and so from locking) during a long run, without touching its settings: every 8 s it wakes
+# the screen and sends a Shift key (user activity, which restarts the screen timeout), only while GLOWTIDE or the launcher
+# is in front. Returns a job for Stop-GtKeepAwake.
+function Start-GtKeepAwake {
+    param([Parameter(Mandatory)][string]$Serial)
+    return Start-Job -ScriptBlock {
+        param($adb, $serial, $app)
+        while ($true) {
+            & $adb -s $serial shell input keyevent KEYCODE_WAKEUP 2>$null | Out-Null
+            $line = (& $adb -s $serial shell "dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity'" 2>$null) | Select-Object -First 1
+            $fg = if ("$line" -match 'u0 ([\w\.]+)/') { $Matches[1] } else { '' }
+            $homePkg = ((& $adb -s $serial shell 'cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME' 2>$null) | Select-Object -Last 1) -split '/' | Select-Object -First 1
+            if ($fg -eq $app -or $fg -eq "$homePkg".Trim()) {
+                & $adb -s $serial shell input keyevent KEYCODE_SHIFT_LEFT 2>$null | Out-Null
+            }
+            Start-Sleep -Seconds 8
+        }
+    } -ArgumentList $GT_ADB, $Serial, $GT_APP_ID
+}
+function Stop-GtKeepAwake {
+    param($Job)
+    if ($Job) { Stop-Job $Job -ErrorAction SilentlyContinue; Remove-Job $Job -Force -ErrorAction SilentlyContinue }
+}
+
 function Start-GtApp {
     param([Parameter(Mandatory)][string]$Serial, [string]$AppArgs = '')
     if (-not (Test-GtDeviceFree $Serial)) {

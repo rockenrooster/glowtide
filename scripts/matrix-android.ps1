@@ -32,6 +32,10 @@ function Invoke-Step([string]$script, [string[]]$argv) {
 }
 
 Write-Host "[matrix] $model ($id), Android $android, $size, panel modes: $($modes -join ', ') Hz"
+# A phone that sleeps locks (and then nothing can come to the front): start awake and unlocked, and stay awake.
+Assert-GtUnlocked $Serial
+$keepAwake = Start-GtKeepAwake $Serial
+try {
 if (-not $NoInstall) {
     $r = Invoke-Step 'deploy-android.ps1' @('-Serial', $Serial, '-NoBuild', '-NoLaunch')
     Add-Row 'Install the dev APK' ($r.code -eq 0) "$(($r.out | Select-Object -Last 1))"
@@ -54,6 +58,10 @@ foreach ($b in @(@('bench_flood', @('-Seconds', '60', '-Warmup', '60')), @('benc
 # The refresh rate the game asked for and got (TECH_SPEC 5.10): the activity's log line and the benchmark's figure.
 $display = (& $GT_ADB -s $Serial logcat -d -s GLOWTIDE:I GTLIFE:I) | Select-String 'display: mode|refresh:' | Select-Object -Last 2
 Add-Row 'Refresh rate' $true "panel modes $($modes -join '/') Hz; $(($display | ForEach-Object { "$_" -replace '^.*?: ', '' }) -join '; ')"
+
+} finally {
+    Stop-GtKeepAwake $keepAwake
+}
 
 $text = @("# Device matrix: $model ($id)", '', "Android $android, $size, panel modes $($modes -join ', ') Hz. $(Get-Date -Format 'yyyy-MM-dd HH:mm').",
           '', '| Check | Result | Detail |', '|---|---|---|') + $rows
