@@ -46,6 +46,11 @@ bool Game::init(const Args& args, const GameEnv& env) {
     feedback_.init(&mixer_);
     mixer_.setTone(args.tone);
     applySettings();
+    if (save_.refresh60 && env.refreshHz > 61.0f && args.fps <= 0.0f) {
+        GT_LOG("refresh: the save asks for 60 Hz (an earlier level was late at %.0f Hz)", double(env.refreshHz));
+        platform::requestRefreshRate(60.0f);
+        env_.refreshHz = 60.0f;
+    }
 
     if (!std::strcmp(args.scenario, "sim_hash")) {
         // The determinism hash on this device (P2): levels 1-5, the greedy bot, 60 s each, the same runs as
@@ -145,6 +150,7 @@ void Game::enterLevel(int index, bool fade) {
     worldTicks_ = false;
     fingerCount_ = 0;
     levelTime_ = 0;
+    levelFrames_ = levelLate_ = 0;
     firingTicks_ = divPasses_ = mulPasses_ = 0;
     popWaveZ_ = 0;
     setScreen(Screen::Home);
@@ -181,6 +187,14 @@ void Game::startPlaying() {
 void Game::finishLevel(bool won) {
     resultTime_ = 0;
     starsLanded_ = 0;
+    // The one-way 60 Hz fallback (TECH_SPEC 5.10), decided on this level's frames; the next level runs at 60 Hz.
+    if (mode_ == Mode::Play && !save_.refresh60 && shouldFallBackTo60(env_.refreshHz, levelFrames_, levelLate_)) {
+        GT_TAG("GTLIFE", "refresh: %d of level %d's %d frames were late at %.0f Hz: 60 Hz from now on", levelLate_, level_, levelFrames_,
+               double(env_.refreshHz));
+        save_.refresh60 = true;
+        platform::requestRefreshRate(60.0f);
+        env_.refreshHz = 60.0f;
+    }
     if (won) {
         const float t = world_.time(), T = world_.def.targetT;
         stars_ = t <= T ? 3 : t <= 1.3f * T ? 2 : 1;  // GAME_DESIGN 5.11: stars are for speed
@@ -225,6 +239,7 @@ void Game::destroyGraphics() {
 
 void Game::resize(const GameEnv& env) {
     env_ = env;
+    if (save_.refresh60 && args_.fps <= 0.0f) env_.refreshHz = minv(env_.refreshHz, 60.0f);  // the fallback holds
     layout_ = {env.frameW, env.frameH, env.dpScale, env.safe};
     view_.resize({env.frameW, env.frameH, env.dpScale, env.safe});
 }
@@ -412,6 +427,12 @@ void Game::tick() {
     if (world_.def.rowCount > 0 && world_.lowestGloomZ < world_.def.rowZ[0]) showHint(5);
     if (world_.result != sim::Result::None && mode_ == Mode::Play) finishLevel(world_.result == sim::Result::Win);
     lastTick_ = float(nowSeconds() - t0);
+}
+
+void Game::frameShown(float intervalSeconds) {
+    if (screen_ != Screen::Play || mode_ != Mode::Play) return;
+    ++levelFrames_;
+    if (lateFrame(intervalSeconds, env_.refreshHz)) ++levelLate_;
 }
 
 void Game::update(float dt, float alpha) {
@@ -624,6 +645,11 @@ void Game::render(unsigned fbo, int w, int h) {
         }
     }
     scene_.ui = &uiBatch_;
+    // Between levels the labels and the HUD fade with the picture (GAME_DESIGN 10: 150 ms out, 150 ms in); PAUSE
+    // only dims the world, so its menu stays whole.
+    const bool levelFade = fadeOut_ > 0 || fadeIn_ < 1;
+    scene_.labelOpacity = view_.fade;
+    scene_.uiOpacity = levelFade ? view_.fade : 1.0f;
     renderer_.draw(scene_, fbo, w, h);
     checkGl("Game::render");
 }

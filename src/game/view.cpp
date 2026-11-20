@@ -473,6 +473,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     s.props = props_;
     s.propCount = propCount_;
     s.spireStage = w.spireStage;
+    s.spireGone = w.result == sim::Result::Win;
     s.heartGain = 0.8f + 0.5f * pulse + spireFlash_;
     for (int b = 0; b < sim::kMaxBarriers; ++b) {
         s.barrierAlive[b] = b < def.barrierCount && w.barrierHealth[b] > 0;

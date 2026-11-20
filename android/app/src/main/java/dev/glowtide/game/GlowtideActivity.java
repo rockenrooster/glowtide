@@ -129,6 +129,35 @@ public class GlowtideActivity extends SDLActivity {
                 + best.getRefreshRate() + " Hz (wanted " + (wanted > 0 ? wanted + " Hz" : "the highest") + ")");
     }
 
+    /** Native code asks for the mode of the current size nearest `hz` (the 60 Hz fallback); on the UI thread. */
+    static void requestRefreshRate(final float hz) {
+        final Activity activity = mSingleton;
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Display display = Build.VERSION.SDK_INT >= 30 ? activity.getDisplay() : activity.getWindowManager().getDefaultDisplay();
+                if (display == null) {
+                    return;
+                }
+                Display.Mode current = display.getMode();
+                Display.Mode best = current;
+                for (Display.Mode m : display.getSupportedModes()) {
+                    if (m.getPhysicalWidth() == current.getPhysicalWidth() && m.getPhysicalHeight() == current.getPhysicalHeight()
+                            && Math.abs(m.getRefreshRate() - hz) < Math.abs(best.getRefreshRate() - hz)) {
+                        best = m;
+                    }
+                }
+                WindowManager.LayoutParams params = activity.getWindow().getAttributes();
+                params.preferredDisplayModeId = best.getModeId();
+                activity.getWindow().setAttributes(params);
+                Log.i(TAG, "display: asked for " + hz + " Hz: mode " + best.getModeId() + " at " + best.getRefreshRate() + " Hz");
+            }
+        });
+    }
+
     /** The panel's current refresh rate (native code: benchmarks and the start-up log). */
     static float refreshRate() {
         Activity activity = mSingleton;

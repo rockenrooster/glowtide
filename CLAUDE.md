@@ -16,6 +16,15 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | Benchmark on a device (lock, foreground checks, pulls `captures\bench\*.json`, grades the contract) | `scripts\bench-android.ps1 -Serial moto -Scenario bench_idle\|bench_flood\|bench_play [-Seconds 60] [-Warmup 180] [-AppArgs '...'] [-Deploy]` |
 | Screenshot of a device's panel (GLOWTIDE in front only) | `scripts\capture-android.ps1 -Serial moto [-Out x.png] [-Small]` |
 | 20 background/foreground cycles | `scripts\lifecycle-android.ps1 -Serial moto [-Cycles 20] [-AppArgs '...']` |
+| Picture sets with contact sheets (`levels`: 60 top-down level thumbnails; `p4`: audio renders and their table) | `scripts\review.ps1 -Set p1\|p2\|p3\|p4\|p5\|p6\|levels [-Only a,b] [-Lint]` |
+| Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
+| Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |
+| Heat soak: 20 min of `bench_play` on the heaviest level, temperature and memory per minute | `scripts\soak-android.ps1 -Serial moto [-Minutes 20] [-Level 87]` |
+| Flashing audit of the win, boss win, lose and core-hit strips | `scripts\flash-audit.ps1 [-NoBuild]` |
+| Level bake (writes `src\sim\levels_baked.h`; about 4 min at 4 jobs) | `build\desktop-dev\glowtide_headless.exe --bake-levels --from 2 --to 300 --jobs 4 --out src\sim\levels_baked.h --report captures\levels\report.md` |
+| Band tables and the P5 checks from the report | `python -I -B tools\band_table.py captures\levels\report.md captures\levels\bands.md` |
+| Offline audio and its numbers | `glowtide_headless --render-audio ladder\|flood\|ui\|win\|lose\|music\|timbres --out x.wav`; `python -I -B tools\wav_metrics.py x.wav [--ladder ladder.wav]` |
+| GAME_DESIGN 5.9's findings with the real simulation | `glowtide_headless --sim flux` |
 | Review copy of a PNG (at most 1600 x 1000) | `python -I -B tools\shrink_png.py x.png` |
 | App icon layers | `python -I -B tools\make_icon.py` |
 

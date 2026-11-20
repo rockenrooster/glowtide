@@ -165,6 +165,7 @@ int App::run(int argc, char** argv) {
         bf.cpu = float(threadCpuSeconds() - c0);
         double presents[64];
         const int np = platform::presentCollect(presents, 64);
+        game_.frameShown(float(t6 - t0));
         if (frameIndex_ == 1) GT_TAG("GTLIFE", "first frame swapped %.0f ms after main", (t6 - startTime_) * 1000.0);
         if (firstFrameAfterResume_) {
             GT_TAG("GTLIFE", "first frame after resume (frame %d)", frameIndex_);

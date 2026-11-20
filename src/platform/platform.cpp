@@ -25,6 +25,7 @@ namespace {
 jclass g_activityClass = nullptr;
 jmethodID g_haptic = nullptr;
 jmethodID g_refresh = nullptr;
+jmethodID g_requestRefresh = nullptr;
 
 // Present timestamps
 bool g_presentOk = false;
@@ -113,6 +114,7 @@ void init(SDL_Window*) {
     g_activityClass = static_cast<jclass>(env->NewGlobalRef(cls));
     g_haptic = env->GetStaticMethodID(g_activityClass, "haptic", "(I)V");
     g_refresh = env->GetStaticMethodID(g_activityClass, "refreshRate", "()F");
+    g_requestRefresh = env->GetStaticMethodID(g_activityClass, "requestRefreshRate", "(F)V");
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(cls);
     env->DeleteLocalRef(activity);
@@ -124,6 +126,14 @@ void haptic(int kind) {
     JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
     if (!env) return;
     env->CallStaticVoidMethod(g_activityClass, g_haptic, jint(kind));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+void requestRefreshRate(float hz) {
+    if (!g_requestRefresh) return;
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    if (!env) return;
+    env->CallStaticVoidMethod(g_activityClass, g_requestRefresh, jfloat(hz));
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
@@ -219,6 +229,7 @@ int pinToFastCores(char* desc, size_t cap) {
 }
 void init(SDL_Window*) {}
 void haptic(int) {}
+void requestRefreshRate(float) {}
 float refreshRateHz(SDL_Window* window) {
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
     return mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.0f;

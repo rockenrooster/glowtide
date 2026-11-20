@@ -19,6 +19,8 @@ void init(SDL_Window* window);
 void haptic(int kind);
 
 float refreshRateHz(SDL_Window* window);
+// Asks the display for the mode nearest `hz` (Android; the one-way 60 Hz fallback of TECH_SPEC 5.10).
+void requestRefreshRate(float hz);
 
 // A path for an output file: absolute paths stay; relative ones go to the app's external files directory on
 // Android and stay relative (to the working directory) on the desktop.

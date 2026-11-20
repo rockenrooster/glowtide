@@ -191,7 +191,8 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
         mb.discE(V3(B.x, 1.31f, B.z), B.r * 0.5f, gp.good);
     }
 
-    // The spire.
+    // The spire: its own range, so the win can take it away when it shatters.
+    const u32 spireI0 = u32(mb.idx.size()), spireE0 = u32(mb.emit.size());
     const float zc = len + 1.4f;
     const Ramp spire{gp.spire, gp.spireLight, gp.spireDark};
     const float halfW = def.boss ? 3.4f : 2.8f;
@@ -231,8 +232,10 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
         out.heart = {int(i0), int(mb.idx.size() - i0)};
         out.heartEmit = {int(e0), int(mb.emit.size() - e0)};
     }
-    out.opaque.count = int(beforeCracks);
-    out.emissive = {0, int(beforeCracksE)};
+    out.opaque.count = int(spireI0);
+    out.emissive = {0, int(spireE0)};
+    out.spire = {int(spireI0), int(beforeCracks - spireI0)};
+    out.spireEmit = {int(spireE0), int(beforeCracksE - spireE0)};
 
     // Barriers: one range each (they shake and break).
     out.barrierCount = def.barrierCount;

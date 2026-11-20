@@ -262,10 +262,13 @@ void Renderer::drawProps(const Scene& s, bool glow) {
     glUniformMatrix4fv(uModel, 1, GL_FALSE, ident.m);
     glUniform4f(uTint, 1, 1, 1, s.emissiveGain);
     drawRange(glow ? level_.emissive : level_.opaque);
-    for (int k = 0; k < minv(s.spireStage, 3); ++k) drawRange(glow ? level_.cracksEmit[k] : level_.cracks[k]);
-    glUniform4f(uTint, 1, 1, 1, s.emissiveGain * s.heartGain);
-    drawRange(glow ? level_.heartEmit : level_.heart);
-    glUniform4f(uTint, 1, 1, 1, s.emissiveGain);
+    if (!s.spireGone) {  // after the win the spire is its shards
+        drawRange(glow ? level_.spireEmit : level_.spire);
+        for (int k = 0; k < minv(s.spireStage, 3); ++k) drawRange(glow ? level_.cracksEmit[k] : level_.cracks[k]);
+        glUniform4f(uTint, 1, 1, 1, s.emissiveGain * s.heartGain);
+        drawRange(glow ? level_.heartEmit : level_.heart);
+        glUniform4f(uTint, 1, 1, 1, s.emissiveGain);
+    }
     for (int b = 0; b < level_.barrierCount; ++b) {
         if (!s.barrierAlive[b]) continue;
         const M4 m = translation(s.barrierOffset[b]);
@@ -436,7 +439,7 @@ void Renderer::draw(const Scene& s, GLuint fbo, int w, int h) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     // Labels win: after every unit and after the bloom, so no crowd and no glow ever hides a number.
-    if (s.world && s.labels) drawBatch(*s.labels, 1.0f);
+    if (s.world && s.labels) drawBatch(*s.labels, s.labelOpacity);
     if (s.ui) drawBatch(*s.ui, s.uiOpacity);
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);

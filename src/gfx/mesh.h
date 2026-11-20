@@ -60,6 +60,7 @@ struct Range {
 struct LevelMeshData {
     MeshBuilder mb;
     Range opaque, emissive;                 // everything static / its emissive part
+    Range spire, spireEmit;                 // the spire (gone once it shatters)
     Range cracks[3], cracksEmit[3];         // the spire's cracks by stage (75, 50, 25%)
     Range heart, heartEmit;
     int barrierCount = 0;

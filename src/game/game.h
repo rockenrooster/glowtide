@@ -6,6 +6,7 @@
 #include "game/feedback.h"
 #include "game/hud.h"
 #include "game/input.h"
+#include "game/refresh.h"
 #include "game/save.h"
 #include "game/ui.h"
 #include "game/view.h"
@@ -41,6 +42,8 @@ public:
 
     void tick();                         // one fixed 1/60 s step
     void update(float dt, float alpha);  // once a frame
+    // The frame's interval on the display (present times, else swaps): the fallback counts late frames per level.
+    void frameShown(float intervalSeconds);
     void render(unsigned fbo, int w, int h);
 
     bool quitRequested() const { return quit_; }
@@ -145,6 +148,7 @@ private:
     static constexpr int kHapticRing = 24;
     double hapticRing_[kHapticRing] = {};
     int hapticsSent_ = 0, hapticPeak_ = 0;
+    int levelFrames_ = 0, levelLate_ = 0;
     char pictureScreen_[16] = "";
 
     // Player input (GAME_DESIGN 4): the oldest finger still down owns the gesture.

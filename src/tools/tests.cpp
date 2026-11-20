@@ -11,6 +11,7 @@
 #include "core/tuning.h"
 #include "audio/mixer.h"
 #include "game/feedback.h"
+#include "game/refresh.h"
 #include "game/save.h"
 #include "tests_sim.h"
 
@@ -200,6 +201,10 @@ int main(int argc, char** argv) {
     testPng(dir);
     testSave(dir);
     testAudio();
+    // The 60 Hz fallback's rule: only above 60 Hz, only with two seconds of frames, only past 5% late.
+    GT_CHECK(lateFrame(1.0f / 60.0f, 120.0f) && !lateFrame(1.0f / 120.0f, 120.0f) && !lateFrame(1.0f / 60.0f, 60.0f));
+    GT_CHECK(shouldFallBackTo60(120.0f, 1200, 61) && !shouldFallBackTo60(120.0f, 1200, 60) && !shouldFallBackTo60(60.0f, 1200, 500));
+    GT_CHECK(!shouldFallBackTo60(90.0f, 100, 50));
     gt::test::runSimTests();
     std::printf("tests: %d checks, %d failed\n", gt::test::g_checks, gt::test::g_failures);
     return gt::test::g_failures ? 1 : 0;

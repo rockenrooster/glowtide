@@ -64,6 +64,7 @@ struct Scene {
     const PropDraw* props = nullptr;
     int propCount = 0;
     int spireStage = 0;        // cracks shown: 0..3
+    bool spireGone = false;  // the win shattered it
     float heartGain = 1;
     bool barrierAlive[sim::kMaxBarriers] = {};
     V3 barrierOffset[sim::kMaxBarriers];
@@ -71,6 +72,7 @@ struct Scene {
     const UiBatch* labels = nullptr;
     const UiBatch* ui = nullptr;
     float uiOpacity = 1.0f;
+    float labelOpacity = 1.0f;  // the world's labels fade with the picture between levels
     bool world = true;         // false: only the UI (and the debug quads)
 };
 
