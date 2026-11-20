@@ -369,7 +369,7 @@ own integer random stream and plain arithmetic.
    | Wall and prize | A barrier covering a strong gate 2 m behind it; beside it a weaker open gate |
    | Pillars | Two or three bumpers with gates in the passages |
    | Patrol | A snuffer patrolling in front of a strong gate |
-   | Crossing sliders | Two sliders in opposite phase, a multiply and a ÷2 |
+   | Crossing sliders | Two sliders in opposite phase, a multiply and a ÷2, 1.6 m apart in z so they pass each other |
 
    Factors: a plain gate draws from ×2 up to the level's strongest; the gate of a Slider, a Wall and
    prize or a Patrol is one step stronger, never above ×5. Rules: the first row is always Open or
@@ -411,12 +411,17 @@ Nobody tunes 300 levels by hand, and the executor cannot play. The offline bake 
    - (b) greedy's median core at the end is 6 or more;
    - (c) greedy's median time is within 0.7 `T` … 1.3 `T`;
    - (d) from level 8, the **naive** bot either loses or needs at least 1.6 times greedy's time;
-   - (e) the **idle** bot loses.
+   - (e) the **idle** bot loses;
+   - (f) from level 21 the **naive** bot loses (added after the first full bake: three bands let it win twice);
+   - (g) for a generated level, greedy's median cancelled share is within 5 points of `fight` (added with (f):
+     the bisection's runs keep the spire whole for `T`, the real runs end at the win and cancel a few points more).
+     Before giving up on the seed, the bake corrects the rate scale toward `fight` (scale × fight ÷ share) up to
+     twice, sizing the spire again each time.
 
    Not accepted: a generated level moves to its next seed (at most eight, then the bake stops and
    reports the level); a hand-made level is reported.
 
-The result is `src/sim/levels_baked.h`: one row per level (seed, spire health, rate scale). At run time
+The result is `src/sim/levels_baked.h`: one row per level (seed, spire health, the enemy's base flow). At run time
 the game regenerates the layout from the seed and takes the two numbers from the table. The bake also
 writes `captures/levels/report.md`, one row per level: rows, patterns, `P0`, `fight` and the cancelled
 share reached, greedy's time and core, naive's result, peak tide, peak unit counts, the lowest `z` a

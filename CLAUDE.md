@@ -20,6 +20,7 @@ owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase na
 | Flow test on a device (42+ checks: screens, settings, save, input) | `scripts\flow-android.ps1 -Serial moto [-NoInstall]` |
 | Save through a force-stop / back key / cold start | `scripts\save-android.ps1`, `backkey-android.ps1`, `coldstart-android.ps1 -Serial moto` |
 | Heat soak: 20 min of `bench_play` on the heaviest level, temperature and memory per minute | `scripts\soak-android.ps1 -Serial moto [-Minutes 20] [-Level 87]` |
+| The release APK on a device: starts, ignores arguments, not debuggable (puts the dev build back) | `scripts\release-check-android.ps1 -Serial moto` |
 | Flashing audit of the win, boss win, lose and core-hit strips | `scripts\flash-audit.ps1 [-NoBuild]` |
 | Level bake (writes `src\sim\levels_baked.h`; about 4 min at 4 jobs) | `build\desktop-dev\glowtide_headless.exe --bake-levels --from 2 --to 300 --jobs 4 --out src\sim\levels_baked.h --report captures\levels\report.md` |
 | Band tables and the P5 checks from the report | `python -I -B tools\band_table.py captures\levels\report.md captures\levels\bands.md` |

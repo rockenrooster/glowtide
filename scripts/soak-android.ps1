@@ -25,15 +25,29 @@ try {
     $appPid = Start-GtApp $Serial "--scenario bench_play --level $Level --seconds 60 --warmup $warm"
     if (-not $appPid) { throw "GLOWTIDE did not start" }
     $t0 = Get-Date
-    for ($m = 1; $m -le $Minutes + 1; ++$m) {
-        while (((Get-Date) - $t0).TotalSeconds -lt $m * 60 - 30) {
+    # One sample on each minute mark (the last one 30 s before the run ends); memory is the median of three reads
+    # 3 s apart, so one level reload's transient GL buffers do not count as growth.
+    function Get-Pss {
+        $p = ((& $GT_ADB -s $Serial shell dumpsys meminfo $appPid) | Select-String 'TOTAL PSS:\s*(\d+)|^\s*TOTAL\s+(\d+)' | Select-Object -First 1)
+        if (-not $p) { return $null }
+        $g = $p.Matches[0].Groups
+        return [int]$(if ($g[1].Value) { $g[1].Value } else { $g[2].Value })
+    }
+    for ($m = 1; $m -le $Minutes; ++$m) {
+        $at = [math]::Min($m * 60, $Minutes * 60 - 30)
+        while (((Get-Date) - $t0).TotalSeconds -lt $at) {
             if (-not (Get-GtPid $Serial)) { break }
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 2
         }
         if (-not (Get-GtPid $Serial)) { break }
         $temp = ((& $GT_ADB -s $Serial shell dumpsys battery) | Select-String 'temperature:\s*(\d+)').Matches.Groups[1].Value
-        $pss = ((& $GT_ADB -s $Serial shell dumpsys meminfo $appPid) | Select-String 'TOTAL PSS:\s*(\d+)|^\s*TOTAL\s+(\d+)' | Select-Object -First 1)
-        $kb = if ($pss -and $pss.Matches[0].Groups[1].Value) { $pss.Matches[0].Groups[1].Value } elseif ($pss) { $pss.Matches[0].Groups[2].Value } else { '' }
+        $reads = @()
+        for ($k = 0; $k -lt 3; ++$k) {
+            $v = Get-Pss
+            if ($v) { $reads += $v }
+            if ($k -lt 2) { Start-Sleep -Seconds 3 }
+        }
+        $kb = if ($reads.Count) { ($reads | Sort-Object)[[int][math]::Floor(($reads.Count - 1) / 2)] } else { '' }
         $fg = Get-GtForegroundPackage $Serial
         $c = if ($temp) { '{0:N1}' -f ([int]$temp / 10.0) } else { '' }
         "$m,$c,$kb,$fg" | Add-Content $csv
