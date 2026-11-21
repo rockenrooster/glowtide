@@ -5,8 +5,8 @@ RAVEFORM's pipeline (`Raveform/docs/RELEASE_PIPELINE.md`) point for point.
 
 ## Where
 
-- The repository: `rockenrooster/glowtide` on GitHub, **public**, the remote `origin` of this checkout. Sessions push only
-  when the owner asks (CLAUDE.md, Conventions).
+- The repository: `rockenrooster/glowtide` on GitHub, **public**, the remote `origin` of this checkout. Sessions may
+  push without asking (the owner, 2026-11-21; CLAUDE.md, Conventions); nothing secret or personal goes in a commit.
 - The workflow: `.github/workflows/release.yml` ("Release APK").
 
 ## What runs, and when

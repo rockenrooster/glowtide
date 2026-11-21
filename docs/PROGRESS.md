@@ -31,7 +31,7 @@ listed under "Choices" below; the owner can reverse any of them.
 | V3 Kinds, twists, bosses | Done on the PC 2026-11-20 (phones: in V4's runs) | Holdout, Colossus, Twins, Festival, four bosses, eight twists; every kind's lines pass in the bake; Siege unchanged |
 | V4 Recipes, calendar, no repeats | Code done 2026-11-20; its table is re-baked in V5 | 24 recipes, 12 set pieces, the calendar, the tuned rule, the bake's three passes, 600 levels, replays; 17 levels not accepted and the variety report failing on this table (below) |
 | V5 Worlds and dressing | Done 2026-11-21 (phones: the Moto; the tablet not reached, the 12R out for now) | Ten worlds (five palettes picked), signatures, two prop families, four sky features, the world's banner, music a world; the table names each level's recipe; generator 11; all 599 levels accepted and both contracts holding on the table; the Moto's frame time brought back to 0.8% late |
-| V6 Balance, polish, release | Done 2026-11-21 except the release itself (the owner's word) | V5's table final; balance by boon and kind; P6's checks again (flash, rebuild, sanitizers, layout lint, greyscale); soaks on the heaviest level and a festival; the release build (3.60 MB) checked on the Moto; documents; cleanup; open items in "After 0.2" |
+| V6 Balance, polish, release | Done 2026-11-21: released as GitHub build 23 (0.2.0); the tablet's rows wait for its pairing | V5's table final; balance by boon and kind; P6's checks again (flash, rebuild, sanitizers, layout lint, greyscale); soaks on the heaviest level and a festival; the release build (3.60 MB) checked on the Moto; documents; cleanup; open items in "After 0.2" |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -639,9 +639,12 @@ the music render); `README.md` (the game as it now is); `RELEASE_CHECKLIST.md` (
 added). **Cleaned up:** `docs/variety/baseline_stats.py` (V0's stand-in), the unused `bruteFromLevel` tweakable, a desktop
 bench file committed by mistake in P4 (now ignored); twists replaced the old bursts in V3 (`Burst` had gone with them).
 
-**The release** waits for the owner's word: pushing `main` publishes GitHub release `build-<n>` with this build (version
-0.2.0). Until the owner runs `scripts\release-key.ps1`, each GitHub build is signed with a key made for that run, so its
-UPDATE download does not install over the build that showed it (uninstall first): RELEASE_PIPELINE.md, Signing.
+**The release** (on the owner's word, 2026-11-21): GitHub release `build-23`, version 0.2.0, with its three files
+(`glowtide.apk` 3,774,048 bytes, its SHA-256, the symbols), built by the workflow in 1 min 50 s. GitHub's latest-release
+API answers `build-23`, which an older GitHub build compares with its own number to show `UPDATE: BUILD 23` (no phone
+here holds an older GitHub build to see it). Until the owner runs `scripts\release-key.ps1`, each GitHub build is signed
+with a key made for that run, so its UPDATE download does not install over the build that showed it (uninstall first):
+RELEASE_PIPELINE.md, Signing.
 
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 

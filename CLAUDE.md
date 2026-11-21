@@ -3,7 +3,7 @@
 Read `docs/PLAN.md` first, then `docs/PROGRESS.md` (phase status, measured numbers, deviations, choices made for the
 owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase names; `docs/subplans/P*.md` per phase.
 
-**The variety and content pass, built (V0-V6, 2026-11-21; version 0.2.0, its release waits for the owner's word)**:
+**The variety and content pass, built and released (V0-V6, 2026-11-21; version 0.2.0, GitHub build 23)**:
 geodes and boons, six kinds of level, twists and bosses, a recipe catalogue, a calendar, 600 levels under a no-repeat
 rule, ten worlds with their own music. Read `docs/VARIETY_PLAN.md` first; it names the
 sections of `docs/VARIETY_DESIGN.md` and `docs/VARIETY_TECH.md` and the work orders `docs/subplans/V0_*.md` to
@@ -82,5 +82,5 @@ external files directory on Android), `GTSIM`, `GTLIFE`, `FLOW`.
   glslangValidator at build time and embedded. Fragment shaders are `mediump` unless a value needs `highp`.
 - No heap allocation in the steady-state frame (global `operator new` is counted; benchmarks report `heap_allocs`).
 - Git: commit at working checkpoints. `origin` is the public GitHub repository `rockenrooster/glowtide` (since
-  2026-11-20): push only when the owner asks; every push to `main` builds and publishes a release APK
+  2026-11-20): the owner allows pushes without asking (2026-11-21); every push to `main` builds and publishes a release APK
   (`docs/RELEASE_PIPELINE.md`). `keys/` holds the release key: gitignored; never commit it, copy it or print it.
