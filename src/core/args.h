@@ -9,6 +9,7 @@ struct Args {
     char scenario[24] = "play";    // play | touch_test | bench_idle | bench_flood | bench_play
     int level = 0;                 // 0: the saved level
     i64 seed = -1;                 // -1: the level's own
+    int recipe = -1;               // the recipe_top picture: a recipe from the catalogue (-1: the calendar's)
     int world = 0;                 // 0: the level's own (1..5)
     char bot[12] = "";             // greedy | naive | sweep | idle
     char picture[40] = "";

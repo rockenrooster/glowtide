@@ -102,9 +102,11 @@ float boonGain(int boon, int lanterns, int quicken, int bright) {
 u64 defaultSeed(int index) { return hash64(u64(index) * 7919u + 17u) & 0xFFFFFFFFull; }
 
 int levelForPlay(int index) {
-    if (index <= 300) return index;
-    return 101 + (index - 301) % 200;
+    if (index <= kLastBaked) return index;
+    return 101 + (index - kLastBaked - 1) % (kLastBaked - 100);
 }
+
+bool isReplay(int index) { return index > kLastBaked; }
 
 // The table's goal number by kind (VARIETY_DESIGN 12.2 step 6): Twins split it between the spires; a festival's is the
 // geodes opened for three stars; a WARD WALL and a cub are shares of a boss's spire.
@@ -131,6 +133,10 @@ LevelDef levelFor(int playIndex) {
     const int index = levelForPlay(maxv(1, playIndex));
     const bool baked = index >= 1 && index <= kBakedCount && kBaked[index - 1].spire > 0;
     LevelDef L = layoutFor(index, baked ? kBaked[index - 1].seed : defaultSeed(index));
+    if (isReplay(playIndex)) {  // VARIETY_DESIGN 16: mirrored, in another world; the rules are symmetric, so the numbers hold
+        mirrorLayout(L);
+        L.world = (L.world - 1 + kReplayWorldShift) % kWorldCount + 1;
+    }
     if (index == 1) return L;
     if (baked) {
         L.spireHealth = kBaked[index - 1].spire;

@@ -37,29 +37,99 @@ const char* boonName(int boon) {
     return nameIn(n, boon);
 }
 
-// V3's simple schedule (VARIETY_PLAN V3 task 8; the calendar proper is V4): levels ending in 5 are festivals from 15,
-// in 0 bosses; places 3 and 7 of each world take Holdout, Colossus and Twins in turn, each from the level that introduces
-// it (21, 31, 41). No kind but Siege comes twice in a row (3 and 7 are never next to 5 or 0).
+namespace {
+// A level that introduces something other than a kind (VARIETY_DESIGN 10.1): a recipe, a twist, a boon, a hand-made
+// lesson or a set piece. A kind's slot moves off it, so the new thing comes on a plain siege.
+bool introducesSomething(int index) {
+    return introRecipe(index) >= 0 || introTwist(index) >= 0 || index == 7 || index == 12 || index == 36 || index == 52 || index == 63 ||
+           index == 76 ||
+           (isHandMade(index) && index != 22 && index != 32 && index != 42) || setPieceAt(index) >= 0;
+}
+
+// The place (2, 3, 7 or 8) of world w's slot `which` (0 or 1) for Holdout, Colossus or Twins, or 0 when it has none.
+// Never next to a festival (5) or a boss (10, and the next world's 1), so no kind but Siege comes twice in a row. The
+// places alternate between worlds so they do not all look alike; worlds 3 to 5 open on place 2, where the kind they
+// introduce stands (22, 32, 42).
+int slotPlace(int w, int which) {
+    if (w < 2) return 0;
+    if (which == 0 && w <= 4) return 2;
+    const int a = which == 0 ? (w % 2 ? 2 : 3) : (w % 2 ? 8 : 7);
+    const int b = which == 0 ? 5 - a : 15 - a;
+    if (!introducesSomething(w * 10 + a)) return a;
+    if (!introducesSomething(w * 10 + b)) return b;
+    return 0;
+}
+}  // namespace
+
+// The kinds (VARIETY_DESIGN 6, 10): festivals on 5 from 15, bosses on 0, and a world's two slots (slotPlace) shared out
+// among Holdout, Colossus and Twins by their weights 10 : 8 : 7 in a smooth weighted turn, each from the level that
+// introduces it. VARIETY_DESIGN 10.1 put those at 21, 31 and 41, right after a boss: they moved one level on (10.1 allows
+// three), so no kind but Siege comes twice in a row.
 int kindFor(int index) {
     if (index <= 5) return kSiege;
     if (index % 10 == 0) return kBoss;
     if (index % 10 == 5 && index >= 15) return kFestival;
-    if (index == 21) return kHoldout;
-    if (index == 31) return kColossus;
-    if (index == 41) return kTwins;
-    const int place = index % 10;
-    if ((place == 3 || place == 7) && index > 21) {
-        const int slot = (index / 10 - 2) * 2 + (place == 7 ? 1 : 0);  // 23 is 0, 27 is 1, 33 is 2, ...
-        const int avail = index > 41 ? 3 : index > 31 ? 2 : 1;
-        static const int order[3] = {kHoldout, kColossus, kTwins};
-        return order[slot % avail];
+    const int w = (index - 1) / 10, place = (index - 1) % 10 + 1;
+    if (place != slotPlace(w, 0) && place != slotPlace(w, 1)) return kSiege;
+    static const int kinds[3] = {kHoldout, kColossus, kTwins};
+    static const float weight[3] = {10, 8, 7};
+    static const int from[3] = {22, 32, 42};
+    float credit[3] = {};
+    int pick = 0;
+    for (int wi = 2; wi <= w; ++wi)
+        for (int s = 0; s < 2; ++s) {
+            const int p = slotPlace(wi, s), i = wi * 10 + p;
+            if (!p || i > index) continue;
+            float total = 0;
+            for (int k = 0; k < 3; ++k) total += i >= from[k] ? weight[k] : 0;
+            int best = -1;
+            for (int k = 0; k < 3; ++k) {
+                if (i < from[k]) continue;
+                credit[k] += weight[k] / total;
+                if (best < 0 || credit[k] > credit[best]) best = k;
+            }
+            for (int k = 0; k < 3; ++k) best = i == from[k] ? k : best;  // an introduction is its kind
+            credit[best] -= 1.0f;
+            pick = best;
+        }
+    return kinds[pick];
+}
+
+// Lengths (VARIETY_DESIGN 9.1, 10.2): Sprint lanes at a world's places 1 and 6, Long lanes at 4, 8 or 9 (one a world,
+// from level 61, which introduces them); Standard otherwise.
+int lengthClassFor(int index) {
+    if (index <= 10 || isHandMade(index)) return kStandard;  // a hand-made lane is a Standard one
+    const int place = (index - 1) % 10 + 1, w = (index - 1) / 10;
+    const int kind = kindFor(index);
+    if (kind == kFestival || kind == kBoss) return kStandard;
+    if (place == 1 || place == 6) return kSprint;
+    static const int longPlace[3] = {4, 8, 9};
+    if (index >= 61 && place == longPlace[w % 3]) return kLong;
+    if (index == 61) return kLong;
+    return kStandard;
+}
+
+// The target time by length class and kind (VARIETY_DESIGN 9.1): the class's time grows until level 30.
+float targetTime(int index, int lengthClass) {
+    static const float intro[5] = {8, 14, 18, 22, 26};
+    if (index >= 1 && index <= 5) return intro[index - 1];
+    const int kind = kindFor(index);
+    if (kind == kFestival) return tune.festivalSeconds;
+    static const float byClass[kLengthCount] = {22, 32, 44};
+    const float ramp = 0.8f + 0.2f * float(minv(index, 30)) / 30.0f;
+    const float cls = byClass[clampv(lengthClass, 0, kLengthCount - 1)] * ramp;
+    switch (kind) {
+        case kHoldout: return 40.0f * ramp;
+        case kTwins: return 1.2f * cls;
+        case kBoss: return 1.4f * byClass[kStandard] * ramp;
+        default: return cls;
     }
-    return kSiege;
 }
 
 float targetTime(int index) {
     static const float intro[5] = {8, 14, 18, 22, 26};
     if (index >= 1 && index <= 5) return intro[index - 1];
+    if (index > 5) return targetTime(index, lengthClassFor(index));
     if (kindFor(index) == kFestival) return tune.festivalSeconds;
     const float t = 24.0f + 0.4f * float(minv(index, 30));
     return index % 10 == 0 ? t * 1.4f : t;
@@ -67,7 +137,7 @@ float targetTime(int index) {
 
 float fightFor(int index) { return tune.fightBase + tune.fightPerLevel * float(minv(float(index), tune.fightLevelCap)); }
 
-int worldFor(int index) { return ((index - 1) / 10) % 5 + 1; }
+int worldFor(int index) { return ((index - 1) / 10) % kWorldCount + 1; }
 
 float hardnessFor(int index) {
     if (index <= 5) return 0.2f;
@@ -77,11 +147,93 @@ float hardnessFor(int index) {
 }
 
 bool isHandMade(int index) {
-    return index <= 6 || index == 11 || index == 15 || index == 16 || index == 21 || index == 23 || index == 31 || index == 38 || index == 41;
+    return index <= 6 || index == 11 || index == 15 || index == 16 || index == 22 || index == 23 || index == 32 || index == 38 || index == 42;
+}
+
+// The set pieces (VARIETY_DESIGN 10.3): the hard level before every fiftieth, 49 to 599; -1 elsewhere.
+int setPieceAt(int index) { return index % 50 == 49 && index <= 599 ? (index - 49) / 50 : -1; }
+
+// The name a level shows under its LEVEL chip and in its first second, and its one hint line (VARIETY_DESIGN 10.1, 10.3):
+// a set piece's, or the recipe the level introduces; null for any other level.
+const char* levelTitle(int index) {
+    const int p = setPieceAt(index), r = introRecipe(index);
+    return p >= 0 ? recipeName(recipeCount() + p) : r >= 0 ? kRecipes[r].name : nullptr;
+}
+const char* levelIdea(int index) {
+    const int p = setPieceAt(index), r = introRecipe(index);
+    return p >= 0 ? kSetPieces[p].idea : r >= 0 ? kRecipes[r].idea : nullptr;
+}
+
+// The introductions of VARIETY_DESIGN 10.1 that are not hand-made: on its level a recipe, a plan or a twist comes for the
+// first time, forced there (a generated level of that recipe, with its name and idea as the hint: see PROGRESS.md). The
+// stretch items that were not built leave their levels (76, 83, 88, 91) to two things already in, together (76 side doors
+// on a recipe the seed draws, 83 runner packs, 88 ECLIPSE, 91 GOLDEN GATE), and the executor's last two recipes come there.
+int introRecipe(int index) {
+    switch (index) {
+        case 17: return 14;  // Hopscotch (hoppers came on 16)
+        case 24: return 21;  // Gauntlet (the executor's)
+        case 26: return 12;  // Crossroads: choice pairs
+        case 28: return 9;   // Crossfire: side doors, plan Flank
+        case 33: return 2;   // Twin rivers
+        case 39: return 20;  // Breathing ladder (the executor's; breathing gates came on 38)
+        case 46: return 5;   // Toll road: sliding walls arrive with it
+        case 56: return 13;  // Treasure walls: vaults
+        case 58: return 3;   // Checker
+        case 61: return 7;   // Stagger: the first Long lane
+        case 68: return 6;   // Pendulum
+        case 73: return 4;   // The vault (a level on: something new every five levels from 68 to 88)
+        case 78: return 15;  // The narrows
+        case 83: return 8;   // Islands, three levels early (VARIETY_DESIGN 10.1 allows it), with runner packs
+        case 88: return 23;  // Late bloom (the executor's) under ECLIPSE: GATE STORM's level
+        case 91: return 22;  // Shifting window (the executor's) with GOLDEN GATE: the portals' level
+        case 93: return 10;  // The breach
+        case 96: return 11;  // Caravan, with shields
+        default: return -1;
+    }
+}
+
+int introPlanFor(int index) {
+    if (index == 76) return kPlanFlank;
+    if (index == 83) return kPlanRunnerPacks;
+    for (int p = 1; p < kPlanCount; ++p)
+        if (index == planFrom(p)) return p;
+    return -1;
+}
+
+int introTwist(int index) {
+    switch (index) {
+        case 43: return kTwistGeodeRain;
+        case 48: return kTwistEclipse;
+        case 66: return kTwistGoldenGate;
+        case 88: return kTwistEclipse;
+        case 91: return kTwistGoldenGate;
+        default: return -1;
+    }
+}
+
+// The recipe a generated level gets when no introduction forces one: any recipe that serves its kind and has come by
+// then, drawn by the seed (the bake's first pass tries seeds until the no-repeat rule holds: VARIETY_DESIGN 11).
+// A recipe made for one kind (Dawn line, The long walk, Two towers, Festival field) is drawn three times as often on its
+// kind: those come six to ten times a hundred levels, and each of their recipes should show at least twice.
+int pickRecipe(int index, int kind, Rng& r) {
+    int allowed[32], n = 0;
+    float weight[32], total = 0;
+    for (int i = 0; i < recipeCount() && n < 32; ++i)
+        if ((kRecipes[i].kinds >> kind & 1u) && index >= kRecipes[i].from) {
+            const u32 k = kRecipes[i].kinds;
+            weight[n] = (k & (k - 1)) == 0 ? 3.0f : 1.0f;
+            total += weight[n];
+            allowed[n++] = i;
+        }
+    if (n == 0) return 0;
+    float pick = r.range(0, total);
+    int i = 0;
+    while (i < n - 1 && pick >= weight[i]) pick -= weight[i++];
+    return allowed[i];
 }
 
 int planFrom(int plan) {
-    static const int from[kPlanCount] = {2, 18, 22, 27, 34, 28, 37, 30};
+    static const int from[kPlanCount] = {2, 18, 24, 27, 34, 28, 37, 30};  // Pincer on 24: 22 is the first holdout
     return plan >= 0 && plan < kPlanCount ? from[plan] : 1 << 20;
 }
 

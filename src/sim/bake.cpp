@@ -6,10 +6,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <thread>
 #include <vector>
 
 #include "core/tuning.h"
+#include "sim/fingerprint.h"
 #include "sim/level_build.h"
 
 namespace gt::sim {
@@ -397,6 +399,20 @@ float delivers(const LevelDef& def, BotKind kind) {
     return maxv(1.0f, float(runLevel(def, kind, 1, ro).delivered));
 }
 
+// Line g's cheap forecast (VARIETY_DESIGN 12.2 line g, before the costly runs): on a level with a lasting boon, the boons
+// taken freely must raise greedy's delivery 12% over podless's with no enemy, or greedy will not be 10% faster with the
+// enemy on either. Hand-made levels, festivals, holdouts and colossi pass: a festival and a holdout have other lines, and
+// a colossus is won or lost as it arrives, so a slightly weaker stream loses outright (line g holds by "podless loses").
+bool forecastG(const LevelDef& def) {
+    if (isHandMade(def.index) || def.kind == kFestival || def.kind == kHoldout || def.kind == kColossus) return true;
+    bool lasting = false;
+    for (int i = 0; i < def.geodeCount; ++i)
+        lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
+                  def.geodes[i].boon == kBoonKindle;
+    if (!lasting) return true;
+    return delivers(def, BotKind::Greedy) >= 1.12f * (def.geodeCount ? delivers(def, BotKind::Podless) : 0.0f);
+}
+
 // VARIETY_DESIGN 12.2 for one level: the layout from its seed, then Pa, Pn, the reliance m, R, geode health, the enemy,
 // the spire, the acceptance; the next seed while a line fails (up to eight; hand-made levels have one).
 BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
@@ -424,7 +440,7 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
         for (int i = 0; i < def.geodeCount; ++i)
             lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
                       def.geodes[i].boon == kBoonKindle;
-        if (!hand && lasting && def.kind != kFestival && def.kind != kHoldout && pa < 1.12f * pn) {
+        if (!hand && lasting && def.kind != kFestival && def.kind != kHoldout && def.kind != kColossus && pa < 1.12f * pn) {
             b.seed = seed;
             std::snprintf(b.acc.why, sizeof b.acc.why, "g: with no enemy greedy delivers %.0f a second, podless %.0f", double(pa / T),
                           double(pn / T));
@@ -501,6 +517,20 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
                 scale *= 0.85f;
                 def.baseFlow = def.fight * R / T * scale;
                 acc = accept(def, 0, false);
+            }
+            // Both bots kept every pip: the night was too mild for the boons to matter (line g). A stronger night, while
+            // greedy still holds it (lines a and b).
+            for (int fix = 0; fix < 3 && !acc.ok && std::strncmp(acc.why, "g: podless keeps", 16) == 0; ++fix) {
+                const float before = scale;
+                scale *= 1.2f;
+                def.baseFlow = def.fight * R / T * scale;
+                const Acceptance harder = accept(def, 0, false);
+                if (harder.why[0] == 'a' || harder.why[0] == 'b') {  // too strong for greedy: keep the milder night
+                    scale = before;
+                    def.baseFlow = def.fight * R / T * scale;
+                    break;
+                }
+                acc = harder;
             }
             if (acc.ok && def.geodeCount > 0) acc.hungryTime = botTime(def, BotKind::Hungry, 5, acc.hungryWins);
             b.seed = seed;
@@ -763,6 +793,129 @@ int fluxFindings() {
     return 0;
 }
 
+// --sim forecast: line g's forecast on a level's first seeds (the bake's pass 1 numbering): what greedy and podless
+// deliver a second with no enemy, and the geodes greedy opened.
+int forecastReport(int level, int tries) {
+    std::printf("| Seed number | Recipe | Greedy /s | Podless /s | Ratio | Greedy opened | Forecast |\n|---|---|---|---|---|---|---|\n");
+    int pass = 0;
+    for (int t = 0; t < tries; ++t) {
+        const LevelDef def = layoutFor(level, seedFor(level, t));
+        RunOptions ro;
+        ro.seconds = def.targetT;
+        ro.unbreakable = true;
+        ro.enemyOff = true;
+        const RunResult g = runLevel(def, BotKind::Greedy, 1, ro), p = runLevel(def, BotKind::Podless, 1, ro);
+        const float pa = float(g.delivered) / def.targetT, pn = float(p.delivered) / def.targetT;
+        const bool ok = forecastG(def);
+        pass += ok ? 1 : 0;
+        std::printf("| %d | %s | %.0f | %.0f | %.2f | %d of %d | %s |\n", t, recipeName(def.recipe), double(pa), double(pn),
+                    double(pa / maxv(1.0f, pn)), g.geodesOpened, g.geodesShown, ok ? "pass" : "fail");
+    }
+    std::printf("\nforecast: %d of %d pass\n", pass, tries);
+    return 0;
+}
+
+// --sim forecast --all: line g's forecast on every recipe, `tries` seeds each on levels of a kind it serves from its first
+// level on (which recipes the bake's first pass will rarely find a layout for).
+int forecastRecipes(int tries) {
+    std::printf("| Recipe | Seeds | Forecast passes | Greedy / podless, mean |\n|---|---|---|---|\n");
+    for (int rc = 0; rc < recipeCount(); ++rc) {
+        int pass = 0, n = 0;
+        double ratio = 0;
+        for (int s = 0; s < tries; ++s) {
+            int level = maxv(25, kRecipes[rc].from) + (s * 37) % 300;
+            for (int k = 0; k < 40 && !(kRecipes[rc].kinds >> kindFor(level) & 1u); ++k) ++level;
+            LevelDef def = generateWith(level, hash64(u64(s) * 7919u + u64(rc)) & 0xFFFFFFFFull, rc);
+            sizeGeodes(def);
+            if (def.kind == kFestival || def.kind == kHoldout) continue;
+            RunOptions ro;
+            ro.seconds = def.targetT;
+            ro.unbreakable = true;
+            ro.enemyOff = true;
+            const float pa = float(runLevel(def, BotKind::Greedy, 1, ro).delivered), pn = float(runLevel(def, BotKind::Podless, 1, ro).delivered);
+            ratio += double(pa / maxv(1.0f, pn));
+            pass += forecastG(def) ? 1 : 0;
+            ++n;
+        }
+        if (n) std::printf("| %s | %d | %d (%.0f%%) | %.2f |\n", recipeName(rc), n, pass, 100.0 * pass / n, ratio / n);
+    }
+    return 0;
+}
+
+// --sim balance (VARIETY_PLAN V6 task 3): greedy and podless once each on every level of the table, with the enemy.
+int balanceReport(int from, int to) {
+    struct Tally {
+        int levels = 0, offered = 0, taken = 0, wins = 0;
+        double gain = 0, timeT = 0;
+        int lowestCore = 10;
+    };
+    Tally boons[kBoonCount], plans[kPlanCount], twists[kTwistCount], recipes[64], kinds[kKindCount];
+    for (int l = from; l <= to; ++l) {
+        const LevelDef def = levelFor(l);
+        if (def.kind == kFestival) continue;  // no enemy, no core: its own numbers are in the bake report
+        RunOptions ro;
+        ro.seconds = 2.5f * def.targetT;
+        // Greedy, watching which boons it opens.
+        thread_local World w;
+        Bot bot;
+        w.init(def, 1);
+        bot.init(BotKind::Greedy, 1);
+        int lowest = w.core;
+        bool took[kBoonCount] = {};
+        const int ticks = int(ro.seconds * 60.0f);
+        for (int t = 0; t < ticks && w.result == Result::None; ++t) {
+            w.tick(bot.think(w));
+            lowest = minv(lowest, int(w.core));
+            for (int e = 0; e < w.eventCount; ++e)
+                if (w.events[e].type == kEvGeodeOpen) took[clampv(int(w.events[e].b), 0, kBoonCount - 1)] = true;
+        }
+        const bool won = w.result == Result::Win;
+        const float gt = won ? w.time() : 1e6f;
+        const RunResult p = runLevel(def, BotKind::Podless, 1, ro);
+        const float pt = p.result == Result::Win ? p.time : 1e6f;
+        const float gain = gt < 1e5f ? (pt < 1e5f ? pt / gt - 1.0f : 1.0f) : 0.0f;  // podless lost: count it as twice as slow
+        bool offered[kBoonCount] = {};
+        for (int g = 0; g < def.geodeCount; ++g)
+            if (!(def.geodes[g].twist && def.twists[def.geodes[g].twist - 1].type == kTwistSecondWind)) offered[def.geodes[g].boon] = true;
+        for (int b = 0; b < kBoonCount; ++b) {
+            if (!offered[b]) continue;
+            boons[b].offered++;
+            boons[b].taken += took[b] ? 1 : 0;
+            boons[b].gain += double(gain);
+        }
+        auto add = [&](Tally& t) {
+            t.levels++;
+            t.wins += won ? 1 : 0;
+            t.timeT += won ? double(gt / def.targetT) : 0.0;
+            t.gain += double(gain);
+            t.lowestCore = minv(t.lowestCore, lowest);
+        };
+        add(plans[def.plan % kPlanCount]);
+        add(kinds[def.kind % kKindCount]);
+        if (!isHandMade(l)) add(recipes[def.recipe & 63]);
+        for (int k = 0; k < def.twistCount; ++k)
+            if (def.twists[k].type != kTwistSecondWind) add(twists[def.twists[k].type % kTwistCount]);
+    }
+    std::printf("# Balance by boon, plan, twist, recipe and kind, levels %d to %d (greedy and podless, one run each)\n\n", from, to);
+    std::printf("| Boon | Levels offering it | Greedy takes it | Greedy's gain over podless (mean) |\n|---|---|---|---|\n");
+    for (int b = 0; b < kBoonCount; ++b)
+        if (boons[b].offered)
+            std::printf("| %s | %d | %.0f%% | %.0f%% |\n", boonName(b), boons[b].offered, 100.0 * boons[b].taken / boons[b].offered,
+                        100.0 * boons[b].gain / boons[b].offered);
+    auto table = [&](const char* what, Tally* t, int n, const char* (*name)(int)) {
+        std::printf("\n| %s | Levels | Greedy wins | Time / T (wins) | Greedy's lowest core | Gain over podless |\n|---|---|---|---|---|---|\n", what);
+        for (int i = 0; i < n; ++i)
+            if (t[i].levels)
+                std::printf("| %s | %d | %.0f%% | %.2f | %d | %.0f%% |\n", name(i), t[i].levels, 100.0 * t[i].wins / t[i].levels,
+                            t[i].wins ? t[i].timeT / t[i].wins : 0.0, t[i].lowestCore, 100.0 * t[i].gain / t[i].levels);
+    };
+    table("Plan", plans, kPlanCount, planName);
+    table("Twist", twists, kTwistCount, twistName);
+    table("Recipe", recipes, recipeCount() + setPieceCount(), recipeName);
+    table("Kind", kinds, kKindCount, kindName);
+    return 0;
+}
+
 int acceptIntro(int from, int to) {
     int failed = 0;
     for (int level = from; level <= to; ++level) {
@@ -795,7 +948,10 @@ int acceptIntro(int from, int to) {
     return failed ? 1 : 0;
 }
 
-int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report) {
+int finishBake(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, std::vector<BakeOut>& results,
+               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0);
+
+int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, const char* repairOnly) {
     from = maxv(2, from);
     const int n = to - from + 1;
     if (n <= 0) return 2;
@@ -803,11 +959,52 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
     std::atomic<int> next{0};
     std::atomic<int> doneCount{0};
     const double t0 = wallSeconds();
+    if (repairOnly) {
+        // A repair-only run: the levels the table marks "(not accepted)" in from..to, on the table this program was built
+        // with (the same file); every other row stays as it is.
+        std::vector<int> marked;
+        if (FILE* in = std::fopen(repairOnly, "rb")) {
+            char line[256];
+            while (std::fgets(line, sizeof line, in)) {
+                const char* c = std::strstr(line, "// ");
+                int level = 0;
+                if (c && std::strstr(c, "(not accepted)") && std::sscanf(c + 3, "%d", &level) == 1 && level >= from && level <= to)
+                    marked.push_back(level);
+            }
+            std::fclose(in);
+        }
+        std::vector<Fingerprint> fps(size_t(maxv(to, keepTo) + 1));
+        for (int l = 1; l < int(fps.size()); ++l) fps[size_t(l)] = fingerprintOf(levelFor(l));
+        std::vector<LayoutChoice> picks(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            const LevelDef d = levelFor(from + i);
+            picks[size_t(i)].tries = int((d.seed - defaultSeed(from + i)) / 1000003u);
+            results[size_t(i)].accepted = true;  // kept: written from the table below
+        }
+        for (int l : marked) results[size_t(l - from)].accepted = false;
+        std::printf("repair only: %d levels marked not accepted in %s\n", int(marked.size()), repairOnly);
+        return finishBake(from, to, jobs, keepTo, out, report, repairSeeds, results, fps, picks, t0);
+    }
+    // Pass 1 (VARIETY_TECH 5): the layouts, one thread, in level order, each the first seed that passes the lints and
+    // VARIETY_DESIGN 11's rule against every level already chosen (level 1 and the rows outside from..to as the table has
+    // them).
+    // Of the layouts that keep the rule, pass 1 takes one that line g's cheap forecast keeps (forecastG), so pass 2 balances
+    // a layout whose boons can pay.
+    std::vector<Fingerprint> fps;
+    std::vector<LayoutChoice> picks = chooseLayouts(from, to, keepTo, fps, 64, forecastG, jobs);
+    int ruleless = 0, unviable = 0;
+    for (const LayoutChoice& c : picks) ruleless += c.broken > 0 ? 1 : 0, unviable += c.unviable;
+    std::printf("pass 1: %d layouts in %.1f s; %d found no seed that keeps the rule; %d candidates the forecast threw away\n", n,
+                wallSeconds() - t0, ruleless, unviable);
+    for (int i = 0; i < n; ++i)
+        if (picks[size_t(i)].broken) std::printf("  level %d: %d pairs broken (%s)\n", from + i, picks[size_t(i)].broken, picks[size_t(i)].why);
+    std::fflush(stdout);
+    // Pass 2: balance, in parallel, each level on the layout pass 1 chose.
     auto worker = [&]() {
         for (;;) {
             const int i = next.fetch_add(1);
             if (i >= n) return;
-            results[size_t(i)] = bakeOne(from + i);
+            results[size_t(i)] = bakeOne(from + i, picks[size_t(i)].tries, 1);
             const BakeOut& b = results[size_t(i)];
             const int d = doneCount.fetch_add(1) + 1;
             std::printf("bake %d/%d: level %d %s (seed %llu, spire %d, flow %.1f, Pa %.0f Pn %.0f m %.2f, share %.0f%%/%.0f%%, greedy %d/10 "
@@ -822,22 +1019,58 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
     std::vector<std::thread> pool;
     for (int j = 0; j < maxv(1, jobs); ++j) pool.emplace_back(worker);
     for (std::thread& t : pool) t.join();
+    for (BakeOut& b : results) b.done = true;
+    return finishBake(from, to, jobs, keepTo, out, report, repairSeeds, results, fps, picks, t0);
+}
 
-    // Repair (VARIETY_TECH 5, pass 3): every generated level still not accepted gets twenty-four more seeds.
+// Pass 3 and the outputs. A result with `done` false is a row kept from the table (a repair-only run).
+int finishBake(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, std::vector<BakeOut>& results,
+               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0) {
+    const int n = to - from + 1;
+    std::vector<std::thread> pool;
+    // Pass 3, repair (VARIETY_TECH 5): every generated level not accepted takes the next seeds whose layouts pass the lints
+    // and the rule against the levels on both sides, and balances them, up to `repairSeeds` (eight in VARIETY_TECH 5);
+    // levels are repaired in parallel, so a layout that was accepted is taken only if the rule still holds against its
+    // neighbours as they are then.
     std::vector<int> repair;
     for (int i = 0; i < n; ++i)
         if (!results[size_t(i)].accepted && !isHandMade(from + i)) repair.push_back(i);
     std::atomic<int> nextRepair{0};
+    std::mutex fpLock;
+    const std::vector<bool> allFixed(fps.size(), true);
     auto repairWorker = [&]() {
+        char lintWhy[96];
         for (;;) {
             const int k = nextRepair.fetch_add(1);
             if (k >= int(repair.size())) return;
-            const int i = repair[size_t(k)];
-            BakeOut b = bakeOne(from + i, 12, 24);
-            if (b.accepted || b.seedsTried == 0) results[size_t(i)] = b;
-            else results[size_t(i)].seedsTried = b.seedsTried;
-            std::printf("repair: level %d %s after %d seeds%s%s %.0f s\n", from + i, b.accepted ? "accepted" : "NOT ACCEPTED", b.seedsTried,
-                        b.accepted ? "" : ": ", b.accepted ? "" : b.acc.why, wallSeconds() - t0);
+            const int i = repair[size_t(k)], level = from + i;
+            int balanced = 0, t = picks[size_t(i)].tries + 1;
+            BakeOut last;
+            bool done = false;
+            for (; balanced < repairSeeds && t < picks[size_t(i)].tries + 1 + 64 * repairSeeds && !done; ++t) {
+                const LevelDef def = layoutFor(level, seedFor(level, t));
+                if (!lintLevel(def, level, lintWhy, sizeof lintWhy)) continue;
+                const Fingerprint f = fingerprintOf(def);
+                {
+                    std::lock_guard<std::mutex> g(fpLock);
+                    if (!ruleHolds(fps, allFixed, level, f, nullptr, nullptr, 1)) continue;
+                }
+                last = bakeOne(level, t, 1);
+                // A layout line g's forecast threw away (two runs with no enemy) is not one of the eight balanced.
+                if (std::strncmp(last.acc.why, "g: with no enemy", 16) != 0) ++balanced;
+                if (!last.accepted) continue;
+                std::lock_guard<std::mutex> g(fpLock);
+                if (ruleHolds(fps, allFixed, level, f, nullptr, nullptr, 1)) {
+                    fps[size_t(level)] = f;
+                    picks[size_t(i)].tries = t;
+                    results[size_t(i)] = last;
+                    results[size_t(i)].done = true;
+                    done = true;
+                }
+            }
+            if (!done && results[size_t(i)].done) results[size_t(i)].seedsTried += balanced;  // a kept row stays as it was
+            std::printf("repair: level %d %s after %d more seeds%s%s %.0f s\n", level, done ? "accepted" : "NOT ACCEPTED", balanced,
+                        done ? "" : ": ", done ? "" : last.acc.why, wallSeconds() - t0);
             std::fflush(stdout);
         }
     };
@@ -849,6 +1082,9 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
 
     int rejected = 0;
     for (const BakeOut& b : results) rejected += !b.accepted;
+    std::vector<int> stillMarked;  // a repair-only run's levels that kept their old row and stay not accepted
+    for (int i = 0; i < n; ++i)
+        if (!results[size_t(i)].accepted && !results[size_t(i)].done) stillMarked.push_back(from + i);
     if (out) {
         FILE* f = std::fopen(out, "wb");
         if (!f) return 1;
@@ -858,10 +1094,15 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
         std::fprintf(f, "static const BakedLevel kBaked[] = {\n");
         const int count = maxv(to, keepTo);
         for (int level = 1; level <= count; ++level) {
-            if (level >= from && level <= to) {
+            if (level >= from && level <= to && results[size_t(level - from)].done) {
                 const BakeOut& b = results[size_t(level - from)];
                 std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d%s\n", (unsigned long long)b.seed, b.spire, double(b.baseFlow),
                              double(b.ref), level, b.accepted ? "" : " (not accepted)");
+            } else if (level >= from && level <= to) {
+                const LevelDef d = levelFor(level);
+                const bool marked = std::find(stillMarked.begin(), stillMarked.end(), level) != stillMarked.end();
+                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d%s\n", (unsigned long long)d.seed, d.spireHealth,
+                             double(d.baseFlow), double(d.ref), level, marked ? " (not accepted)" : "");
             } else {
                 const LevelDef d = levelFor(level);
                 std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d\n", (unsigned long long)d.seed, d.spireHealth,
@@ -883,24 +1124,28 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
                         "runs in which the core was hit and a gloom came below the first gate row. Podless and Hungry: wins of five, "
                         "median time.\n\n",
                      from, to);
-        std::fprintf(f, "| Level | Accepted | h | Rows | Patterns | Kind | Plan | Geodes | Pa /s | Pn /s | m | R | Fight | Target | Cancelled | Scale | "
-                        "Spire | Greedy wins | Time (T) | Core | Opened | Pip lost | Deep gloom | Podless | Hungry | Naive | Lowest gloom z | "
-                        "Peak tide | Peak units | Seeds |\n");
-        std::fprintf(f, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+        std::fprintf(f, "| Level | Accepted | h | Rows | Patterns | Kind | Recipe | Plan | Twists | Geodes | Pa /s | Pn /s | m | R | Fight | Target | "
+                        "Cancelled | Scale | Spire | Greedy wins | Time (T) | Core | Opened | Pip lost | Deep gloom | Podless | Hungry | Naive | "
+                        "Lowest gloom z | Peak tide | Peak units | Seeds |\n");
+        std::fprintf(f, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         for (const BakeOut& b : results) {
+            if (!b.done) continue;  // a row a repair-only run kept: its line is in the earlier report
             const LevelDef d = layoutFor(b.index, b.seed);
             auto botCell = [](char* out, size_t n, int wins, float time) {
                 if (time >= 1e5f) std::snprintf(out, n, "%d/5 -", wins);
                 else std::snprintf(out, n, "%d/5 %.1f", wins, double(time));
             };
-            char pod[32], hun[32];
+            char pod[32], hun[32], tw[64] = "";
             botCell(pod, sizeof pod, b.acc.podlessWins, b.acc.podlessTime);
             botCell(hun, sizeof hun, b.acc.hungryWins, b.acc.hungryTime);
-            std::fprintf(f, "| %d | %s | %.2f | %d | %s | %s | %s | %s | %.0f | %.0f | %.2f | %.0f | %.0f%% | %.0f%% | %.0f%% | %.2f | %d | %d/10 | "
-                            "%.1f (%.0f) | %.0f | %.0f/%.0f | %d | %d | %s | %s | %s | %.1f | %lld | %d | %d |\n",
+            for (int k = 0; k < d.twistCount; ++k)
+                if (d.twists[k].type != kTwistSecondWind)
+                    std::snprintf(tw + std::strlen(tw), sizeof tw - std::strlen(tw), "%s%s", tw[0] ? ", " : "", twistName(d.twists[k].type));
+            std::fprintf(f, "| %d | %s | %.2f | %d | %s | %s | %s | %s | %s | %s | %.0f | %.0f | %.2f | %.0f | %.0f%% | %.0f%% | %.0f%% | %.2f | %d | "
+                            "%d/10 | %.1f (%.0f) | %.0f | %.0f/%.0f | %d | %d | %s | %s | %s | %.1f | %lld | %d | %d |\n",
                          b.index, b.accepted ? "yes" : b.acc.why, double(d.hardness), b.rows, b.patterns,
-                         d.kind == kBoss ? bossName(d.bossType) : kindName(d.kind), planName(d.plan),
-                         b.boons[0] ? b.boons : "-",
+                         d.kind == kBoss ? bossName(d.bossType) : kindName(d.kind), isHandMade(d.index) ? "by hand" : recipeName(d.recipe),
+                         planName(d.plan), tw[0] ? tw : "-", b.boons[0] ? b.boons : "-",
                          double(b.pa), double(b.pn), double(b.m), double(b.ref), double(b.fight * 100), double(b.target * 100),
                          double(b.acc.medShare * 100), double(b.scale), b.spire, b.acc.wins, double(b.acc.medTime), double(d.targetT),
                          double(b.acc.medCore), double(b.acc.medOpened), double(b.acc.medShown), b.acc.pipLost, b.acc.deepGloom, pod, hun,

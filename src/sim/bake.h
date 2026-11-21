@@ -43,11 +43,20 @@ int bakeTable(int from, int to, const char* bots, int seeds);
 int soak(int from, int to, const char* bots);
 // --sim accept: GAME_DESIGN 8's acceptance table for the hand-made levels (and 7.4's lines for 2-5).
 int acceptIntro(int from, int to);
+// --sim balance: VARIETY_PLAN V6 task 3's tables (by boon, plan, twist, recipe, kind) from one greedy and one podless run a
+// level of the table.
+int balanceReport(int from, int to);
+// --sim forecast --level N [--seeds K]: line g's forecast on the level's first K seeds (pass 1's numbering).
+int forecastReport(int level, int tries);
+int forecastRecipes(int tries);  // --sim forecast --all
 // --sim flux: GAME_DESIGN 5.9's four findings, checked with the real simulation on level 5's layout and on a
 // three-row x30 layout (the cases of docs/concept/flux_model.py). Prints markdown.
 int fluxFindings();
 // --bake-levels: VARIETY_DESIGN 12.2 for levels from..to; writes levels_baked.h and the report. Rows before `from`, and
 // past `to` up to `keepTo`, are copied from the table this program was built with (re-baking a few levels in place).
-int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report);
+// repairSeeds: the balanced seeds pass 3 gives a level (VARIETY_TECH 5 says eight); repairOnly: a table file whose levels
+// marked "(not accepted)" are repaired, every other row kept (this program must have been built with that table).
+int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds = 8,
+               const char* repairOnly = nullptr);
 
 }  // namespace gt::sim

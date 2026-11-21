@@ -31,7 +31,7 @@ $lock = Enter-GtDeviceLock $Serial 'glowtide-picture'
 $awake = $null
 try {
     if ($Install) {
-        $apk = Join-Path $GT_ROOT 'android\app\build\outputs\apk\dev\app-dev.apk'
+        $apk = if ($env:GT_APK) { $env:GT_APK } else { Join-Path $GT_ROOT 'android\app\build\outputs\apk\dev\app-dev.apk' }
         & $GT_ADB -s $Serial install -r -t $apk | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "install failed on $Serial" }
     }
@@ -44,7 +44,9 @@ try {
     $held = $false
     while ((Get-Date) -lt $deadline) {
         $log = @(& $GT_ADB -s $Serial logcat -d --pid=$appPid -s GLOWTIDE:I)
-        if (-not $frameLine) { $frameLine = $log | Where-Object { $_ -match 'frame \d+x\d+ px, dp scale' } | Select-Object -Last 1 }
+        # The last frame line: the first can come before the window's insets are known.
+        $fl = $log | Where-Object { $_ -match 'frame \d+x\d+ px, dp scale' } | Select-Object -Last 1
+        if ($fl) { $frameLine = $fl }
         if ($log | Where-Object { $_ -match 'picture: holding frame' }) { $held = $true; break }
         if (-not (Get-GtPid $Serial)) { break }
         Start-Sleep -Seconds 1

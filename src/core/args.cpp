@@ -60,6 +60,9 @@ bool parseArgs(int argc, char** argv, Args& a) {
         } else if (!std::strcmp(k, "--seed")) {
             if (!need() || !toInt(v, iv)) return false;
             a.seed = iv;
+        } else if (!std::strcmp(k, "--recipe")) {
+            if (!need() || !toInt(v, iv) || iv < 0) return false;
+            a.recipe = int(iv);
         } else if (!std::strcmp(k, "--world")) {
             if (!need() || !toInt(v, iv) || iv < 1 || iv > 5) return false;
             a.world = int(iv);

@@ -13,7 +13,7 @@ Assert-GtDevice $Serial
 $lock = Enter-GtDeviceLock $Serial "glowtide-flow"
 try {
     if (-not $NoInstall) {
-        $apk = Join-Path $GT_ROOT 'android\app\build\outputs\apk\dev\app-dev.apk'
+        $apk = if ($env:GT_APK) { $env:GT_APK } else { Join-Path $GT_ROOT 'android\app\build\outputs\apk\dev\app-dev.apk' }
         & $GT_ADB -s $Serial install -r -t $apk | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "install failed on $Serial" }
     }

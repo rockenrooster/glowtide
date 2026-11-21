@@ -9,6 +9,7 @@ param(
     [ValidateSet('debug', 'dev')][string]$Config = 'debug',
     [switch]$NoBuild,
     [switch]$Lint,
+    [int]$Recipe = -1,
     [int]$From = 0,
     [int]$Count = 30,
     [int[]]$Levels = @()
@@ -104,6 +105,18 @@ if ($Set -eq 'p3') {
     foreach ($s in $screens) { foreach ($r in $matrix) { $list["${s}_$r"] = "--picture $s --res $r" } }
     $list['button_strip'] = '--picture button_strip --strip 3 --strip-step 6'
 }
+if ($Set -eq 'recipes') {
+    # The catalogue from above (VARIETY_PLAN V4): three seeds of each recipe, or with -Recipe N twenty seeds of one.
+    $n = 24
+    $recipeList = if ($Recipe -ge 0) { @($Recipe) } else { 0..($n - 1) }
+    $seedCount = if ($Recipe -ge 0) { 20 } else { 3 }
+    foreach ($rc in $recipeList) {
+        for ($k = 0; $k -lt $seedCount; ++$k) {
+            $lv = 100 + 17 * $k + $rc
+            $list[('recipe_{0:D2}_{1:D2}' -f $rc, $k)] = "--picture recipe_top --recipe $rc --level $lv --seed $(1000 + 37 * $k + $rc) --no-hud --frames 4 --res 540x1200"
+        }
+    }
+}
 if ($Set -eq 'v3') {
     # Each kind's HUD across the aspect matrix, for the layout lint (VARIETY_PLAN V3 task 11).
     foreach ($k in 'holdout', 'colossus', 'twins', 'festival', 'boss') { foreach ($r in $matrix) { $list["hud_${k}_$r"] = "--picture hud_$k --res $r" } }
@@ -151,7 +164,11 @@ foreach ($name in $list.Keys) {
     if ($a -match '--strip') { python -I -B (Join-Path $GT_ROOT 'tools\contact.py') strip (Join-Path $out "${name}_sheet.png") $png | Out-Null }
     Write-Host "[review] $name"
 }
-if ($smalls.Count -and $Set -eq 'levels' -and ($From -gt 0 -or $Levels.Count)) {
+if ($smalls.Count -and $Set -eq 'recipes') {
+    $sheet = if ($Recipe -ge 0) { 'sheet_recipe_{0:D2}.png' -f $Recipe } else { 'sheet_recipes.png' }
+    $cols = if ($Recipe -ge 0) { 10 } else { 12 }
+    python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out $sheet) @smalls --cols ([math]::Min($cols, $smalls.Count)) --height 520
+} elseif ($smalls.Count -and $Set -eq 'levels' -and ($From -gt 0 -or $Levels.Count)) {
     $sheet = if ($Levels.Count) { 'sheet_levels.png' } else { "sheet_${From}_$($From + $Count - 1).png" }
     python -I -B (Join-Path $GT_ROOT 'tools\contact.py') sheet (Join-Path $out $sheet) @smalls --cols ([math]::Min(10, $smalls.Count)) --height 520
 } elseif ($smalls.Count -and $Set -eq 'levels') {

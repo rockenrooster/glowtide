@@ -44,7 +44,7 @@ if (-not $NoInstall) {
 $r = Invoke-Step 'flow-android.ps1' @('-Serial', $Serial, '-NoInstall')
 Add-Row 'Flow test' ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match '\[flow\]' } | Select-Object -Last 1))"
 $r = Invoke-Step 'simhash-android.ps1' @('-Serial', $Serial)
-Add-Row 'Determinism against the PC (9 levels, 4 with geodes)' ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match '\[simhash\] (PASS|FAIL)' } | Select-Object -Last 1))"
+Add-Row 'Determinism against the PC (the hash levels: kHashLevels)' ($r.code -eq 0) "$(($r.out | Where-Object { $_ -match '\[simhash\] (PASS|FAIL)' } | Select-Object -Last 1))"
 # The phone draws what the PC draws (VARIETY_TECH 12, trap 1: a phone once passed everything with no crowd on screen).
 foreach ($p in $Pictures) {
     $r = Invoke-Step 'picture-android.ps1' @('-Serial', $Serial, '-Picture', $p)

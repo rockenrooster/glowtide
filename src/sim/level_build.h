@@ -82,6 +82,36 @@ struct Band {
     int rowsLo = 2, rowsHi = 3, strongest = 3;
     float patternWeight[kPatCount] = {};
 };
+
+// A recipe (VARIETY_DESIGN 9.2; the catalogue is recipe_book.cpp): what it is told about the level, and its row.
+struct RecipeCtx {
+    int index = 1;
+    int strongest = 3;           // the band's strongest multiply gate
+    int rows = 0;                // 0: the length class's count
+    u8 lengthClass = kStandard;
+    u8 kind = kSiege;
+    const float* patternWeight = nullptr;  // Terraces' patterns (the band's weights)
+};
+using RecipeFn = void (*)(LevelDef& L, Rng& r, const RecipeCtx& c);
+struct RecipeRow {
+    const char* name;
+    const char* idea;  // the sentence a player could say
+    u32 kinds;         // a bit per Kind it serves
+    int from;          // the first level it may appear on
+    bool mirror;       // asymmetric: the seed mirrors it half the time
+    RecipeFn build;
+};
+extern const RecipeRow kRecipes[];
+int recipeCount();
+// The twelve set pieces (VARIETY_DESIGN 10.3), laid out by hand as builders; set piece k is recipe recipeCount() + k in a
+// level's data and its fingerprint.
+extern const RecipeRow kSetPieces[];
+int setPieceCount();
+// calendar.cpp: the introductions of VARIETY_DESIGN 10.1 (-1: none at this level) and the recipe the seed draws.
+int introRecipe(int index);
+int introPlanFor(int index);
+int introTwist(int index);
+int pickRecipe(int index, int kind, Rng& r);
 Band bandFor(int index);           // calendar.cpp
 void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core
 int planFor(int index, Rng& r);        // calendar.cpp: the enemy's plan for a generated level
@@ -91,5 +121,15 @@ void placeGeodes(LevelDef& L, Rng& r);  // recipes.cpp: VARIETY_DESIGN 9.3
 void placeFestivalGeodes(LevelDef& L, Rng& r);
 void addBossScript(LevelDef& L);
 void addTwists(LevelDef& L, Rng& r);
+// The best straight line on the layout alone (recipes.cpp); the most geodes on the lane at one time if none is opened, a
+// time twist's rain included (VARIETY_DESIGN 9.3); a level's lints (lint.cpp: false, with the reason).
+float bestLineX(const LevelDef& L);
+void placeDetour(const LevelDef& L, Geode& g, float best, bool preferRight, float extra);  // a detour geode's x and z0
+bool movingLane(const LevelDef& L);  // half the rows or more have a gate that slides, hops or breathes
+bool geodeWindow(const LevelDef& L, const Geode& G, float& t0, float& t1);
+int geodesAtOnce(const LevelDef& L);
+bool lintLevel(const LevelDef& L, int index, char* why, size_t whyLen);
+// A geode a twist releases (twist: its 0-based index): GEODE RAIN's runners, SECOND WIND's WARD.
+void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed, float radius, float hpSeconds, u8 boon);
 
 }  // namespace gt::sim

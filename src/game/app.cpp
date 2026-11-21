@@ -403,9 +403,13 @@ void App::handleEvent(const SDL_Event& e) {
             }
             break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
             if (platform::isAndroid()) {
                 readFrameGeometry();
                 game_.resize({frameW_, frameH_, dpScale_, safe_, true, refreshHz_});
+                // Again, with the insets the window has now: the device picture check reads the last such line.
+                GT_LOG("frame %dx%d px, dp scale %.3f, safe top %.0f bottom %.0f px, refresh %.1f Hz", frameW_, frameH_, dpScale_,
+                       safe_.top, safe_.bottom, refreshHz_);
             }
             break;
         case SDL_EVENT_FINGER_DOWN:

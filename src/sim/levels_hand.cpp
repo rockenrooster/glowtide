@@ -7,7 +7,7 @@ LevelDef introLevel(int index) {
     LevelDef L;
     L.index = index;
     L.seed = defaultSeed(index);
-    L.world = 1;
+    L.world = worldFor(index);
     L.targetT = targetTime(index);
     L.fight = fightFor(index);
     L.hardness = hardnessFor(index);
@@ -125,8 +125,8 @@ LevelDef introLevel(int index) {
             }
             break;
         }
-        case 21: {
-            // The first holdout: no spire, a dark gate the enemy pours from; keep them off the lantern until dawn. Plain gates
+        case 22: {
+            // The first holdout (VARIETY_DESIGN 10.1 put it on 21, right after a boss: kindFor moved it one on): no spire, a dark gate the enemy pours from; keep them off the lantern until dawn. Plain gates
             // so the night is the new thing. Hint: KEEP THEM OFF YOUR LANTERN UNTIL DAWN.
             L.kind = kHoldout;
             L.len = 34;
@@ -144,8 +144,8 @@ LevelDef introLevel(int index) {
             addEmitter(L, 2.0f);
             break;
         }
-        case 31: {
-            // The first colossus: a giant gloom walks down the lane; bring it down before it arrives. The nearer it gets,
+        case 32: {
+            // The first colossus (on 32, not 31: see 22): a giant gloom walks down the lane; bring it down before it arrives. The nearer it gets,
             // the fewer gates lie between it and the lantern. Hint: BRING IT DOWN BEFORE IT ARRIVES.
             L.kind = kColossus;
             L.len = 36;
@@ -160,8 +160,8 @@ LevelDef introLevel(int index) {
             addEmitter(L, 2.0f);
             break;
         }
-        case 41: {
-            // The first twins: two spires, each with its own emitter that stops when it falls; a stream on a fallen spire's
+        case 42: {
+            // The first twins (on 42, not 41: see 22): two spires, each with its own emitter that stops when it falls; a stream on a fallen spire's
             // side is wasted, so it must cross over. Hint: BOTH MUST FALL.
             L.kind = kTwins;
             L.len = 36;

@@ -12,7 +12,7 @@ param(
 if (-not $NoBuild) { & "$PSScriptRoot\build-android.ps1" -Config $Config -Offline }
 $Serial = Resolve-GtSerial $Serial
 Assert-GtDevice $Serial
-$apk = Join-Path $GT_ROOT "android\app\build\outputs\apk\$Config\app-$Config.apk"
+$apk = if ($env:GT_APK) { $env:GT_APK } else { Join-Path $GT_ROOT "android\app\build\outputs\apk\$Config\app-$Config.apk" }  # GT_APK: a frozen APK
 & $GT_ADB -s $Serial install -r -t $apk
 if ($LASTEXITCODE -ne 0) { throw "install failed on $Serial" }
 if (-not $NoLaunch) {

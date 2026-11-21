@@ -2,7 +2,9 @@
 // tick, the camera's fit across the aspect matrix, the palette lint and the font's glyph set.
 #include "tests_sim.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 
@@ -11,6 +13,7 @@
 #include "gfx/camera.h"
 #include "gfx/palette.h"
 #include "gfx/text.h"
+#include "sim/bake.h"
 #include "sim/bots.h"
 #include "sim/level_build.h"
 #include "sim/world.h"
@@ -735,124 +738,100 @@ void testNoAllocation() {
 
 void testGenerator() {
     int bad = 0;
+    char why[96] = "";
     for (int s = 0; s < 1000; ++s) {
-        const int index = 6 + (s * 37) % 295;
+        const int index = 6 + (s * 37) % 595;
+        if (isHandMade(index) || index == 43) continue;  // 43: see the recipes below
         LevelDef L = generate(index, hash64(u64(s)) & 0xFFFFFFFFull);
         sizeGeodes(L);
-        char why[96] = "";
-        bool ok = L.rowCount >= 2 && L.len >= 30 && L.len <= 44 && L.gateCount <= kMaxGates && (L.emitterCount >= 1 || L.kind == kFestival);
-        if (!ok) std::snprintf(why, sizeof why, "rows %d len %.1f gates %d", L.rowCount, double(L.len), L.gateCount);
-        if (ok && (L.rowZ[0] < 8 || L.rowZ[0] > 10)) ok = false, std::snprintf(why, sizeof why, "first row at %.1f", double(L.rowZ[0]));
-        for (int r = 1; ok && r < L.rowCount; ++r) {
-            const float gap = L.rowZ[r] - L.rowZ[r - 1];
-            if (gap < 6 - 1e-3f || gap > 8 + 1e-3f) ok = false, std::snprintf(why, sizeof why, "rows %.1f apart", double(gap));
-        }
-        if (ok && L.rowZ[L.rowCount - 1] > L.len - 10 + 1e-3f) ok = false, std::snprintf(why, sizeof why, "last row too near the spire");
-        for (int r = 0; ok && r < L.rowCount; ++r) {
-            bool mul = false;
-            for (int g = 0; g < L.gateCount; ++g) mul = mul || (L.gates[g].row == r && L.gates[g].kind == kGateMul);
-            if (!mul) ok = false, std::snprintf(why, sizeof why, "row %d has no multiply gate", r);
-        }
-        // Gates of a row never overlap (crossing sliders cross on purpose); openings stay inside the lane; a hopper or a
-        // breathing gate is never also a slider (VARIETY_DESIGN 4).
-        for (int a = 0; ok && a < L.gateCount; ++a) {
-            const Gate& A = L.gates[a];
-            const float reach = A.slides ? A.amp : A.breath > 0 ? 0.2f * A.hw : 0.0f;
-            if (std::fabs(A.cx) + reach + A.hw > kHW + 1e-3f) ok = false, std::snprintf(why, sizeof why, "gate %d leaves the lane", a);
-            if (A.hw < 1.2f - 1e-3f || A.hw > 1.8f + 1e-3f) ok = false, std::snprintf(why, sizeof why, "gate %d half-width %.2f", a, double(A.hw));
-            if (A.breath > 0 && A.slides) ok = false, std::snprintf(why, sizeof why, "gate %d breathes and moves", a);
-            if (A.slides == kGateHop && (A.period < 1.5f - 1e-3f || A.period > 2.5f + 1e-3f))
-                ok = false, std::snprintf(why, sizeof why, "hopper %d stays %.2f s", a, double(A.period));
-            for (int b = a + 1; ok && b < L.gateCount; ++b) {
-                const Gate& B = L.gates[b];
-                if (std::fabs(A.z - B.z) > 0.01f || A.slides || B.slides) continue;
-                const float wa = A.hw * (A.breath > 0 ? 1.2f : 1.0f), wb = B.hw * (B.breath > 0 ? 1.2f : 1.0f);
-                if (std::fabs(A.cx - B.cx) < wa + wb - 1e-3f) ok = false, std::snprintf(why, sizeof why, "gates %d and %d overlap", a, b);
-            }
-        }
-        // Sliding walls stay inside the lane; side doors stand on a rail between z 14 and len - 8; shares add up to 1.
-        for (int a = 0; ok && a < L.barrierCount; ++a) {
-            const Barrier& B = L.barriers[a];
-            if (B.x0 - B.amp < -kHW - 1e-3f || B.x1 + B.amp > kHW + 1e-3f) ok = false, std::snprintf(why, sizeof why, "wall %d leaves the lane", a);
-        }
-        float shares = 0;
-        for (int e = 0; ok && e < L.emitterCount; ++e) {
-            const Emitter& E = L.emitters[e];
-            shares += E.share;
-            if (E.side && (E.z < 14.0f - 1e-3f || E.z > maxv(14.0f, L.len - 8.0f) + 1e-3f))
-                ok = false, std::snprintf(why, sizeof why, "side door at z %.1f", double(E.z));
-        }
-        if (ok && shares > 0 && std::fabs(shares - 1.0f) > 1e-3f) ok = false, std::snprintf(why, sizeof why, "shares add to %.3f", double(shares));
-        // Twists: a boss has its two, a level from 43 one more, SECOND WIND from 23; no brutes but through a plan or a twist.
-        int extra = 0, winds = 0;
-        for (int k = 0; k < L.twistCount; ++k) {
-            if (L.twists[k].type == kTwistSecondWind) ++winds;
-            else ++extra;
-        }
-        if (ok && (L.bruteEvery > 0 || extra > (L.boss ? 2 : index >= 43 && L.kind != kFestival ? 1 : 0) || winds != (index >= 23 && L.hasEnemy() ? 1 : 0)))
-            ok = false, std::snprintf(why, sizeof why, "%d twists and %d second winds", extra, winds);
-        if (ok && L.kind != kindFor(index)) ok = false, std::snprintf(why, sizeof why, "kind %s", kindName(L.kind));
-        if (ok && L.kind == kFestival && (L.hasEnemy() || L.geodeCount < 10)) ok = false, std::snprintf(why, sizeof why, "a festival with %d geodes", L.geodeCount);
-        if (ok && index < planFrom(L.plan)) ok = false, std::snprintf(why, sizeof why, "plan %s before its level", planName(L.plan));
-        // Gaps: a bumper to the walls, to other bumpers and to gate posts at least 1.2 m.
-        for (int a = 0; ok && a < L.bumperCount; ++a) {
-            const Bumper& A = L.bumpers[a];
-            if (kHW - std::fabs(A.x) - A.r < 1.2f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "bumper %d near a wall", a);
-            for (int b = a + 1; ok && b < L.bumperCount; ++b) {
-                const Bumper& B = L.bumpers[b];
-                const float d = std::sqrt((A.x - B.x) * (A.x - B.x) + (A.z - B.z) * (A.z - B.z)) - A.r - B.r;
-                if (d < 1.2f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "bumpers %d and %d %.2f m apart", a, b, double(d));
-            }
-            for (int g = 0; ok && g < L.gateCount; ++g) {
-                const Gate& G = L.gates[g];
-                if (G.slides) continue;
-                for (float s2 : {-1.0f, 1.0f}) {
-                    const float px = G.cx + s2 * G.hw;
-                    const float d = std::sqrt((A.x - px) * (A.x - px) + (A.z - G.z) * (A.z - G.z)) - A.r - 0.18f;
-                    if (d < 1.2f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "bumper %d %.2f m from a post", a, double(d));
-                }
-            }
-        }
-        // Geodes (VARIETY_DESIGN 9.3): how many, when, how far apart, at most three kinds, the first lasting up to 60, the
-        // budget, and inside the lane where a stream can reach them.
-        // Geodes placed by VARIETY_DESIGN 9.3 (not a festival's rain, not the ones a twist releases).
-        int placed = 0;
-        for (int g = 0; g < L.geodeCount; ++g) placed += L.geodes[g].twist == 0 ? 1 : 0;
-        const int maxGeodes = index <= 20 ? 2 : index <= 60 ? 3 : 4;
-        if (L.kind == kFestival) placed = 1;  // its rain is checked above
-        if (ok && (placed > maxv(maxGeodes, L.boss ? 2 : 0) || (index >= 6 && placed == 0)))
-            ok = false, std::snprintf(why, sizeof why, "%d geodes", placed);
-        float worth = 1;
-        int lanterns = 1, quicken = 0, bright = 0, kinds = 0;
-        bool seen[kBoonCount] = {};
-        for (int g = 0; ok && L.kind != kFestival && g < L.geodeCount; ++g) {
-            const Geode& G = L.geodes[g];
-            if (G.twist) continue;
-            const bool lasting = G.boon != kBoonWard && G.boon != kBoonComet && G.boon != kBoonHush;
-            if (g == 0 && (G.t < 0.08f * L.targetT - 1e-3f || G.t > 0.25f * L.targetT + 1e-3f))
-                ok = false, std::snprintf(why, sizeof why, "first geode at %.1f s of %.0f", double(G.t), double(L.targetT));
-            if (g > 0 && G.t < L.geodes[g - 1].t + 5.0f - 1e-3f) ok = false, std::snprintf(why, sizeof why, "geodes under 5 s apart");
-            if (G.boon != kBoonWard && G.t > 0.75f * L.targetT + 1e-3f) ok = false, std::snprintf(why, sizeof why, "a boon after 75%% of T");
-            if (g == 0 && index <= 60 && !lasting) ok = false, std::snprintf(why, sizeof why, "the first geode is an instant");
-            const int from[kBoonCount] = {6, 7, 12, 23, 36, 52, 63};
-            if (index < from[G.boon]) ok = false, std::snprintf(why, sizeof why, "%s before its level", boonName(G.boon));
-            if (std::fabs(G.x) + G.amp > 3.9f + 1e-3f) ok = false, std::snprintf(why, sizeof why, "geode %d outside the reachable lane", g);
-            if (G.hp <= 0 || (G.shieldSeconds > 0 && G.shield <= 0)) ok = false, std::snprintf(why, sizeof why, "geode %d has no health", g);
-            if (!seen[G.boon]) seen[G.boon] = true, ++kinds;
-            worth *= 1.0f + boonGain(G.boon, lanterns, quicken, bright);
-            lanterns += G.boon == kBoonLantern;
-            quicken += G.boon == kBoonQuicken;
-            bright += G.boon == kBoonBright;
-        }
-        if (ok && kinds > 3) ok = false, std::snprintf(why, sizeof why, "%d kinds of boon", kinds);
-        if (ok && worth > (index <= 20 ? 2.0f : index <= 60 ? 2.5f : 3.0f) + 1e-3f)
-            ok = false, std::snprintf(why, sizeof why, "boons worth x%.2f over the budget", double(worth));
-        if (!ok) {
+        if (!lintLevel(L, index, why, sizeof why)) {
             if (bad < 5) std::printf("generator: level %d seed %d: %s\n", index, s, why);
             ++bad;
         }
     }
     GT_CHECK_MSG(bad == 0, "generator invariants over 1,000 seeds");
+    // Every recipe on 200 seeds, on levels from its first (VARIETY_PLAN V4 task 3).
+    int badRecipes = 0;
+    for (int rc = 0; rc < recipeCount(); ++rc) {
+        int fails = 0;
+        for (int s = 0; s < 200; ++s) {
+            // Not on GEODE RAIN's introduction (43): its rain must fit beside the geodes a recipe placed, and where it
+            // cannot, the bake's first pass takes the next seed (the calendar's own levels are linted above).
+            const int index = maxv(6, kRecipes[rc].from) + (s * 13) % 250 + (maxv(6, kRecipes[rc].from) + (s * 13) % 250 == 43 ? 1 : 0);
+            LevelDef L = generateWith(index, hash64(u64(s) * 977u + u64(rc)) & 0xFFFFFFFFull, rc);
+            sizeGeodes(L);
+            if (!lintLevel(L, index, why, sizeof why)) {
+                if (fails < 2) std::printf("recipe %s: level %d seed %d: %s\n", recipeName(rc), index, s, why);
+                ++fails;
+            }
+        }
+        badRecipes += fails ? 1 : 0;
+    }
+    GT_CHECK_MSG(badRecipes == 0, "every recipe passes the generator's lints on 200 seeds");
+    // Every set piece on 50 seeds (VARIETY_DESIGN 10.3).
+    int badPieces = 0;
+    for (int p = 0; p < setPieceCount(); ++p) {
+        int fails = 0;
+        for (int s = 0; s < 50; ++s) {
+            const int index = kSetPieces[p].from;
+            LevelDef L = generate(index, hash64(u64(s) * 131u + u64(p)) & 0xFFFFFFFFull);
+            sizeGeodes(L);
+            if (!lintLevel(L, index, why, sizeof why)) {
+                if (fails < 2) std::printf("set piece %s: level %d seed %d: %s\n", kSetPieces[p].name, index, s, why);
+                ++fails;
+            }
+        }
+        badPieces += fails ? 1 : 0;
+    }
+    GT_CHECK_MSG(badPieces == 0, "every set piece passes the generator's lints on 50 seeds");
+    // The calendar's levels as the table has them (VARIETY_PLAN V4's exit check: the lints for the 600 levels).
+    int badTable = 0;
+    for (int l = 1; l <= kLastBaked; ++l) {
+        if (isHandMade(l)) continue;
+        const LevelDef L = levelFor(l);
+        if (!lintLevel(L, l, why, sizeof why)) {
+            if (badTable < 5) std::printf("table: level %d: %s\n", l, why);
+            ++badTable;
+        }
+    }
+    GT_CHECK_MSG(badTable == 0, "every level of the baked table passes the generator's lints");
+}
+
+// After the last baked level (VARIETY_DESIGN 16): 601 plays 101 mirrored left to right in another world, 1,101 plays 101
+// again; a replay's layout is its source's mirrored, and greedy's median time on each is the same within 5% (twenty runs
+// each: with ten, run-to-run noise alone moved a set piece's median 6% one way and 1% over thirty).
+void testReplays() {
+    GT_CHECK(levelForPlay(600) == 600 && levelForPlay(601) == 101 && levelForPlay(1100) == 600 && levelForPlay(1101) == 101);
+    GT_CHECK(!isReplay(600) && isReplay(601));
+    for (int source : {101, 149, 213}) {
+        const LevelDef a = levelFor(source), b = levelFor(source + 500);
+        bool mirrored = a.gateCount == b.gateCount && a.barrierCount == b.barrierCount && a.geodeCount == b.geodeCount &&
+                        a.emitterCount == b.emitterCount && a.bumperCount == b.bumperCount && a.snufferCount == b.snufferCount &&
+                        a.spireHealth == b.spireHealth && a.baseFlow == b.baseFlow && a.world != b.world;
+        for (int i = 0; mirrored && i < a.gateCount; ++i) mirrored = a.gates[i].cx == -b.gates[i].cx && a.gates[i].k == b.gates[i].k;
+        for (int i = 0; mirrored && i < a.barrierCount; ++i) mirrored = a.barriers[i].x0 == -b.barriers[i].x1;
+        for (int i = 0; mirrored && i < a.geodeCount; ++i) mirrored = a.geodes[i].x == -b.geodes[i].x && a.geodes[i].boon == b.geodes[i].boon;
+        for (int i = 0; mirrored && i < a.emitterCount; ++i) mirrored = a.emitters[i].x == -b.emitters[i].x && a.emitters[i].side == -b.emitters[i].side;
+        for (int i = 0; mirrored && i < a.bumperCount; ++i) mirrored = a.bumpers[i].x == -b.bumpers[i].x;
+        for (int i = 0; mirrored && i < a.snufferCount; ++i) mirrored = a.snuffers[i].xa == -b.snuffers[i].xb;
+        char what[96];
+        std::snprintf(what, sizeof what, "level %d is level %d mirrored, in another world", source + 500, source);
+        GT_CHECK_MSG(mirrored, what);
+        RunOptions ro;
+        ro.seconds = 3.0f * a.targetT;
+        float ta[20], tb[20];
+        for (int s = 0; s < 20; ++s) {
+            const RunResult ra = runLevel(a, BotKind::Greedy, u64(s + 1), ro), rb = runLevel(b, BotKind::Greedy, u64(s + 1), ro);
+            ta[s] = ra.result == Result::Win ? ra.time : 1e6f;
+            tb[s] = rb.result == Result::Win ? rb.time : 1e6f;
+        }
+        std::sort(ta, ta + 20);
+        std::sort(tb, tb + 20);
+        const float ma = 0.5f * (ta[9] + ta[10]), mb = 0.5f * (tb[9] + tb[10]);
+        std::snprintf(what, sizeof what, "greedy's median time on %d (%.1f s) and on %d mirrored (%.1f s) within 5%%", source, double(ma),
+                      source + 500, double(mb));
+        GT_CHECK_MSG(ma < 1e5f && std::fabs(mb - ma) <= 0.05f * ma, what);
+    }
 }
 
 void testCameraFit() {
@@ -929,6 +908,7 @@ void runSimTests() {
     testLaneAndEnemy();
     testNoAllocation();
     testGenerator();
+    testReplays();
     testCameraFit();
     testPalettes();
     testFont();

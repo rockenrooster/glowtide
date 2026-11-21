@@ -18,6 +18,7 @@
 namespace gt {
 
 const char* goalBanner(const sim::LevelDef& d);  // game.cpp: the kind's banner, or null for a siege
+bool levelName(int index, char* out, size_t n);  // game.cpp: a set piece's or an introduction's name, in capitals
 
 struct GameEnv {
     int frameW = 0, frameH = 0;
@@ -78,6 +79,7 @@ private:
     void drawSettings(float dt);
     void drawHint();
     void showHint(int id);
+    void showLine(const char* text);
     void pushBanner(const char* text);
     void popGloomsAbove(float z);
     // Pictures and test scenes.
@@ -138,6 +140,8 @@ private:
     float fadeOut_ = 0;          // > 0: fading out before entering `pendingLevel_`
     int pendingLevel_ = 0;
     float fadeIn_ = 1;
+    static constexpr int kLineHint = 1000;  // hint_ when lineText_ is shown
+    char lineText_[64] = "";
     int hint_ = -1;
     float hintTime_ = 0;
     float holdProgress_ = 0;

@@ -8,6 +8,7 @@
 #include "core/tuning.h"
 #include "sim/bake.h"
 #include "sim/bots.h"
+#include "sim/level_build.h"
 #include "sim/fingerprint.h"
 #include "sim/world.h"
 #include "tools/audio_render.h"
@@ -19,8 +20,9 @@ namespace {
 
 struct Opt {
     const char* cmd = nullptr;
-    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, keepTo = 0;
-    bool levelSet = false, pairs = false, noEnemy = false, unbreakable = false;
+    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, keepTo = 0, repairSeeds = 8;
+    const char* repairOnly = nullptr;
+    bool levelSet = false, pairs = false, noEnemy = false, unbreakable = false, hashLevels = false;
     float seconds = 0;
     char bots[64] = "greedy";
     const char* out = nullptr;
@@ -54,8 +56,11 @@ bool parse(int argc, char** argv, Opt& o) {
         else if (!std::strcmp(k, "--seconds")) o.seconds = float(std::atof(take()));
         else if (!std::strcmp(k, "--jobs")) o.jobs = std::atoi(take());
         else if (!std::strcmp(k, "--keep-to")) o.keepTo = std::atoi(take());
+        else if (!std::strcmp(k, "--repair-seeds")) o.repairSeeds = std::atoi(take());
+        else if (!std::strcmp(k, "--repair-only")) o.repairOnly = take();
         else if (!std::strcmp(k, "--bot") || !std::strcmp(k, "--bots")) std::snprintf(o.bots, sizeof o.bots, "%s", take());
         else if (!std::strcmp(k, "--pairs")) o.pairs = true;
+        else if (!std::strcmp(k, "--hash-levels")) o.hashLevels = true;
         else if (!std::strcmp(k, "--no-enemy")) o.noEnemy = true;
         else if (!std::strcmp(k, "--unbreakable")) o.unbreakable = true;
         else if (!std::strcmp(k, "--out")) o.out = take();
@@ -123,9 +128,17 @@ int cmdRun(const Opt& o) {
         &ctx);
 }
 
+// Two runs of greedy on a level equal on every tick, and a third from a fresh init; --hash-levels: the levels the phones
+// compare (kHashLevels), otherwise --from to --to.
 int cmdDeterminism(const Opt& o) {
     int failed = 0;
-    for (int level = o.from; level <= o.to; ++level) {
+    int list[64], n = 0;
+    if (o.hashLevels)
+        for (int l : kHashLevels) list[n++] = l;
+    else
+        for (int l = o.from; l <= o.to && n < 64; ++l) list[n++] = l;
+    for (int i = 0; i < n; ++i) {
+        const int level = list[i];
         const LevelDef def = levelFor(level);
         const float seconds = o.seconds > 0 ? o.seconds : 60.0f;
         static World a, b;
@@ -150,6 +163,57 @@ int cmdDeterminism(const Opt& o) {
                     (unsigned long long)b.hash(), bad >= 0 ? ", diverged" : again ? "" : ", re-init differs");
         if (bad >= 0 || !again) ++failed;
     }
+    return failed ? 1 : 0;
+}
+
+// --sim recipes (VARIETY_PLAN V4 task 3): every recipe on twenty seeds; greedy plays each for 20 s with no enemy and a
+// spire that cannot fall, and the column (1.25 m wide) where its launcher spent the most time is that seed's best line.
+// A recipe passes when no column is the best line on more than half of its seeds. Also the numbers on the lane (gates,
+// walls, geodes: VARIETY_PLAN V4 notes, readable at seven or eight) and the lane's length.
+int cmdRecipes() {
+    static World w;
+    std::printf("| Recipe | Idea | Seeds | Busiest best-line column | Numbers on the lane, mean (max) | Length, mean | Verdict |\n");
+    std::printf("|---|---|---|---|---|---|---|\n");
+    int failed = 0;
+    for (int rc = 0; rc < recipeCount(); ++rc) {
+        int bins[8] = {}, numbersMax = 0;
+        float numbers = 0, len = 0;
+        const int seeds = 20;
+        for (int s = 0; s < seeds; ++s) {
+            const int index = maxv(6, kRecipes[rc].from) + (s * 11) % 200;
+            LevelDef def = generateWith(index, hash64(u64(s) * 31u + u64(rc) * 1009u) & 0xFFFFFFFFull, rc);
+            sizeGeodes(def);
+            def.spireHealth = 1000000;
+            int nums = def.gateCount + def.barrierCount;
+            for (int g = 0; g < def.geodeCount; ++g) nums += def.geodes[g].twist ? 0 : 1;
+            numbers += float(nums);
+            numbersMax = maxv(numbersMax, nums);
+            len += def.len;
+            w.init(def, 1);
+            w.enemyOff = true;
+            w.unbreakableSpire = true;
+            Bot bot;
+            bot.init(BotKind::Greedy, 1);
+            int at[8] = {};
+            for (int t = 0; t < 60 * 20; ++t) {
+                w.tick(bot.think(w));
+                if (t >= 60 * 5) ++at[clampv(int((w.launcherX + kHW) / 1.25f), 0, 7)];
+            }
+            int best = 0;
+            for (int k = 1; k < 8; ++k)
+                if (at[k] > at[best]) best = k;
+            ++bins[best];
+        }
+        int top = 0;
+        for (int k = 1; k < 8; ++k)
+            if (bins[k] > bins[top]) top = k;
+        const bool ok = bins[top] * 2 <= seeds;
+        failed += ok ? 0 : 1;
+        std::printf("| %s | %s | %d | %d of %d (x %.1f..%.1f) | %.1f (%d) | %.0f m | %s |\n", kRecipes[rc].name, kRecipes[rc].idea, seeds,
+                    bins[top], seeds, double(-kHW + 1.25f * float(top)), double(-kHW + 1.25f * float(top + 1)), double(numbers / float(seeds)),
+                    numbersMax, double(len / float(seeds)), ok ? "pass" : "the same line too often");
+    }
+    std::printf("\nrecipes: %d of %d pass\n", recipeCount() - failed, recipeCount());
     return failed ? 1 : 0;
 }
 
@@ -250,12 +314,16 @@ int main(int argc, char** argv) {
     if (!std::strcmp(o.cmd, "determinism")) return cmdDeterminism(o);
     if (!std::strcmp(o.cmd, "flood")) return cmdFlood(o);
     if (!std::strcmp(o.cmd, "decisions")) return cmdDecisions(o);
+    if (!std::strcmp(o.cmd, "recipes")) return cmdRecipes();
     if (!std::strcmp(o.cmd, "table")) return bakeTable(o.from, o.to, o.bots, o.seeds);
     if (!std::strcmp(o.cmd, "soak")) return soak(o.from, o.to, o.bots);
     if (!std::strcmp(o.cmd, "accept")) return acceptIntro(o.from, o.to);
     if (!std::strcmp(o.cmd, "flux")) return fluxFindings();
     if (!std::strcmp(o.cmd, "variety")) return varietyReport(o.from, o.to, o.pairs);
-    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.keepTo, o.out, o.report);
+    if (!std::strcmp(o.cmd, "layouts")) return layoutsReport(o.from, o.to);
+    if (!std::strcmp(o.cmd, "forecast")) return o.levelSet ? forecastReport(o.level, maxv(1, o.seeds)) : forecastRecipes(maxv(1, o.seeds));
+    if (!std::strcmp(o.cmd, "balance")) return balanceReport(maxv(1, o.from), o.to);
+    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.keepTo, o.out, o.report, o.repairSeeds, o.repairOnly);
     if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25);
     std::fprintf(stderr, "unknown command %s\n", o.cmd);
     return 2;

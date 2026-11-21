@@ -1,18 +1,12 @@
-// Recipes: ways of laying out a lane, each with one idea (VARIETY_DESIGN 9.2). "Terraces" is the generator of version
-// 0.1.0 (GAME_DESIGN 7.3): rows of gates, pick the best of each.
+// The generator: a level from its number and seed. The calendar (calendar.cpp) chooses what the level is; a recipe from the
+// catalogue (recipe_book.cpp, VARIETY_DESIGN 9.2) lays out the lane; this file adds the enemy, the geodes (9.3) and the
+// twists for what the recipe left empty, and mirrors an asymmetric recipe half the time.
 #include <cmath>
 
 #include "core/rng.h"
 #include "sim/level_build.h"
 
 namespace gt::sim {
-
-const char* recipeName(int recipe) {
-    static const char* const n[] = {"Terraces"};
-    return recipe >= 0 && recipe < countOf(n) ? n[recipe] : "?";
-}
-
-namespace {
 
 // The column a straight stream does best in, on the layout alone: the gates' factors where they stand, a slider
 // counted for the share of its travel it spends over the column.
@@ -31,7 +25,67 @@ float bestLineX(const LevelDef& L) {
     return bestX;
 }
 
-}  // namespace
+// A detour (VARIETY_DESIGN 9.3): off the best line by 2 m or more and outside the fan of the stream there, so only a
+// stream aimed at it opens it; where the flood fills the top of the lane, it appears lower down, where the stream is
+// narrower. On the preferred side when there is room.
+void placeDetour(const LevelDef& L, Geode& g, float best, bool preferRight, float extra) {
+    const float edge = 3.9f - g.amp, need = 2.0f + g.amp + extra;
+    if (best + need > edge) preferRight = false;  // no room on that side: the other
+    else if (best - need < -edge) preferRight = true;
+    g.x = clampv(best + (preferRight ? need : -need), -edge, edge);
+    // A colossus walks down the top of the lane and takes the stream there: its level's detours wait below it.
+    const float top = L.kind == kColossus ? 0.55f * L.len : L.len - 3.0f, low = L.rowCount ? L.rowZ[0] + 2.0f : top;
+    for (float z = top; z >= low; z -= 1.0f) {
+        const float off = maxv(2.0f, fanSpread(L, best, z) + g.radius + 1.0f) + g.amp + extra;  // clear of the spill
+        const bool rightOk = best + off <= edge, leftOk = best - off >= -edge;
+        if (!rightOk && !leftOk) continue;
+        g.x = rightOk && (!leftOk || preferRight) ? best + off : best - off;
+        g.z0 = z < top ? z : 0.0f;
+        break;
+    }
+}
+
+// Whether half the rows or more have a gate that slides, hops or breathes, or a sliding wall just below them.
+bool movingLane(const LevelDef& L) {
+    int moving = 0;
+    for (int row = 0; row < L.rowCount; ++row) {
+        bool m = false;
+        for (int g = 0; g < L.gateCount; ++g) m = m || (L.gates[g].row == row && (L.gates[g].slides || L.gates[g].breath > 0));
+        for (int b = 0; b < L.barrierCount; ++b)
+            m = m || (L.barriers[b].amp > 0 && L.barriers[b].z < L.rowZ[row] && L.barriers[b].z > L.rowZ[row] - 3.0f);
+        moving += m ? 1 : 0;
+    }
+    return L.rowCount > 0 && moving * 2 >= L.rowCount;
+}
+
+// When a geode is on the lane, if nobody opens it: from its time (a time twist's, for one a twist releases; never, for
+// SECOND WIND's, which comes with the core) until it drifts past the lantern, a vault after it leaves.
+bool geodeWindow(const LevelDef& L, const Geode& G, float& t0, float& t1) {
+    t0 = G.t;
+    if (G.twist) {
+        const TwistDef& x = L.twists[G.twist - 1];
+        if (x.trigger != kTrigTime) return false;
+        t0 = x.at * L.targetT;
+    }
+    const float z0 = G.z0 > 0 ? G.z0 : L.len - 3.0f;
+    t1 = maxv(t0, G.leaveAt) + z0 / maxv(0.1f, G.speed);
+    return true;
+}
+
+int geodesAtOnce(const LevelDef& L) {
+    int most = 0;
+    for (int i = 0; i < L.geodeCount; ++i) {
+        float a0, a1;
+        if (!geodeWindow(L, L.geodes[i], a0, a1)) continue;
+        int n = 0;
+        for (int j = 0; j < L.geodeCount; ++j) {
+            float b0, b1;
+            if (geodeWindow(L, L.geodes[j], b0, b1) && b0 <= a0 + 1e-4f && a0 < b1) ++n;
+        }
+        most = maxv(most, n);
+    }
+    return most;
+}
 
 // Geodes in a generated level (VARIETY_DESIGN 9.3): how many, their boons within the budget, when they come, and where:
 // at least half of them away from the best line, the rest on it.
@@ -44,9 +98,14 @@ void placeGeodes(LevelDef& L, Rng& r) {
     const float T = L.targetT, best = bestLineX(L);
     int lanterns = 1, quicken = 0, bright = 0, wards = 0, kinds = 0;
     // The level that introduces a boon offers it first (VARIETY_DESIGN 10.1): KINDLE 36, COMET 52, HUSH 63.
-    const int intro = index == 36 ? kBoonKindle : index == 52 ? kBoonComet : index == 63 ? kBoonHush : -1;
+    const int intro = index == 7    ? kBoonQuicken
+                      : index == 12 ? kBoonBright
+                      : index == 36 ? kBoonKindle
+                      : index == 52 ? kBoonComet
+                      : index == 63 ? kBoonHush
+                                    : -1;
     bool used[kBoonCount] = {};
-    float worth = 1, t = r.range(0.08f, 0.25f) * T;
+    float worth = 1, t = (movingLane(L) ? r.range(0.08f, 0.12f) : r.range(0.08f, 0.25f)) * T;  // early where gates move
     for (int k = 0; k < n && L.geodeCount < kMaxGeodes; ++k) {
         if (k > 0) t += r.range(5.0f, 8.0f);
         if (L.boss && k == 1) t = minv(t, maxv(L.geodes[0].t + 5.0f, 0.4f * T));
@@ -103,24 +162,19 @@ void placeGeodes(LevelDef& L, Rng& r) {
         }
         const float edge = 3.9f - g.amp;
         if (detour) {
-            // A detour: off the best line by 2 m or more and outside the fan of the stream there, so only a stream aimed at
-            // it opens it. Where the flood fills the top of the lane, it appears lower down, where the stream is narrower.
             const bool preferRight = r.f01() < 0.5f;
-            const float extra = r.range(0.2f, 0.8f);
-            g.x = clampv(best + (preferRight ? 1.0f : -1.0f) * (2.0f + g.amp + extra), -edge, edge);
-            const float top = L.len - 3.0f, low = L.rowCount ? L.rowZ[0] + 2.0f : top;
-            for (float z = top; z >= low; z -= 1.0f) {
-                const float off = maxv(2.0f, fanSpread(L, best, z) + g.radius + 1.0f) + g.amp + extra;  // clear of the spill
-                const bool rightOk = best + off <= edge, leftOk = best - off >= -edge;
-                if (!rightOk && !leftOk) continue;
-                g.x = rightOk && (!leftOk || preferRight) ? best + off : best - off;
-                g.z0 = z < top ? z : 0.0f;
-                break;
-            }
+            placeDetour(L, g, best, preferRight, r.range(0.2f, 0.8f));
         } else {  // on the line
             g.x = clampv(best + r.range(-0.6f, 0.6f), -edge, edge);
         }
-        if (detour && index >= 11 && boon != kBoonWard && r.f01() < (index <= 20 ? 0.3f : 0.4f)) {  // plates on detours only
+        // Plates on detours only, and not where the gates move: the stream sweeps there, and a plate made the boon cost
+        // more than it paid. There a detour comes low on the lane, where the stream is still one line, and costs less.
+        const bool moving = movingLane(L);
+        if (detour && moving) {
+            g.z0 = L.rowCount ? L.rowZ[0] + 2.0f : 0.0f;
+            g.speed = 1.0f;
+            g.hpSeconds = r.range(1.2f, 1.6f);
+        } else if (detour && index >= 11 && boon != kBoonWard && r.f01() < (index <= 20 ? 0.3f : 0.4f)) {
             g.hpSeconds = r.range(1.0f, 1.5f);
             g.shieldSeconds = r.range(3.0f, 4.0f);
         } else {
@@ -138,7 +192,7 @@ void placeFestivalGeodes(LevelDef& L, Rng& r) {
     for (int k = 0; k < n && L.geodeCount < kMaxGeodes; ++k) {
         Geode g;
         g.t = 1.0f + 15.0f * float(k) / float(n) + r.range(0.0f, 0.6f);
-        g.x = r.range(-3.6f, 3.6f);
+        g.x = (r.f01() < 0.5f ? -1.0f : 1.0f) * r.range(1.4f, 3.6f);  // off the middle: a stream that never moves catches few
         g.speed = r.range(1.8f, 2.6f);
         g.radius = 0.6f;
         g.hpSeconds = r.range(0.5f, 0.9f);
@@ -192,7 +246,7 @@ void addBossScript(LevelDef& L) {
 }
 
 // A geode a twist releases (GEODE RAIN's runners, SECOND WIND's WARD).
-static void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed, float radius, float hpSeconds, u8 boon) {
+void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed, float radius, float hpSeconds, u8 boon) {
     if (L.geodeCount >= kMaxGeodes) return;
     Geode g;
     g.x = x;
@@ -205,16 +259,30 @@ static void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed
     L.geodes[L.geodeCount++] = g;
 }
 
-// Twists on a generated level (VARIETY_PLAN V3 task 8): SECOND WIND from level 23 wherever there is an enemy (the one
-// comeback: it fires only when the core falls to 3); from level 43 one more, chosen by the seed, on levels that are not
-// bosses or festivals.
+// Twists on a generated level (VARIETY_DESIGN 7, 10.2): SECOND WIND from level 23 wherever there is an enemy (the one
+// comeback: it fires only when the core falls to 3); from level 43, on levels that are not bosses or festivals, by the
+// level's hardness: none below 0.4, one, two from 0.8; drawn by the seed among those that have come, the introduced one
+// first on its level.
 void addTwists(LevelDef& L, Rng& r) {
     if (!L.hasEnemy()) return;
-    if (L.index >= 43 && L.kind != kBoss && L.kind != kFestival && L.twistCount < kMaxTwists - 1) {
-        static const u8 pool[6] = {kTwistSurge, kTwistBruteGuard, kTwistGeodeRain, kTwistEclipse, kTwistStampede, kTwistGoldenGate};
-        const u8 type = pool[r.rangei(0, 5)];
+    int count = L.index < 43 || L.kind == kBoss || L.kind == kFestival ? 0 : L.hardness < 0.4f ? 0 : L.hardness < 0.8f ? 1 : 2;
+    if (L.twistCount > 0) count = 0;  // a set piece chose its own
+    if (introTwist(L.index) >= 0 && L.kind != kBoss && L.kind != kFestival) count = maxv(count, 1);
+    for (int n = 0; n < count && L.twistCount < kMaxTwists - 1; ++n) {
+        u8 pool[6];
+        int m = 0;
+        pool[m++] = kTwistSurge;
+        pool[m++] = kTwistBruteGuard;
+        pool[m++] = kTwistGeodeRain;
+        if (L.index >= 48) pool[m++] = kTwistEclipse;
+        pool[m++] = kTwistStampede;
+        if (L.index >= 66) pool[m++] = kTwistGoldenGate;
+        u8 type = pool[r.rangei(0, m - 1)];
+        if (n == 0 && introTwist(L.index) >= 0) type = u8(introTwist(L.index));
+        for (int k = 0; k < L.twistCount && n > 0; ++k)  // two twists of one kind would be one twist twice
+            if (L.twists[k].type == type) type = type == kTwistSurge ? kTwistBruteGuard : kTwistSurge;
         const int k = L.twistCount;
-        TwistDef& x = addTwist(L, type, kTrigTime, r.range(0.3f, 0.65f), type == kTwistBruteGuard ? 2 : 0);
+        TwistDef& x = addTwist(L, type, kTrigTime, n == 0 ? r.range(0.3f, 0.5f) : r.range(0.55f, 0.75f), type == kTwistBruteGuard ? 2 : 0);
         if (type == kTwistStampede) x.param = u8(r.rangei(0, L.emitterCount - 1));
         if (type == kTwistGoldenGate) {  // the strongest multiply gate of the middle row
             const int row = L.rowCount / 2;
@@ -227,6 +295,39 @@ void addTwists(LevelDef& L, Rng& r) {
             static const u8 boons[3] = {kBoonQuicken, kBoonBright, kBoonLantern};
             for (int j = 0; j < 3; ++j)
                 addTwistGeode(L, k, -2.6f + 2.6f * float(j) + r.range(-0.4f, 0.4f), 0, 3.0f, 0.6f, r.range(0.6f, 0.9f), boons[(j + r.rangei(0, 2)) % 3]);
+            // Never more than four geodes on the lane together (VARIETY_DESIGN 9.3): the rain moves to a time with room, or
+            // (unless it is the introduction's, which the bake's next seed tries again) it becomes a SURGE.
+            for (float at = 0.3f; geodesAtOnce(L) > 4 && at <= 0.751f; at += 0.05f) L.twists[k].at = at;
+            if (geodesAtOnce(L) > 4 && introTwist(L.index) != kTwistGeodeRain) {
+                const float at = L.twists[k].at;
+                L.geodeCount -= 3;
+                --L.twistCount;
+                addTwist(L, kTwistSurge, kTrigTime, at);
+            }
+            // The introduction keeps its rain: geodes placed before it go instead, a pair or a caravan whole, never the first,
+            // and one on the best line before a detour (VARIETY_DESIGN 9.3's place rule holds for what stays).
+            const float best = bestLineX(L);
+            while (geodesAtOnce(L) > 4) {
+                const int placed = L.geodeCount - 3;  // the rain is the last three
+                int groupStart[kMaxGeodes], groups = 0;
+                for (int g = 0; g < placed; ++g)
+                    if (g == 0 || !(L.geodes[g].t == L.geodes[g - 1].t || (L.geodes[g].group && L.geodes[g].group == L.geodes[g - 1].group)))
+                        groupStart[groups++] = g;
+                if (groups <= 1) break;
+                int pick = groups - 1;
+                for (int k = groups - 1; k >= 1; --k) {
+                    const int end = k + 1 < groups ? groupStart[k + 1] : placed;
+                    bool detour = false;
+                    for (int g = groupStart[k]; g < end; ++g) detour = detour || std::fabs(L.geodes[g].x - best) + 0.5f * L.geodes[g].amp >= 2.0f;
+                    if (!detour) {
+                        pick = k;
+                        break;
+                    }
+                }
+                const int a = groupStart[pick], b = pick + 1 < groups ? groupStart[pick + 1] : placed;
+                for (int g = b; g < L.geodeCount; ++g) L.geodes[g - (b - a)] = L.geodes[g];
+                L.geodeCount -= b - a;
+            }
         }
     }
     if (L.index >= 23 && L.twistCount < kMaxTwists) {
@@ -236,184 +337,101 @@ void addTwists(LevelDef& L, Rng& r) {
     }
 }
 
-LevelDef generate(int index, u64 seed) {
+// Mirrors a layout left to right (an asymmetric recipe's twin, and the replays after the last level: VARIETY_DESIGN 16):
+// every x, every slide's phase by half a period (easedWave(p + 0.5) = -easedWave(p)), every door's side.
+void mirrorLayout(LevelDef& L) {
+    for (int i = 0; i < L.gateCount; ++i) {
+        Gate& G = L.gates[i];
+        G.cx = -G.cx;
+        if (G.slides == kGateSlide) G.phase += 0.5f;
+        if (G.slides == kGateHop) G.phase += 0.5f;
+    }
+    for (int i = 0; i < L.barrierCount; ++i) {
+        Barrier& B = L.barriers[i];
+        const float x0 = B.x0;
+        B.x0 = -B.x1;
+        B.x1 = -x0;
+        if (B.amp > 0) B.phase += 0.5f;
+    }
+    for (int i = 0; i < L.bumperCount; ++i) L.bumpers[i].x = -L.bumpers[i].x;
+    for (int i = 0; i < L.snufferCount; ++i) {
+        Snuffer& S = L.snuffers[i];
+        const float xa = S.xa;
+        S.xa = -S.xb;
+        S.xb = -xa;
+        S.phase += 0.5f;
+    }
+    for (int i = 0; i < L.emitterCount; ++i) {
+        Emitter& E = L.emitters[i];
+        E.x = -E.x;
+        E.side = i8(-E.side);
+        if (E.amp > 0) E.phase += 0.5f;
+    }
+    for (int i = 0; i < L.geodeCount; ++i) {
+        Geode& G = L.geodes[i];
+        G.x = -G.x;
+        if (G.amp > 0) G.phase += 0.5f;
+    }
+    if (L.kind == kTwins) L.twinShare = 1.0f - L.twinShare;
+}
+
+LevelDef generate(int index, u64 seed) { return generateWith(index, seed, -1); }
+
+// A level from a recipe (-1: the calendar's choice, drawn by the seed among the recipes allowed there).
+LevelDef generateWith(int index, u64 seed, int forced) {
     LevelDef L;
     L.index = index;
     L.seed = seed;
     L.world = worldFor(index);
-    L.targetT = targetTime(index);
     L.hardness = hardnessFor(index);
     L.fight = fightFor(index) + (L.hardness - 0.5f) * 0.08f;  // a world's rhythm moves the enemy's share (VARIETY_DESIGN 10.2)
     L.kind = u8(kindFor(index));
     L.boss = L.kind == kBoss;
     if (L.boss) L.bossType = u8((index / 10 - 1) % kBossCount);
+    L.lengthClass = u8(lengthClassFor(index));
+    L.targetT = targetTime(index);
     const bool festival = L.kind == kFestival;
     Rng r(seed, 7);
 
+    // The recipe: the introduction's, the set piece's, or one the calendar allows here, drawn by the seed.
+    int recipe = forced >= 0 ? forced : setPieceAt(index) >= 0 ? recipeCount() + setPieceAt(index) : introRecipe(index);
+    if (recipe < 0 || recipe >= recipeCount() + setPieceCount()) recipe = pickRecipe(index, L.kind, r);
+    L.recipe = u8(recipe);
+    const RecipeRow& row = recipe < recipeCount() ? kRecipes[recipe] : kSetPieces[recipe - recipeCount()];
     Band band = bandFor(index);
     if (festival) {  // rich gates: no traps, patrols or crossing divides, one factor more
         band.strongest = minv(5, band.strongest + 1);
         band.patternWeight[kPatTrap] = band.patternWeight[kPatPatrol] = band.patternWeight[kPatCrossing] = 0;
     }
-    const int strongest = band.strongest;
-    const float* wt = band.patternWeight;  // Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing, Hopper, Breathing
-    const int rows = r.rangei(band.rowsLo, band.rowsHi);
-    float z = r.range(8, 10);
-    float stream = tune.fireRate;  // the stream a player has at the current row (for barrier health)
-    int prev = -1;
-    for (int row = 0; row < rows; ++row) {
-        if (z > 32.0f) break;
-        // Pick a pattern: the first row is Open or Choice; no two Trap or Patrol rows in a row.
-        int p = 0;
-        for (int tries = 0; tries < 20; ++tries) {
-            float total = 0;
-            for (int k = 0; k < kPatCount; ++k) total += wt[k];
-            float pick = r.range(0, total);
-            p = 0;
-            while (p < kPatCount - 1 && pick >= wt[p]) pick -= wt[p++];
-            if (row == 0 && p != kPatOpen && p != kPatChoice) continue;
-            const bool hard = p == kPatTrap || p == kPatPatrol;
-            const bool prevHard = prev == kPatTrap || prev == kPatPatrol;
-            if (hard && prevHard) continue;
-            break;
-        }
-        if (row == 0 && p != kPatOpen && p != kPatChoice) p = kPatChoice;
-        const float s = r.f01() < 0.5f ? -1.0f : 1.0f;
-        const int plain = r.rangei(2, strongest);
-        const int special = minv(5, plain + 1);
-        int best = plain;
-        switch (p) {
-            case kPatOpen:
-                addGate(L, mulGate(r.range(-2.9f, 2.9f), 1.8f, z, plain, row));
-                break;
-            case kPatChoice: {
-                const int b = r.rangei(3, maxv(3, strongest));
-                const int a = r.rangei(2, b - 1);
-                addGate(L, mulGate(s * r.range(2.5f, 2.9f), 1.8f, z, a, row));
-                addGate(L, mulGate(-s * r.range(2.3f, 2.9f), 1.2f, z, b, row));
-                best = b;
-                break;
-            }
-            case kPatTrap:
-                addGate(L, mulGate(s * 2.6f, 1.5f, z, plain, row));
-                addGate(L, divGate(-s * 2.6f, 1.5f, z, index >= 25 && r.f01() < 0.5f ? 3 : 2, row));
-                break;
-            case kPatSlider: {
-                Gate gs = mulGate(r.range(-0.5f, 0.5f), 1.6f, z, special, row);
-                gs.slides = 1;
-                gs.amp = minv(kHW - gs.hw - 0.3f - std::fabs(gs.cx), r.range(1.8f, 3.0f));
-                gs.period = r.range(3, 6);
-                gs.phase = r.f01();
-                addGate(L, gs);
-                best = special;
-                break;
-            }
-            case kPatWall: {
-                const float cx = s * 2.6f;
-                addGate(L, mulGate(cx, 1.5f, z + 2.0f, special, row));
-                const int weak = r.rangei(2, maxv(2, strongest - 1));
-                addGate(L, mulGate(-s * 2.6f, 1.5f, z, weak, row));
-                Barrier b;
-                b.x0 = maxv(-kHW + 0.1f, cx - 1.6f);
-                b.x1 = minv(kHW - 0.1f, cx + 1.6f);
-                b.z = z;
-                b.health = maxv<i32>(10, i32(1.5f * stream));
-                if (index >= 46 && r.f01() < 0.4f) {
-                    // A sliding wall (VARIETY_DESIGN 4 #3): narrower, sliding so a window to the prize opens and closes.
-                    b.x0 = cx - 1.2f;
-                    b.x1 = cx + 1.2f;
-                    b.amp = minv(kHW - 0.1f - std::fabs(cx) - 1.2f, r.range(0.8f, 1.1f));
-                    b.period = r.range(4.0f, 6.0f);
-                    b.phase = r.f01();
-                }
-                if (L.barrierCount < kMaxBarriers) L.barriers[L.barrierCount++] = b;
-                best = special;
-                break;
-            }
-            case kPatPillars: {
-                const int a = r.rangei(2, strongest), b = r.rangei(2, strongest);
-                addGate(L, mulGate(-3.3f, 1.3f, z, a, row));
-                addGate(L, mulGate(3.3f, 1.3f, z, b, row));
-                if (L.bumperCount + 2 <= kMaxBumpers) {
-                    L.bumpers[L.bumperCount++] = {-1.25f, z - 1.8f, 0.55f};
-                    L.bumpers[L.bumperCount++] = {1.25f, z - 1.8f, 0.55f};
-                }
-                best = maxv(a, b);
-                break;
-            }
-            case kPatPatrol: {
-                const float cx = r.range(-2.6f, 2.6f);
-                addGate(L, mulGate(cx, 1.5f, z, special, row));
-                if (std::fabs(cx) > 1.0f) addGate(L, mulGate(cx > 0 ? -3.2f : 3.2f, 1.5f, z, 2, row));
-                Snuffer sn;
-                sn.xa = maxv(-kLauncherRange, cx - 2.2f);
-                sn.xb = minv(kLauncherRange, cx + 2.2f);
-                sn.z = z - 2.0f;
-                sn.speed = r.range(2, 4);
-                sn.phase = r.f01();
-                if (L.snufferCount < kMaxSnuffers) L.snuffers[L.snufferCount++] = sn;
-                best = special;
-                break;
-            }
-            case kPatHopper: {  // a gate that jumps between two places (VARIETY_DESIGN 4 #1)
-                Gate h = mulGate(r.range(-0.4f, 0.4f), 1.5f, z, special, row);
-                h.slides = kGateHop;
-                h.amp = minv(kHW - h.hw - 0.3f - std::fabs(h.cx), r.range(1.8f, 2.6f));
-                h.period = r.range(1.5f, 2.5f);
-                h.phase = r.f01();
-                addGate(L, h);
-                best = special;
-                break;
-            }
-            case kPatBreathing: {  // a strong gate whose opening swings 60% to 120% (VARIETY_DESIGN 4 #2), a plain one aside
-                const float cx = s * r.range(1.4f, 2.0f);
-                Gate b = mulGate(cx, 1.6f, z, special, row);
-                b.breath = r.range(3.0f, 5.0f);
-                b.phase = r.f01();
-                addGate(L, b);
-                addGate(L, mulGate(-s * 3.4f, 1.2f, z, plain, row));
-                best = special;
-                break;
-            }
-            default: {  // Crossing sliders, 1.6 m apart in z so they pass each other instead of through each other
-                const float period = r.range(3.5f, 5.5f), phase = r.f01();
-                Gate a = mulGate(0, 1.4f, z + 0.8f, plain, row);
-                a.slides = 1;
-                a.amp = 2.6f;
-                a.period = period;
-                a.phase = phase;
-                Gate d = divGate(0, 1.4f, z - 0.8f, 2, row);
-                d.slides = 1;
-                d.amp = 2.6f;
-                d.period = period;
-                d.phase = phase + 0.5f;
-                addGate(L, a);
-                addGate(L, d);
-                p = kPatCrossing;
-                break;
-            }
-        }
-        addRow(L, z, Pattern(p));
-        stream *= float(best);
-        prev = p;
-        z += r.range(6, 8);
-    }
-    const float last = L.rowZ[L.rowCount - 1] + (L.rowPattern[L.rowCount - 1] == kPatWall ? 2.0f : 0.0f);
-    L.len = clampv(last + 12.0f, 30.0f, 44.0f);
+    RecipeCtx ctx;
+    ctx.index = index;
+    ctx.strongest = band.strongest;
+    ctx.lengthClass = L.lengthClass;
+    ctx.kind = L.kind;
+    ctx.patternWeight = band.patternWeight;
+    L.plan = 255;  // a recipe with an idea about the enemy sets it
+    row.build(L, r, ctx);
+    if (row.mirror && r.f01() < 0.5f) mirrorLayout(L);
+    L.targetT = targetTime(index, L.lengthClass);  // a recipe may have lengthened the lane
 
     // The enemy (GAME_DESIGN 5.9, 7.3 step 3) and its plan (VARIETY_DESIGN 5.1); a boss's plan is its own (8).
-    L.plan = u8(planFor(index, r));
+    const int introPlan = introPlanFor(index);
+    const u8 recipePlan = L.plan;
+    L.plan = u8(introPlan >= 0 ? introPlan : planFor(index, r));
+    if (recipePlan != 255) L.plan = recipePlan;
     if (L.boss) {
         static const u8 bossPlan[kBossCount] = {kPlanSteady, kPlanSteady, kPlanRunnerPacks, kPlanPulse};
         L.plan = bossPlan[L.bossType];
     }
+    const bool ownEmitters = L.emitterCount > 0;
     if (L.kind == kTwins && (L.plan == kPlanPincer || L.plan == kPlanFlank)) L.plan = kPlanPulse;  // each spire has its emitter
-    if (festival) L.plan = kPlanSteady;
+    if (ownEmitters && L.plan == kPlanFlank && recipePlan != kPlanFlank) L.plan = kPlanSteady;    // the recipe placed the enemy
+    if (ownEmitters && L.plan == kPlanPincer && L.emitterCount != 2) L.plan = kPlanSteady;
+    if (festival) L.plan = kPlanSteady, L.emitterCount = 0;
     const int emitters = index <= 9 ? 1 : index <= 29 ? 2 : 3;
-    if (festival) {
-        // No enemy (VARIETY_DESIGN 6).
+    if (festival || ownEmitters) {
+        // No enemy (a festival), or the recipe's own emitters.
     } else if (L.kind == kTwins) {  // an emitter at each spire's foot; it stops when its spire falls
-        L.twinShare = r.f01() < 0.5f ? 0.5f : (r.f01() < 0.5f ? 0.4f : 0.6f);
         addEmitter(L, -tune.twinX);
         addEmitter(L, tune.twinX);
         L.emitters[1].group = 1;
@@ -432,13 +450,14 @@ LevelDef generate(int index, u64 seed) {
         addEmitter(L, 0);
         addEmitter(L, 2.5f);
     }
-    if (index >= 20 && L.plan != kPlanPincer && L.emitterCount > 0 && r.f01() < 0.4f) {
+    if (L.kind == kTwins) L.twinShare = r.f01() < 0.5f ? 0.5f : (r.f01() < 0.5f ? 0.4f : 0.6f);
+    if (!ownEmitters && index >= 20 && L.plan != kPlanPincer && L.emitterCount > 0 && r.f01() < 0.4f) {
         Emitter& e = L.emitters[r.rangei(0, L.emitterCount - 1)];
         e.amp = r.range(1.0f, 1.5f);
         e.period = r.range(4, 7);
         e.x = clampv(e.x, -2.5f + e.amp, 2.5f - e.amp);
     }
-    if (L.plan == kPlanFlank) {
+    if (!ownEmitters && L.plan == kPlanFlank) {
         // A third of the flow through one or two side doors, between z 14 and len - 8, clear of the rows by 1.5 m.
         const int foot = L.emitterCount, doors = r.f01() < 0.5f ? 1 : 2;
         for (int e = 0; e < foot; ++e) L.emitters[e].share = (2.0f / 3.0f) / float(foot);
@@ -458,7 +477,7 @@ LevelDef generate(int index, u64 seed) {
     if (L.boss) addBossScript(L);
     applyEnemyDefaults(L);
     if (festival) placeFestivalGeodes(L, r);
-    else placeGeodes(L, r);
+    else if (L.geodeCount == 0) placeGeodes(L, r);
     addTwists(L, r);
     return L;
 }

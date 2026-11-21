@@ -54,13 +54,13 @@ bool Game::init(const Args& args, const GameEnv& env) {
     }
 
     if (!std::strcmp(args.scenario, "sim_hash")) {
-        // The determinism hash on this device (P2): levels 1-5, four geode levels (VARIETY_PLAN V1) and one level of each kind
-        // (V3: a boss, a festival, a holdout, a colossus, twins), the greedy bot, 60 s
-        // each, the same runs as glowtide_headless --sim determinism on the PC (seed 1 unless --seed;
+        // The determinism hash on this device (P2): levels 1-5, four geode levels (VARIETY_PLAN V1), one level of each kind
+        // (V3: a boss, a festival, a holdout, a colossus, twins) and of each recipe, a set piece and a mirrored replay (V4),
+        // the greedy bot, 60 s each, the same runs as glowtide_headless --sim determinism on the PC (seed 1 unless --seed;
         // scripts\simhash-android.ps1 compares them).
         mode_ = Mode::Debug;
         const u64 seed = args.seed >= 0 ? u64(args.seed) : 1u;
-        for (int level : {1, 2, 3, 4, 5, 6, 11, 23, 47, 10, 15, 21, 31, 41}) {
+        for (int level : sim::kHashLevels) {
             world_.init(sim::levelFor(level), seed);
             bot_.init(sim::BotKind::Greedy, seed);
             for (int t = 0; t < 60 * 60; ++t) world_.tick(bot_.think(world_));
@@ -169,9 +169,9 @@ void Game::enterLevel(int index, bool fade) {
     else if (level_ == 5) showHint(4);
     else if (level_ == 16) showHint(9);
     else if (level_ == 15) showHint(10);
-    else if (level_ == 21) showHint(11);
-    else if (level_ == 31) showHint(12);
-    else if (level_ == 41) showHint(13);
+    else if (level_ == 22) showHint(11);
+    else if (level_ == 32) showHint(12);
+    else if (level_ == 42) showHint(13);
 }
 
 const char* screenName(Screen s) {
@@ -196,6 +196,22 @@ void Game::startPlaying() {
     resumeRamp_ = 1;
     if (level_ == 1) showHint(0);
     if (const char* b = goalBanner(world_.def)) pushBanner(b);  // the goal, for the level's first second (VARIETY_DESIGN 14)
+    // A set piece's name, or the recipe the level introduces, then its idea as the hint line (VARIETY_DESIGN 10.1, 10.3).
+    char name[48];
+    if (levelName(world_.def.index, name, sizeof name)) {
+        if (!goalBanner(world_.def)) pushBanner(name);
+        if (const char* idea = sim::levelIdea(world_.def.index)) showLine(idea);
+    }
+}
+
+// A level's name in the font's capitals (a set piece's, or the recipe it introduces); false for any other level.
+bool levelName(int index, char* out, size_t n) {
+    const char* t = sim::levelTitle(index);
+    if (!t || n == 0) return false;
+    size_t i = 0;
+    for (; t[i] && i + 1 < n; ++i) out[i] = t[i] >= 'a' && t[i] <= 'z' ? char(t[i] - 'a' + 'A') : t[i];
+    out[i] = 0;
+    return true;
 }
 
 // The goal's banner (VARIETY_DESIGN 6, 8): none for a siege.
@@ -252,6 +268,15 @@ void Game::pushBanner(const char* text) {
     } else if (bannerQueued_ < 4) {
         std::snprintf(bannerQueue_[bannerQueued_++], sizeof bannerQueue_[0], "%s", text);
     }
+}
+
+// A hint line that is not one of kHints: a level's idea, shown each time the level starts (VARIETY_DESIGN 10.1).
+void Game::showLine(const char* text) {
+    size_t i = 0;
+    for (; text[i] && i + 1 < sizeof lineText_; ++i) lineText_[i] = text[i] >= 'a' && text[i] <= 'z' ? char(text[i] - 'a' + 'A') : text[i];
+    lineText_[i] = 0;
+    hint_ = kLineHint;
+    hintTime_ = 3.2f;
 }
 
 void Game::showHint(int id) {

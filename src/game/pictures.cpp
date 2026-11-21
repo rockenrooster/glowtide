@@ -9,6 +9,7 @@
 #include "core/tuning.h"
 #include "game/game.h"
 #include "sim/bake.h"
+#include "sim/level_build.h"
 
 namespace gt {
 
@@ -168,6 +169,26 @@ bool Game::setupPicture(const char* name) {
         updateOverride_ = 999;
         return true;
     }
+    if (!std::strcmp(name, "recipe_top")) {
+        // A recipe's lane from straight above (VARIETY_PLAN V4 task 3): --recipe R --level N --seed S.
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        // The first level from --level on whose kind the recipe serves (Two towers on a Twins level, and so on).
+        int index = args_.level > 0 ? args_.level : 60;
+        if (args_.recipe >= 0 && args_.recipe < sim::recipeCount())
+            for (int i = 0; i < 40 && !(sim::kRecipes[args_.recipe].kinds >> sim::kindFor(index) & 1u); ++i) ++index;
+        sim::LevelDef def = sim::generateWith(index, args_.seed >= 0 ? u64(args_.seed) : sim::defaultSeed(index), args_.recipe);
+        sim::sizeGeodes(def);
+        def.spireHealth = 1000;
+        sim::setGoals(def);
+        world_.init(def, 0);
+        view_.setLevel(def, 0);
+        if (graphicsReady_) renderer_.setLevel(def, *view_.wp, *view_.gp);
+        level_ = index;
+        coldStart_ = false;
+        view_.topDown = true;
+        setScreen(Screen::Play);
+        return true;
+    }
     if (!std::strcmp(name, "level_top")) {
         // A level from straight above with its labels (P5 level sheets); --level picks it.
         std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
@@ -267,10 +288,10 @@ bool Game::setupPicture(const char* name) {
             int level;
             sim::BotKind bot;
             float seconds;
-        } kinds[] = {{"kind_holdout", 21, sim::BotKind::Greedy, 14},  {"kind_colossus", 31, sim::BotKind::Greedy, 10},
-                     {"kind_twins", 41, sim::BotKind::Greedy, 12},     {"kind_festival", 15, sim::BotKind::Greedy, 8},
-                     {"hud_holdout", 21, sim::BotKind::Greedy, 6},     {"hud_colossus", 31, sim::BotKind::Greedy, 6},
-                     {"hud_twins", 41, sim::BotKind::Greedy, 6},       {"hud_festival", 15, sim::BotKind::Greedy, 6},
+        } kinds[] = {{"kind_holdout", 22, sim::BotKind::Greedy, 14},  {"kind_colossus", 32, sim::BotKind::Greedy, 10},
+                     {"kind_twins", 42, sim::BotKind::Greedy, 12},     {"kind_festival", 15, sim::BotKind::Greedy, 8},
+                     {"hud_holdout", 22, sim::BotKind::Greedy, 6},     {"hud_colossus", 32, sim::BotKind::Greedy, 6},
+                     {"hud_twins", 42, sim::BotKind::Greedy, 6},       {"hud_festival", 15, sim::BotKind::Greedy, 6},
                      {"hud_boss", 10, sim::BotKind::Greedy, 6}};
         for (const auto& k : kinds) {
             if (std::strcmp(name, k.name)) continue;
@@ -302,7 +323,7 @@ bool Game::setupPicture(const char* name) {
     if (!std::strcmp(name, "colossus_strip") || !std::strcmp(name, "colossus_fall_strip") || !std::strcmp(name, "dawn_strip")) {
         std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
         const bool arrive = !std::strcmp(name, "colossus_strip"), dawn = !std::strcmp(name, "dawn_strip");
-        presim(dawn ? 21 : 31, arrive ? sim::BotKind::Idle : sim::BotKind::Greedy, 1);
+        presim(dawn ? 22 : 32, arrive ? sim::BotKind::Idle : sim::BotKind::Greedy, 1);
         for (int t = 0; t < 60 * 120 && world_.result == sim::Result::None; ++t) {
             if (arrive && world_.colossusOut && world_.colossusZ < 6.0f) break;
             if (dawn && world_.time() > world_.def.targetT - 0.6f) break;

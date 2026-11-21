@@ -10,7 +10,7 @@ namespace gt::sim {
 // Bump kGeneratorVersion when anything that changes a layout changes (a recipe, the calendar, a hand-made level), and
 // kRulesVersion when anything that changes a bot's run changes (a rule in world.cpp, a tuning default, a bot). The bake
 // writes both into levels_baked.h; a unit test fails while the table's differ from these (VARIETY_TECH 2).
-constexpr int kGeneratorVersion = 8;  // 8: kinds, twists, bosses; hand-made 15, 21, 31, 41
+constexpr int kGeneratorVersion = 9;  // 9: the recipe catalogue, the calendar, set pieces
 constexpr int kRulesVersion = 5;      // 5: kinds (holdout, colossus, twins, festival, boss), twists, cubs
 int bakedGeneratorVersion();
 int bakedRulesVersion();
@@ -186,6 +186,11 @@ int planFrom(int plan);
 i32 twoSignificant(float v);
 // Whether a level number is laid out by hand (levels_hand.cpp) rather than by a recipe.
 bool isHandMade(int index);
+// The set piece at a level (VARIETY_DESIGN 10.3: 49, 99 ... 599), 0 to 11, or -1; a level's name and hint line (a set
+// piece's, or the recipe it introduces: VARIETY_DESIGN 10.1), or null.
+int setPieceAt(int index);
+const char* levelTitle(int index);
+const char* levelIdea(int index);
 float hardnessFor(int index);  // VARIETY_DESIGN 10.2
 // What a boon taken now multiplies the stream's power by, minus one, given what the stream already has (VARIETY_DESIGN
 // 3); 0 at its limit and for an instant boon.
@@ -198,13 +203,26 @@ LevelDef layoutFor(int index, u64 seed);
 void setGoals(LevelDef& L);  // the baked goal number into each kind's goals (levels.cpp)
 LevelDef introLevel(int index);  // the hand-made levels
 LevelDef generate(int index, u64 seed);
+LevelDef generateWith(int index, u64 seed, int recipe);  // -1: the calendar's choice
+void mirrorLayout(LevelDef& L);  // left to right (VARIETY_DESIGN 9.2's twins and 16's replays)
+int lengthClassFor(int index);   // VARIETY_DESIGN 10.2
+float targetTime(int index, int lengthClass);
 float targetTime(int index);
-int kindFor(int index);  // calendar.cpp: the simple schedule of V3 (VARIETY_PLAN V3 task 8)
+int kindFor(int index);  // calendar.cpp: VARIETY_DESIGN 6 and 10
 float fightFor(int index);
 int worldFor(int index);
 u64 defaultSeed(int index);
-// The repeat after level 300 (GAME_DESIGN 7.4): 301 plays 101, ...
+// After the last baked level (VARIETY_DESIGN 16): 601 plays 101 mirrored left to right in the world kReplayWorldShift
+// places on, and so on; the level number whose layout and numbers a play index uses, and whether it is mirrored.
+constexpr int kLastBaked = 600;
+constexpr int kWorldCount = 5;  // VARIETY_DESIGN 15 (phase V5) brings ten
+constexpr int kReplayWorldShift = kWorldCount >= 10 ? 5 : 2;
 int levelForPlay(int index);
+bool isReplay(int index);
+// The levels whose determinism hash the PC and the phones compare (glowtide_headless --sim determinism --hash-levels, the
+// sim_hash scenario): 1-5, geode levels, one of each kind, the recipe introductions, a set piece and a mirrored replay.
+inline constexpr int kHashLevels[] = {1,  2,  3,  4,  5,  6,  11, 23, 47, 10, 15, 22, 32, 42, 17, 24, 26, 28,
+                                      33, 39, 46, 56, 58, 61, 68, 73, 78, 83, 88, 91, 93, 96, 49, 601};
 
 // An eased triangle wave in [-1, 1] with period 1 (no trigonometry: TECH_SPEC 4.2).
 float easedWave(float p);
