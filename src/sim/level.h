@@ -10,8 +10,8 @@ namespace gt::sim {
 // Bump kGeneratorVersion when anything that changes a layout changes (a recipe, the calendar, a hand-made level), and
 // kRulesVersion when anything that changes a bot's run changes (a rule in world.cpp, a tuning default, a bot). The bake
 // writes both into levels_baked.h; a unit test fails while the table's differ from these (VARIETY_TECH 2).
-constexpr int kGeneratorVersion = 7;  // 7: hoppers, breathing gates, sliding walls, plans, side doors; hand-made 16, 38
-constexpr int kRulesVersion = 4;      // 4: plans, runners, side doors, KINDLE, COMET, HUSH; no default bursts or brutes
+constexpr int kGeneratorVersion = 8;  // 8: kinds, twists, bosses; hand-made 15, 21, 31, 41
+constexpr int kRulesVersion = 5;      // 5: kinds (holdout, colossus, twins, festival, boss), twists, cubs
 int bakedGeneratorVersion();
 int bakedRulesVersion();
 
@@ -19,8 +19,8 @@ constexpr float kHW = 5.0f;              // lane half-width (GAME_DESIGN 3)
 constexpr float kLauncherRange = 4.4f;   // the launcher's rail: x in [-4.4, 4.4]
 constexpr float kMuzzleZ = 2.55f;        // the barrel's tip: where the lens is (gfx/mesh.cpp's launcher, placed at z 0.2)
 constexpr float kCoreZ = 0.8f;
-constexpr int kMaxGates = 24, kMaxBarriers = 16, kMaxBumpers = 16, kMaxSnuffers = 8, kMaxEmitters = 6, kMaxBursts = 8,
-              kMaxRows = 6, kMaxGeodes = 16;
+constexpr int kMaxGates = 24, kMaxBarriers = 16, kMaxBumpers = 16, kMaxSnuffers = 8, kMaxEmitters = 6, kMaxTwists = 4,
+              kMaxRows = 6, kMaxGeodes = 16, kMaxCubs = 2;
 
 enum GateKind : u8 { kGateMul = 0, kGateDiv = 1 };
 // How a gate moves (Gate::slides): still, sliding on the gates' wave (GAME_DESIGN 5.4), or hopping between two places
@@ -60,6 +60,11 @@ enum Twist : u8 {
     kTwistCount
 };
 enum Boon : u8 { kBoonLantern, kBoonQuicken, kBoonBright, kBoonWard, kBoonKindle, kBoonComet, kBoonHush, kBoonCount };
+// What starts a twist: the clock (a share of T), the goal (the share of it still to go), the core (at or below a count).
+enum TwistTrigger : u8 { kTrigTime, kTrigGoal, kTrigCore };
+// The four bosses (VARIETY_DESIGN 8), in the order they come from level 10.
+enum BossType : u8 { kBossOldSpire, kBossWarden, kBossTempest, kBossHydra, kBossCount };
+const char* bossName(int boss);
 const char* kindName(int kind);
 const char* lengthClassName(int lengthClass);
 const char* planName(int plan);
@@ -78,6 +83,7 @@ struct Barrier {
     float x0 = 0, x1 = 0, z = 0;
     i32 health = 0;
     float amp = 0, period = 4, phase = 0;  // a sliding wall (VARIETY_DESIGN 4 #3): its span shifts by amp * wave(...)
+    u8 dormant = 0;                        // raised by a twist (WARD WALL): no health until then
 };
 
 struct Bumper {
@@ -96,11 +102,14 @@ struct Emitter {
     u8 group = 0;    // Twins: which spire it belongs to
 };
 
-// A burst of the enemy flow: time-triggered (t >= 0, seconds after the level starts) or health-triggered (t < 0 and
-// healthFrac: when the spire falls to that fraction). `brutes` brutes come with it.
-struct Burst {
-    float t = -1, healthFrac = 0, mult = 2, dur = 3;
+// A twist (VARIETY_DESIGN 7): a named moment that starts once, by the clock, the goal or the core. SURGE multiplies the
+// flow for `dur` seconds (with `brutes` brutes: the old bursts); BRUTE GUARD sends two brutes; the others are in world.cpp.
+struct TwistDef {
+    u8 type = kTwistSurge, trigger = kTrigTime;
+    float at = 0.5f;          // kTrigTime: a share of T; kTrigGoal: the share of the goal left; kTrigCore: the core at or below
+    float mult = 2, dur = 3;  // SURGE
     i32 brutes = 0;
+    u8 param = 0;             // GOLDEN GATE: the gate; WARD WALL: the barrier; CUB: how many; STAMPEDE: the emitter
 };
 
 // A geode (VARIETY_DESIGN 2): a crystal with health that drifts down the lane toward the lantern; the stream cracks it
@@ -117,6 +126,7 @@ struct Geode {
     i32 hp = 0, shield = 0;
     u8 boon = kBoonLantern;
     u8 group = 0;                            // a choice pair shares a group above 0: opening one dissolves the other
+    u8 twist = 0;                            // 1-based: released by that twist (GEODE RAIN, SECOND WIND) instead of at t
 };
 
 struct LevelDef {
@@ -126,7 +136,10 @@ struct LevelDef {
     float len = 36;
     int world = 1;          // palette, 1..5
     float targetT = 24;     // seconds
-    i32 spireHealth = 60;
+    i32 spireHealth = 60;   // the goal: Siege and Boss the spire, Twins the left spire, Colossus its health
+    i32 goal2 = 0;          // Twins: the right spire; Festival: the geodes opened for three stars
+    float twinShare = 0.5f; // Twins: the left spire's share of the goal
+    u8 bossType = 0;        // a BossType when kind is kBoss
     i32 coreHealth = 10;
     float baseFlow = 0;     // enemy power a second (GAME_DESIGN 5.9); 0 with no enemy
     float fight = 0;        // the share of the player's output the enemy should cancel
@@ -146,8 +159,8 @@ struct LevelDef {
     Snuffer snuffers[kMaxSnuffers];
     int emitterCount = 0;
     Emitter emitters[kMaxEmitters];
-    int burstCount = 0;
-    Burst bursts[kMaxBursts];
+    int twistCount = 0;
+    TwistDef twists[kMaxTwists];
     int rowCount = 0;
     float rowZ[kMaxRows] = {};
     u8 rowPattern[kMaxRows] = {};
@@ -182,9 +195,11 @@ float boonGain(int boon, int lanterns, int quicken, int bright);
 LevelDef levelFor(int index);
 // The layout alone (no baked numbers): hand-made or generated from (index, seed).
 LevelDef layoutFor(int index, u64 seed);
+void setGoals(LevelDef& L);  // the baked goal number into each kind's goals (levels.cpp)
 LevelDef introLevel(int index);  // the hand-made levels
 LevelDef generate(int index, u64 seed);
 float targetTime(int index);
+int kindFor(int index);  // calendar.cpp: the simple schedule of V3 (VARIETY_PLAN V3 task 8)
 float fightFor(int index);
 int worldFor(int index);
 u64 defaultSeed(int index);

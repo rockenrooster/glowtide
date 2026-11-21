@@ -83,6 +83,8 @@ private:
     float wardRing_ = 0;        // WARD's gold ring spreading up the lane
     float barrelRing_ = 0;      // QUICKEN or BRIGHT: a ring runs up the barrel
     float kindleT_ = -1;        // KINDLE: seconds since it was taken (-1: not this level); the labels count up row by row
+    float eclipse_ = 0;         // ECLIPSE's grade, eased in and out over 0.5 s (VARIETY_DESIGN 7)
+    bool twinDown_[2] = {};     // Twins: a spire that has shattered
     int kindleRow_ = 0;         // the rows whose labels have counted up
     float pipsLit_ = 10;        // the pips relight one by one
     float launcherZ_[3] = {0.2f, 0.896f, 0.896f};  // side lanterns stand forward so every lens is at the muzzle
@@ -117,5 +119,6 @@ private:
 };
 
 const char* gateLabel(const sim::Gate& g, char* buf, int n, int k = 0);  // k: the factor shown (0: the gate's own)
+int goldenGate(const sim::World& w);  // GOLDEN GATE's gate while it lasts, or -1
 
 }  // namespace gt

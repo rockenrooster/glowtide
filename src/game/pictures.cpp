@@ -258,6 +258,96 @@ bool Game::setupPicture(const char* name) {
         worldTicks_ = true;
         return true;
     }
+    // V3: each kind on its introduction level a few seconds in (kind_*, and hud_* for the lint over the frames); the bosses
+    // a second after their first twist; the colossus arriving (idle lets it come) and falling; dawn; a twist a second
+    // after it starts, on the first level from 43 that has it (or the boss whose script has it).
+    {
+        const struct {
+            const char* name;
+            int level;
+            sim::BotKind bot;
+            float seconds;
+        } kinds[] = {{"kind_holdout", 21, sim::BotKind::Greedy, 14},  {"kind_colossus", 31, sim::BotKind::Greedy, 10},
+                     {"kind_twins", 41, sim::BotKind::Greedy, 12},     {"kind_festival", 15, sim::BotKind::Greedy, 8},
+                     {"hud_holdout", 21, sim::BotKind::Greedy, 6},     {"hud_colossus", 31, sim::BotKind::Greedy, 6},
+                     {"hud_twins", 41, sim::BotKind::Greedy, 6},       {"hud_festival", 15, sim::BotKind::Greedy, 6},
+                     {"hud_boss", 10, sim::BotKind::Greedy, 6}};
+        for (const auto& k : kinds) {
+            if (std::strcmp(name, k.name)) continue;
+            std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+            presim(k.level, k.bot, int(k.seconds * 60.0f));
+            worldTicks_ = true;
+            return true;
+        }
+    }
+    {
+        const struct {
+            const char* name;
+            int level;
+        } bosses[] = {{"boss_old_spire", 10}, {"boss_warden", 20}, {"boss_tempest", 30}, {"boss_hydra", 40}};
+        for (const auto& k : bosses) {
+            if (std::strcmp(name, k.name)) continue;
+            std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+            presim(k.level, sim::BotKind::Greedy, 1);
+            for (int t = 0; t < 60 * 120 && world_.result == sim::Result::None; ++t) {
+                if (world_.def.twistCount > 0 && world_.twistStart[0] >= 0 && world_.tickCount > world_.twistStart[0] + 60) break;
+                world_.tick(bot_.think(world_));
+                view_.onTick(world_);
+                if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
+            }
+            worldTicks_ = true;
+            return true;
+        }
+    }
+    if (!std::strcmp(name, "colossus_strip") || !std::strcmp(name, "colossus_fall_strip") || !std::strcmp(name, "dawn_strip")) {
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        const bool arrive = !std::strcmp(name, "colossus_strip"), dawn = !std::strcmp(name, "dawn_strip");
+        presim(dawn ? 21 : 31, arrive ? sim::BotKind::Idle : sim::BotKind::Greedy, 1);
+        for (int t = 0; t < 60 * 120 && world_.result == sim::Result::None; ++t) {
+            if (arrive && world_.colossusOut && world_.colossusZ < 6.0f) break;
+            if (dawn && world_.time() > world_.def.targetT - 0.6f) break;
+            if (!arrive && !dawn && world_.colossusOut && world_.spire * 12 < world_.spireStart) break;
+            world_.tick(bot_.think(world_));
+            view_.onTick(world_);
+            if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
+        }
+        worldTicks_ = true;
+        return true;
+    }
+    if (!std::strncmp(name, "twist_", 6)) {
+        int type = -1;
+        for (int k = 0; k < sim::kTwistCount; ++k) {
+            char want[32];
+            std::snprintf(want, sizeof want, "twist_%s", sim::twistName(k));
+            for (char* c = want; *c; ++c) *c = *c == ' ' ? '_' : char(*c >= 'A' && *c <= 'Z' ? *c - 'A' + 'a' : *c);
+            if (!std::strcmp(name, want)) type = k;
+        }
+        if (type < 0) return false;
+        std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
+        int level = 24;
+        for (int l = 10; l <= 300 && type != sim::kTwistSecondWind; ++l) {
+            const sim::LevelDef d = sim::levelFor(l);
+            bool has = false;
+            for (int k = 0; k < d.twistCount; ++k) has = has || d.twists[k].type == type;
+            if (has) {
+                level = l;
+                break;
+            }
+        }
+        presim(level, sim::BotKind::Greedy, 1);
+        int k0 = 0;
+        for (int k = 0; k < world_.def.twistCount; ++k)
+            if (world_.def.twists[k].type == type) k0 = k;
+        for (int t = 0; t < 60 * 120 && world_.result == sim::Result::None; ++t) {
+            if (type == sim::kTwistSecondWind && world_.core > 3 && t == 120) world_.core = 3;
+            if (world_.twistStart[k0] >= 0 && world_.tickCount > world_.twistStart[k0] + 20) break;
+            world_.tick(bot_.think(world_));
+            view_.onTick(world_);
+            if (t % 2 == 0) view_.update(1.0f / 30.0f, world_);
+        }
+        worldTicks_ = true;
+        return true;
+    }
     if (!std::strcmp(name, "pan_strip")) {
         // The thumb flicks the lantern across the lane every half second while it fires: every shot must leave the
         // barrel's tip, wherever the lantern has gone since (VARIETY_PLAN work, 2026-11-20).

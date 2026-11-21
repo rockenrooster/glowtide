@@ -39,6 +39,14 @@ inline float punchScale(float p) {
 
 }  // namespace
 
+// GOLDEN GATE's gate while it lasts, or -1.
+int goldenGate(const sim::World& w) {
+    for (int k = 0; k < w.def.twistCount; ++k)
+        if (w.def.twists[k].type == sim::kTwistGoldenGate && w.twistStart[k] >= 0 && float(w.tickCount - w.twistStart[k]) * sim::kTick < tune.goldenSeconds)
+            return w.def.twists[k].param;
+    return -1;
+}
+
 const char* gateLabel(const sim::Gate& g, char* buf, int n, int k) {
     std::snprintf(buf, size_t(n), "%s%d", g.kind == sim::kGateMul ? "\xC3\x97" : "\xC3\xB7", k > 0 ? k : int(g.k));
     return buf;
@@ -78,6 +86,8 @@ void View::setLevel(const sim::LevelDef& d, int worldOverride) {
     wardRing_ = barrelRing_ = 0;
     kindleT_ = -1;
     kindleRow_ = 0;
+    eclipse_ = 0;
+    twinDown_[0] = twinDown_[1] = false;
     pipsLit_ = float(d.coreHealth);
     for (Flash& f : flashes_) f.life = 0;
     clearParticles();
@@ -295,14 +305,57 @@ void View::onTick(const sim::World& w) {
                 bannerTime = 0.9f;
                 break;
             case sim::kEvWin: {
-                const float zc = def.len + 1.4f;
-                for (int k = 0; k < (def.boss ? 100 : 60); ++k)
-                    spawn(V3((rnd() - 0.5f) * 4.5f, 0.3f + rnd() * 6.0f, zc - 0.5f), V3((rnd() - 0.5f) * 9, 2 + rnd() * 7, -2 - rnd() * 6),
-                          k % 3 == 0 ? gp->crack : (k % 3 == 1 ? gp->spireLight : V3(1, 0.85f, 0.95f)), 1.0f, 0.25f + rnd() * 0.25f,
-                          1.6f, 2, (rnd() - 0.5f) * 14);
-                trauma = minv(1.0f, trauma + (def.boss ? 0.5f : 0.35f));
+                // The goal shatters where it is: the spire, the last twin, the colossus (a hundred shards); a festival's
+                // lantern throws gold; dawn is the grade's brightening alone.
+                if (def.kind == sim::kHoldout) break;
+                float cx = 0, cz = def.len + 1.4f - 0.5f, wide = 4.5f;
+                int shards = def.boss ? 100 : 60;
+                if (def.kind == sim::kColossus) cx = w.colossusX, cz = w.colossusZ, shards = 100, wide = 3.6f;
+                if (def.kind == sim::kTwins) cx = w.spire2 <= 0 && !twinDown_[1] ? tune.twinX : -tune.twinX, wide = 3.0f;
+                const V3 gold = hexColor(0xFFD25A);
+                for (int k = 0; k < shards; ++k)
+                    spawn(V3(cx + (rnd() - 0.5f) * wide, 0.3f + rnd() * 6.0f, cz), V3((rnd() - 0.5f) * 9, 2 + rnd() * 7, -2 - rnd() * 6),
+                          def.kind == sim::kFestival ? gold : k % 3 == 0 ? gp->crack : (k % 3 == 1 ? gp->spireLight : V3(1, 0.85f, 0.95f)),
+                          1.0f, 0.25f + rnd() * 0.25f, 1.6f, 2, (rnd() - 0.5f) * 14);
+                trauma = minv(1.0f, trauma + (def.boss || def.kind == sim::kColossus ? 0.5f : 0.35f));
                 break;
             }
+            case sim::kEvColossusStep:  // heavy steps: the camera feels them inside 12 m of the lantern
+                if (ev.z < 12.0f) trauma = minv(1.0f, trauma + 0.1f);
+                for (int k = 0; k < 6; ++k)
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 3, 0.1f, ev.z - 1.2f), V3((rnd() - 0.5f) * 2, 0.6f + rnd(), -rnd()), gp->gloomLight, 0.6f,
+                          0.18f, 0.5f, 0);
+                break;
+            case sim::kEvColossusHit:
+                spireFlash_ = minv(1.0f, spireFlash_ + 0.1f);
+                if (spirePunch_ < 0.4f) spirePunch_ = 1.0f;
+                break;
+            case sim::kEvCubHit:
+                spawn(V3(ev.x + (rnd() - 0.5f), 1.0f + rnd(), ev.z - 1.0f), V3((rnd() - 0.5f) * 2, 1 + rnd(), -1), gp->gloomEye, 0.8f, 0.16f, 0.4f, 0);
+                break;
+            case sim::kEvCubDown:
+                for (int k = 0; k < 24; ++k)
+                    spawn(V3(ev.x + (rnd() - 0.5f) * 2, 0.4f + rnd() * 2, ev.z), V3((rnd() - 0.5f) * 6, 1 + rnd() * 4, (rnd() - 0.5f) * 4),
+                          k & 1 ? gp->gloomEye : gp->gloomLight, 1.0f, 0.22f, 0.7f, 0);
+                trauma = minv(1.0f, trauma + 0.15f);
+                break;
+            case sim::kEvTwist:
+                if (ev.b == sim::kTwistWardWall && ev.a < def.twistCount) {  // the wall rises across the lane
+                    const int b = def.twists[ev.a].param;
+                    if (b < def.barrierCount) {
+                        const sim::Barrier& B = def.barriers[b];
+                        for (int k = 0; k < 30; ++k)
+                            spawn(V3(B.x0 + (B.x1 - B.x0) * rnd(), 0.2f, B.z), V3(0, 2 + rnd() * 3, 0), gp->crack, 0.9f, 0.2f, 0.6f, 0);
+                        barrierShake_[b] = 1.0f;
+                    }
+                    trauma = minv(1.0f, trauma + 0.2f);
+                } else if (ev.b == sim::kTwistGoldenGate && ev.a < def.twistCount) {
+                    const int g = def.twists[ev.a].param;
+                    if (g < def.gateCount) gateFlash_[g] = gatePunch_[g] = 1.0f;
+                } else if (ev.b == sim::kTwistCub || ev.b == sim::kTwistBruteGuard || ev.b == sim::kTwistStampede) {
+                    trauma = minv(1.0f, trauma + 0.12f);
+                }
+                break;
             case sim::kEvLose:
                 break;
             default:
@@ -338,6 +391,23 @@ void View::update(float dt, const sim::World& w) {
     }
     for (float& p : lanternPop_) p = maxv(0.0f, p - k / 0.3f);
     wardRing_ = maxv(0.0f, wardRing_ - k / 0.7f);
+    // ECLIPSE: the picture loses 35% of its colour, eased 0.5 s each way (GAME_DESIGN 14; REDUCE EFFECTS halves it).
+    const float eclipseWant = def.twistCount > 0 && w.twistOn(sim::kTwistEclipse, tune.eclipseSeconds) ? 0.35f : 0.0f;
+    eclipse_ += clampv(eclipseWant - eclipse_, -k / 0.5f * 0.35f, k / 0.5f * 0.35f);
+    if (def.kind == sim::kTwins) {  // a twin that falls shatters where it stands
+        for (int s = 0; s < 2; ++s) {
+            if (twinDown_[s] || (s == 0 ? w.spire : w.spire2) > 0) continue;
+            twinDown_[s] = true;
+            const float cx = s == 0 ? -tune.twinX : tune.twinX;
+            for (int j = 0; j < 50; ++j) {
+                const float a = float(j) * 0.618f;
+                spawn(V3(cx + (a - std::floor(a) - 0.5f) * 3.0f, 0.3f + float(j % 7) * 0.8f, def.len + 0.9f),
+                      V3((a - std::floor(a) - 0.5f) * 8, 2 + float(j % 5), -2 - float(j % 4)), j % 2 ? gp->crack : gp->spireLight, 1.0f, 0.25f,
+                      1.4f, 2, float(j % 9) - 4.0f);
+            }
+            trauma = minv(1.0f, trauma + 0.35f);
+        }
+    }
     if (kindleT_ >= 0) {  // KINDLE's run: each row's multiply gates count up with a punch, 80 ms apart
         kindleT_ += k;
         while (kindleRow_ < sim::kMaxRows && kindleT_ >= 0.08f * float(kindleRow_)) {
@@ -400,6 +470,23 @@ void View::buildUnits(const sim::World& w) {
         if (brute && t < 2) t = 2;
         put(w.g, i, u8(1 | (brute ? 2 : 0) | (f & sim::kRunner ? 16 : 0) | (f & sim::kStepping ? 32 : 0)), t);
     }
+    // The colossus (tier 5, crowned: flag 64) and the cubs (tier 4): glooms of two new sizes (VARIETY_TECH 7).
+    auto body = [&](float x, float z, u8 flags, int tier, u8 seed) {
+        if (n >= kMaxUnits) return;
+        UnitInstance& q = scratch_[n];
+        q.x = x;
+        q.z = z;
+        q.dx = q.dz = 0;
+        q.flags = flags;
+        q.seed = seed;
+        q.age = 255;
+        q.tier = u8(tier);
+        keys_[n] = u16(clampv(int((z + 3.0f) * 100.0f), 0, kBuckets - 1));
+        ++n;
+    };
+    if (def.kind == sim::kColossus && w.colossusOut && w.spire > 0) body(w.colossusX, w.colossusZ, 1 | 64, 5, 77);
+    for (int c = 0; c < w.cubCount; ++c)
+        if (w.cubHp[c] > 0) body(w.cubX[c], w.cubZ[c], 1, 4, u8(31 + c));
     unitCount_ = n;
     // Counting sort on z (centimetres), far to near.
     std::memset(bucket_, 0, sizeof bucket_);
@@ -414,6 +501,7 @@ void View::buildUnits(const sim::World& w) {
 
     // Row cuts: each distinct gate z, far to near.
     panelCount_ = cutCount_ = 0;
+    const int golden = goldenGate(w);
     float zs[sim::kMaxGates];
     int nz = 0;
     for (int g = 0; g < def.gateCount; ++g) {
@@ -442,7 +530,7 @@ void View::buildUnits(const sim::World& w) {
             p.x1 = w.gateX[g] + w.gateHw[g];
             p.z = G.z;
             p.flash = gateFlash_[g];
-            p.kind = G.kind == sim::kGateMul ? 0.0f : 1.0f;
+            p.kind = g == golden ? 2.0f : G.kind == sim::kGateMul ? 0.0f : 1.0f;  // GOLDEN GATE is drawn gold
             p.arrows = G.slides ? 1.0f : 0.0f;
             p.punch = gatePunch_[g];
             p.pad = 0;
@@ -491,7 +579,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     fu.camUp = V4(cam.up, 0);
     fu.camPos = V4(cam.eyeNow, def.len);
     fu.time = V4(tt, alpha, cheer > 0.0f ? cheer : -gloomCheer, float(std::fmod(time, 60.0)));
-    fu.grade = V4(brighten, desaturate, fade, 0.42f);
+    fu.grade = V4(brighten, maxv(desaturate, eclipse_ * (reduceEffects ? 0.5f : 1.0f)), fade, 0.42f);
     fu.screen = V4(float(env_.w), float(env_.h), 1.0f / float(env_.w), 1.0f / float(env_.h));
     fu.lane = V4(sim::kHW, def.len, 1.0f / (2.0f * sim::kHW + 2.0f), 1.0f / (def.len + 6.0f));
     fu.fog = V4(wp->backdrop[2], 0.55f);
@@ -535,7 +623,19 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     for (float sgn : {-1.0f, 1.0f}) addLight(sgn * (HW - 0.25f), len * 0.5f, 0.45f, len * 0.5f + 2.5f, wp->rail, 0.2f, 1);
     // The emitters' glow at the spire's foot goes out while HUSH holds them (VARIETY_DESIGN 13).
     const float hush = w.tickCount < w.hushUntil ? 0.3f : 1.0f;
-    addLight(0, len + 0.3f, 4.4f, 1.8f, gp->crack, (0.34f + 0.06f * pulse) * hush + spireFlash_ * 0.45f, 0);
+    if (def.kind == sim::kTwins) {
+        for (int s = 0; s < 2; ++s)
+            if ((s == 0 ? w.spire : w.spire2) > 0)
+                addLight(s == 0 ? -tune.twinX : tune.twinX, len + 0.3f, 2.6f, 1.6f, gp->crack, (0.34f + 0.06f * pulse) * hush + spireFlash_ * 0.4f, 0);
+    } else if (def.kind == sim::kHoldout) {
+        addLight(0, len + 0.3f, 3.6f, 2.2f, gp->gloom, (0.5f + 0.08f * pulse) * hush, 0);  // the gate's gloom light
+    } else if (def.kind == sim::kFestival) {
+        addLight(0, len + 0.6f, 4.0f, 2.4f, hexColor(0xFFC654), 0.55f + 0.05f * pulse, 0);
+    } else if (def.kind == sim::kColossus) {
+        if (w.colossusOut && w.spire > 0) addLight(w.colossusX, w.colossusZ, 3.0f, 2.4f, gp->gloom, 0.4f + spireFlash_ * 0.4f, 0);
+    } else {
+        addLight(0, len + 0.3f, 4.4f, 1.8f, gp->crack, (0.34f + 0.06f * pulse) * hush + spireFlash_ * 0.45f, 0);
+    }
     for (int e = 0; e < def.emitterCount; ++e) {  // side doors: a rose glow on the lane in front of the arch
         const sim::Emitter& E = def.emitters[e];
         if (E.side) addLight(float(E.side) * (HW - 0.8f), E.z, 0.9f, 1.0f, gp->crack, 0.4f * hush, 0);
@@ -655,8 +755,9 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     }
     s.props = props_;
     s.propCount = propCount_;
-    s.spireStage = w.spireStage;
-    s.spireGone = w.result == sim::Result::Win;
+    s.spireStage = def.kind == sim::kSiege || def.kind == sim::kBoss ? w.spireStage : 0;
+    s.spireGone = def.kind == sim::kTwins ? twinDown_[0] : w.result == sim::Result::Win;
+    s.spire2Gone = def.kind != sim::kTwins || twinDown_[1];
     s.heartGain = 0.8f + 0.5f * pulse + spireFlash_;
     for (int b = 0; b < sim::kMaxBarriers; ++b) {
         s.barrierAlive[b] = b < def.barrierCount && w.barrierHealth[b] > 0;
@@ -671,13 +772,16 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     minLabelCapPx = minLabelStrokePx = 1e9f;
     if (showLabels && tune.labels > 0) {
         char buf[32];
+        const int golden = goldenGate(w);
         for (int g = 0; g < def.gateCount; ++g) {
             const sim::Gate& G = def.gates[g];
             const V3 col = G.kind == sim::kGateMul ? gp->good : gp->bad;
             // KINDLE: a multiply gate shows its new factor once the run up the lane has reached its row.
             const bool kindled = w.kindle && G.kind == sim::kGateMul && (kindleT_ < 0 || G.row < kindleRow_);
-            const int k = kindled ? minv(int(tune.kindleMax), int(G.k) + 1) : int(G.k);
-            label(gateLabel(G, buf, sizeof buf, k), V3(w.gateX[g], 1.95f, G.z - 0.05f), 1.45f, col * 0.2f, gatePunch_[g], labels);
+            int k = kindled ? minv(int(tune.kindleMax), int(G.k) + 1) : int(G.k);
+            if (g == golden) k += int(tune.goldenExtra);  // GOLDEN GATE: two more, in gold
+            label(gateLabel(G, buf, sizeof buf, k), V3(w.gateX[g], 1.95f, G.z - 0.05f), 1.45f, g == golden ? V3(0.45f, 0.25f, 0.02f) : col * 0.2f,
+                  gatePunch_[g], labels);
         }
         for (int b = 0; b < def.barrierCount; ++b) {
             if (w.barrierHealth[b] <= 0) continue;
@@ -700,10 +804,25 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
                 label(buf, V3(x, 0.75f, z - tune.plateGap - 0.3f), 0.95f, gp->spireDark, plateShake_[g], labels);
             }
         }
-        if (w.result != sim::Result::Win) {
+        const float zc = def.len + 1.4f;
+        if (w.result != sim::Result::Win && (def.kind == sim::kSiege || def.kind == sim::kBoss)) {
             formatThousands(int(w.spire), buf, sizeof buf);
-            const float zc = def.len + 1.4f;
             label(buf, V3(0, 2.6f, zc - 1.4f * 0.87f * (1.0f - 2.6f / 6.3f) - 0.3f), 1.7f, gp->spireDark, spirePunch_, labels);
+        } else if (def.kind == sim::kTwins) {
+            for (int s = 0; s < 2; ++s) {
+                const i32 hp = s == 0 ? w.spire : w.spire2;
+                if (hp <= 0) continue;
+                formatThousands(int(hp), buf, sizeof buf);
+                label(buf, V3(s == 0 ? -tune.twinX - 0.5f : tune.twinX + 0.5f, 2.2f, zc - 0.9f), 1.1f, gp->spireDark, spirePunch_, labels);
+            }
+        } else if (def.kind == sim::kColossus && w.colossusOut && w.spire > 0) {
+            formatThousands(int(w.spire), buf, sizeof buf);
+            label(buf, V3(w.colossusX, 4.6f, w.colossusZ), 1.5f, gp->gloomRim, spirePunch_, labels);
+        }
+        for (int c = 0; c < w.cubCount; ++c) {
+            if (w.cubHp[c] <= 0) continue;
+            formatThousands(int(w.cubHp[c]), buf, sizeof buf);
+            label(buf, V3(w.cubX[c], 2.9f, w.cubZ[c]), 1.1f, gp->gloomRim, 0, labels);
         }
     }
     s.labels = &labels;

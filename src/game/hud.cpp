@@ -1,5 +1,7 @@
 #include "game/hud.h"
 
+#include "sim/level.h"
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -113,16 +115,37 @@ void drawHud(UiBatch& ui, const Layout& L, const HudState& s) {
     ui.rect(pr.cx() - L.px(6), pr.cy(), L.px(6), L.px(20), L.px(3), pbar);
     ui.rect(pr.cx() + L.px(6), pr.cy(), L.px(6), L.px(20), L.px(3), pbar);
     }
-    // The spire's health bar between them.
+    // The goal bar between them (the spire's health; by kind, VARIETY_DESIGN 14).
     const float bx0 = chipX + chipW + L.px(14), bx1 = pr.x - L.px(14);
     if (bx1 - bx0 > L.px(40)) {
         const float bh = L.px(14), by = top + rowH * 0.5f;
-        ui.rect((bx0 + bx1) * 0.5f, by, bx1 - bx0, bh, bh * 0.5f, ink, edge, L.px(1));
-        const float inner = (bx1 - bx0 - L.px(4)) * clampv(s.spireFrac, 0.0f, 1.0f);
-        if (inner > L.px(2)) {
-            ui.rect(bx0 + L.px(2) + inner * 0.5f, by, inner, bh - L.px(4), (bh - L.px(4)) * 0.5f, rgba(kRose, u8(255 * s.opacity)));
-            ui.rect(bx0 + L.px(2) + inner * 0.5f, by - L.px(2), maxv(0.0f, inner - L.px(4)), L.px(3), L.px(1.5f),
-                    rgba(0xFFAAE8, u8(200 * s.opacity)));
+        auto bar = [&](float x0, float x1, float frac, u32 fill, u32 shine) {
+            ui.rect((x0 + x1) * 0.5f, by, x1 - x0, bh, bh * 0.5f, ink, edge, L.px(1));
+            const float inner = (x1 - x0 - L.px(4)) * clampv(frac, 0.0f, 1.0f);
+            if (inner > L.px(2)) {
+                ui.rect(x0 + L.px(2) + inner * 0.5f, by, inner, bh - L.px(4), (bh - L.px(4)) * 0.5f, rgba(fill, u8(255 * s.opacity)));
+                ui.rect(x0 + L.px(2) + inner * 0.5f, by - L.px(2), maxv(0.0f, inner - L.px(4)), L.px(3), L.px(1.5f), rgba(shine, u8(200 * s.opacity)));
+            }
+        };
+        if (s.kind == sim::kTwins) {
+            const float mid = (bx0 + bx1) * 0.5f;
+            bar(bx0, mid - L.px(4), s.spireFrac, kRose, 0xFFAAE8);
+            bar(mid + L.px(4), bx1, s.spire2Frac, kRose, 0xFFAAE8);
+        } else if (s.kind == sim::kHoldout) {
+            bar(bx0, bx1, s.clockFrac, 0xFFB45A, 0xFFE2A8);  // the dawn coming
+        } else if (s.kind == sim::kFestival) {
+            bar(bx0, bx1, 1.0f - s.clockFrac, kGold, 0xFFE9B0);
+            char g[32];
+            std::snprintf(g, sizeof g, "GEODES %d/%d", s.geodesOpened, s.geodesTotal);
+            ui.text(g, (bx0 + bx1) * 0.5f, by + L.px(22), L.px(15), white, inkStroke, L.px(2), Align::Center);
+        } else {
+            bar(bx0, bx1, s.spireFrac, kRose, 0xFFAAE8);
+            if (s.kind == sim::kBoss) {  // the script's thresholds
+                for (float f : {0.66f, 0.33f}) {
+                    const float x = bx0 + L.px(2) + (bx1 - bx0 - L.px(4)) * f;
+                    ui.rect(x, by, L.px(3), bh + L.px(6), L.px(1.5f), rgba(kWhite, u8(220 * s.opacity)));
+                }
+            }
         }
     }
     // The tide counter, bottom right, above the gesture inset.

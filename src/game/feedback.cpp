@@ -159,9 +159,26 @@ void Feedback::onTick(const sim::World& w, float t) {
                 }
                 break;
             }
+            case sim::kEvTwist: {  // a cue each (VARIETY_DESIGN 13), from the sounds the bank already has
+                static const int cue[sim::kTwistCount] = {kSndPulse, kSndThump, kSndTink, kSndPopLow, kSndChip, kSndGeodeOpen,
+                                                           kSndLadder0 + 7, kSndThump, kSndCrack, kSndThump};
+                const int ty = clampv(ev.b, 0, sim::kTwistCount - 1);
+                play(cue[ty], 0.7f, 0);
+                if (ty == sim::kTwistStampede || ty == sim::kTwistGeodeRain)
+                    for (int k = 1; k < 3; ++k) play(cue[ty], 0.55f, 0, 1.0f + 0.12f * float(k), 0.08f * float(k));
+                haptic(kHapticLight, t);
+                break;
+            }
+            case sim::kEvColossusStep:
+                if (ev.z < 16.0f) play(kSndThump, 0.35f, ev.x * hs, 0.7f);
+                break;
+            case sim::kEvCubDown:
+                play(kSndShatterSmall, 0.7f, ev.x * hs);
+                haptic(kHapticMedium, t);
+                break;
             case sim::kEvWin:
                 play(kSndShatterBig, 1.0f, 0);
-                if (w.def.boss) play(kSndShatterBig, 0.9f, 0, 0.94f, 0.12f);
+                if (w.def.boss || w.def.kind == sim::kColossus) play(kSndShatterBig, 0.9f, 0, 0.94f, 0.12f);
                 play(kSndWinChord, 0.9f, 0, 1.0f, 0.35f);
                 if (mixer_ && sound_) mixer_->duck(1.5f);  // nothing to duck under with SOUND off
                 haptic(kHapticWin, t);

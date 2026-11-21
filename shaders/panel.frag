@@ -6,7 +6,7 @@ in highp float vHeightPx;
 uniform float uGlowMode;  // 1: only the bright edges, for the glow buffer
 layout(location = 0) out vec4 oColor;
 void main() {
-    vec3 col = vKind < 0.5 ? uGood.rgb : uBad.rgb;
+    vec3 col = vKind < 0.5 ? uGood.rgb : (vKind < 1.5 ? uBad.rgb : vec3(1.0, 0.78, 0.3));  // 2: GOLDEN GATE
     highp float t = uTime.w;
     float shimmer = 0.5 + 0.5 * sin(vUV.x * 21.0 + vUV.y * 3.0 - t * 1.7) * sin(vUV.x * 7.0 + t * 0.9);
     float fill = 0.17 + 0.07 * shimmer + (vUV.y < 0.24 ? 0.07 : 0.0);

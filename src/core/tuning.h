@@ -49,6 +49,28 @@
     X(kindleMax, 6.0f)          /* KINDLE: a multiply gate counts one more, up to this */                            \
     X(cometSeconds, 4.0f)       /* COMET: a wisp with this many seconds of its lantern's fire */                     \
     X(hushSeconds, 6.0f)        /* HUSH: the emitters send nothing this long */                                      \
+    /* ---- kinds and twists (VARIETY_DESIGN 6, 7) ---- */                                                           \
+    X(colossusDelay, 3.0f)      /* s before the colossus steps out */                                                \
+    X(colossusPace, 1.25f)      /* it reaches the lantern at this many T */                                          \
+    X(colossusSway, 1.5f)       /* m to each side */                                                                 \
+    X(colossusSwayPeriod, 6.0f)                                                                                      \
+    X(colossusRadius, 1.8f)                                                                                          \
+    X(colossusLoseZ, 3.0f)                                                                                           \
+    X(colossusStep, 0.8f)       /* s between its steps (the view's trauma) */                                        \
+    X(cubRadius, 1.1f)                                                                                               \
+    X(cubSpeed, 1.2f)                                                                                                \
+    X(cubShare, 0.05f)          /* a cub's health, of the spire's */                                                 \
+    X(cubCore, 3.0f)            /* pips a cub takes when it reaches the lantern */                                   \
+    X(eclipseSeconds, 6.0f)                                                                                          \
+    X(eclipseSpeed, 1.3f)       /* glooms walk this much faster under ECLIPSE */                                     \
+    X(goldenSeconds, 8.0f)                                                                                           \
+    X(goldenExtra, 2.0f)        /* GOLDEN GATE: the gate counts this many more */                                    \
+    X(stampedeRunners, 16.0f)                                                                                        \
+    X(stampedeSeconds, 2.0f)                                                                                         \
+    X(wardWallShare, 0.06f)     /* WARD WALL's health, of the spire's */                                             \
+    X(twinX, 2.6f)              /* the twin spires stand at -twinX and +twinX */                                     \
+    X(festivalSeconds, 20.0f)                                                                                        \
+    X(holdoutLow, 0.6f)         /* Holdout: the flow grows from this to 2 - this across T */                         \
     /* ---- the lane and the enemy (VARIETY_DESIGN 4, 5) ---- */                                                     \
     X(hopCross, 0.25f)          /* s a hopper takes to jump */                                                       \
     X(runnerSpeed, 5.0f)                                                                                             \

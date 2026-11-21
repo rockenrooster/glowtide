@@ -17,6 +17,8 @@
 
 namespace gt {
 
+const char* goalBanner(const sim::LevelDef& d);  // game.cpp: the kind's banner, or null for a siege
+
 struct GameEnv {
     int frameW = 0, frameH = 0;
     float dpScale = 1;

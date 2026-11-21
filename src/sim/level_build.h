@@ -60,8 +60,20 @@ inline void addDoor(LevelDef& L, int side, float z, float share) {
     }
 }
 
-inline void addBurst(LevelDef& L, float t, float frac, float mult, float dur, int brutes) {
-    if (L.burstCount < kMaxBursts) L.bursts[L.burstCount++] = {t, frac, mult, dur, brutes};
+// A twist (VARIETY_DESIGN 7); SURGE's multiple and length are the old bursts' (tune.burstMult, tune.burstSeconds).
+inline TwistDef& addTwist(LevelDef& L, u8 type, u8 trigger, float at, int brutes = 0, u8 param = 0) {
+    static TwistDef spare;
+    if (L.twistCount >= kMaxTwists) return spare = TwistDef{};
+    TwistDef& x = L.twists[L.twistCount++];
+    x = TwistDef{};
+    x.type = type;
+    x.trigger = trigger;
+    x.at = at;
+    x.mult = tune.burstMult;
+    x.dur = tune.burstSeconds;
+    x.brutes = brutes;
+    x.param = param;
+    return x;
 }
 
 // The generator's band for a level number (GAME_DESIGN 7.3): rows, the strongest multiply gate, pattern weights in
@@ -74,5 +86,10 @@ Band bandFor(int index);           // calendar.cpp
 void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core
 int planFor(int index, Rng& r);        // calendar.cpp: the enemy's plan for a generated level
 void placeGeodes(LevelDef& L, Rng& r);  // recipes.cpp: VARIETY_DESIGN 9.3
+// recipes.cpp: a festival's rain of small geodes (VARIETY_DESIGN 6); a boss's script and the twists of a generated level
+// (7, 8), with the geodes and the wall they release.
+void placeFestivalGeodes(LevelDef& L, Rng& r);
+void addBossScript(LevelDef& L);
+void addTwists(LevelDef& L, Rng& r);
 
 }  // namespace gt::sim

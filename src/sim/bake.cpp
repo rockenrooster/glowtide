@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "core/tuning.h"
+#include "sim/level_build.h"
 
 namespace gt::sim {
 
@@ -261,12 +262,26 @@ float botTime(const LevelDef& def, BotKind kind, int n, int& wins) {
     return median(times);
 }
 
+// Median core of a bot over seeds 1..n (a lost run counts 0).
+float botCore(const LevelDef& def, BotKind kind, int n) {
+    std::vector<float> cores;
+    for (int s = 1; s <= n; ++s) {
+        RunOptions ro;
+        ro.seconds = 3.5f * def.targetT + 10.0f;
+        const RunResult r = runLevel(def, kind, u64(s), ro);
+        cores.push_back(r.result == Result::Win ? float(r.core) : 0.0f);
+    }
+    return median(cores);
+}
+
 // VARIETY_DESIGN 12.2 step 7, lines a to i, in stages that stop at the first line that fails (a seed that will be
 // thrown away costs as little as it can): ten greedy runs (a, b, c, f, i), one idle (d), three naive (e), five podless
 // (g, h); five hungry last, for the band checks of step 8, only when everything passed (`full`). `target` is the
 // cancelled share step 5 aimed at.
 Acceptance accept(const LevelDef& def, float target, bool full = true) {
     Acceptance a;
+    // Holdout has no spire: it is won at dawn, so no time line and no cancelled share; its core is the measure (12.2).
+    const bool holdout = def.kind == kHoldout;
     std::vector<float> times, cores, shares, lows, opened, shown;
     const float firstRow = def.rowCount ? def.rowZ[0] : def.len;
     const float T = def.targetT;
@@ -295,16 +310,18 @@ Acceptance accept(const LevelDef& def, float target, bool full = true) {
     a.podlessTime = a.hungryTime = a.naiveTime = a.medTime;
     a.podlessWins = a.hungryWins = a.wins / 2;
     if (a.wins < 9) return std::snprintf(a.why, sizeof a.why, "a: greedy won %d of 10", a.wins), a;
-    if (a.medCore < (def.hardness <= 0.4f && def.index > 5 ? 9 : 6))
+    if (holdout ? a.medCore < 7 : a.medCore < (def.hardness <= 0.4f && def.index > 5 ? 9 : 6))
         return std::snprintf(a.why, sizeof a.why, "b: greedy's median core %.0f (h %.2f)", double(a.medCore), double(def.hardness)), a;
-    if (a.medTime < 0.7f * T || a.medTime > 1.2f * T)
+    if (!holdout && (a.medTime < 0.7f * T || a.medTime > 1.2f * T))
         return std::snprintf(a.why, sizeof a.why, "c: greedy's median time %.1f s outside %.1f-%.1f", double(a.medTime), double(0.7f * T),
                              double(1.2f * T)),
                a;
-    if (def.index > 5 && std::fabs(a.medShare - target) > 0.05f)
+    if (!holdout && def.index > 5 && std::fabs(a.medShare - target) > 0.05f)
         return std::snprintf(a.why, sizeof a.why, "f: cancelled %.0f%% against a target of %.0f%%", double(a.medShare * 100), double(target * 100)),
                a;
-    if (def.geodeCount > 0 && a.medOpened < 1) return std::snprintf(a.why, sizeof a.why, "i: greedy opened no geode"), a;
+    int placed = 0;  // SECOND WIND's geode comes only when the core falls to 3: line i is about the level's own geodes
+    for (int g = 0; g < def.geodeCount; ++g) placed += def.geodes[g].twist == 0 || def.twists[def.geodes[g].twist - 1].type != kTwistSecondWind;
+    if (placed > 0 && a.medOpened < 1) return std::snprintf(a.why, sizeof a.why, "i: greedy opened no geode"), a;
     RunOptions ro;
     ro.seconds = 60;
     a.idleLoses = runLevel(def, BotKind::Idle, 1, ro).result == Result::Lose;
@@ -316,12 +333,22 @@ Acceptance accept(const LevelDef& def, float target, bool full = true) {
         return std::snprintf(a.why, sizeof a.why, "naive won in %.1f s (greedy %.1f s)", double(a.naiveTime), double(a.medTime)), a;
     if (def.index >= 21 && a.naiveLosses < 2)
         return std::snprintf(a.why, sizeof a.why, "e: naive won from level 21 on (%.1f s)", double(a.naiveTime)), a;
-    if (def.geodeCount > 0) {  // with no geode, podless and hungry play as greedy does
+    if (placed > 0) {  // with no geode of its own (an introduction level), podless and hungry play as greedy does
         bool lasting = false;
         for (int i = 0; i < def.geodeCount; ++i)
             lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
                       def.geodes[i].boon == kBoonKindle;
         a.podlessTime = botTime(def, BotKind::Podless, 5, a.podlessWins);
+        if (holdout) {  // the boons must show in the core: podless loses, or keeps fewer pips than greedy
+            const float pc = botCore(def, BotKind::Podless, 5);
+            if (lasting && a.podlessWins == 5 && pc >= a.medCore)
+                return std::snprintf(a.why, sizeof a.why, "g: podless keeps %.0f pips at dawn, greedy %.0f", double(pc), double(a.medCore)), a;
+            if (def.index >= 30 && pc >= 8)
+                return std::snprintf(a.why, sizeof a.why, "h: podless earns three stars (%.0f pips)", double(pc)), a;
+            if (full) a.hungryTime = botTime(def, BotKind::Hungry, 5, a.hungryWins);
+            a.ok = true;
+            return a;
+        }
         if (lasting && a.podlessWins >= 3 && a.medTime > 0.9f * a.podlessTime)
             return std::snprintf(a.why, sizeof a.why, "g: greedy %.1f s is not 10%% faster than podless %.1f s", double(a.medTime),
                                  double(a.podlessTime)),
@@ -397,11 +424,109 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
         for (int i = 0; i < def.geodeCount; ++i)
             lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
                       def.geodes[i].boon == kBoonKindle;
-        if (!hand && lasting && pa < 1.12f * pn) {
+        if (!hand && lasting && def.kind != kFestival && def.kind != kHoldout && pa < 1.12f * pn) {
             b.seed = seed;
             std::snprintf(b.acc.why, sizeof b.acc.why, "g: with no enemy greedy delivers %.0f a second, podless %.0f", double(pa / T),
                           double(pn / T));
             countRejection(b.acc.why);
+            continue;
+        }
+        if (def.kind == kFestival) {
+            // A festival (step 6): no enemy; three stars for greedy's median geodes opened, less one. Greedy must earn them
+            // in nine runs of ten and naive must not.
+            Acceptance acc;
+            std::vector<float> opened;
+            RunOptions fr;
+            fr.seconds = tune.festivalSeconds + 1.0f;
+            for (int s = 1; s <= 10; ++s) opened.push_back(float(runLevel(def, BotKind::Greedy, u64(s), fr).geodesOpened));
+            const i32 three = maxv<i32>(1, i32(median(opened)) - 1);
+            int greedyThree = 0;
+            for (float o : opened) greedyThree += o >= float(three) ? 1 : 0;
+            const float naive = float(runLevel(def, BotKind::Naive, 1, fr).geodesOpened);
+            acc.wins = 10;
+            acc.medTime = tune.festivalSeconds;
+            acc.medCore = 10;
+            acc.medOpened = median(opened);
+            acc.medShown = float(def.geodeCount);
+            acc.naiveLosses = 3;
+            acc.ok = greedyThree >= 9 && naive < float(three);
+            if (!acc.ok)
+                std::snprintf(acc.why, sizeof acc.why, "festival: greedy three stars in %d of 10, naive opened %.0f (three is %d)", greedyThree,
+                              double(naive), three);
+            b.seed = seed;
+            b.spire = three;
+            b.baseFlow = 0;
+            b.pa = pa / T;
+            b.pn = pn / T;
+            b.m = m;
+            b.ref = R;
+            b.acc = acc;
+            b.rows = def.rowCount;
+            for (int r = 0; r < def.rowCount && r < 15; ++r) b.patterns[r] = "OCTSWPXNHE?"[def.rowPattern[r] < kPatCount ? def.rowPattern[r] : kPatCount];
+            b.boons[0] = 0;
+            if (acc.ok) {
+                b.accepted = true;
+                break;
+            }
+            countRejection(acc.why);
+            continue;
+        }
+        if (def.kind == kHoldout) {
+            // Holdout (step 6): bisect the flow until greedy's median core at dawn is 7 to 9.
+            float lo = std::log(0.12f), hi = std::log(4.0f), scale = 1.0f;
+            RunOptions hr;
+            hr.seconds = T + 1.0f;
+            // Five runs a step and a core of 8 or 9: Holdout stands at the contest's edge (VARIETY_PLAN V3 notes), so the
+            // bisection aims at the top of the band the acceptance asks for.
+            float okScale = 0;
+            for (int step = 0; step < 8; ++step) {
+                scale = step == 0 ? 1.0f : std::exp((lo + hi) * 0.5f);
+                def.baseFlow = def.fight * R / T * scale;
+                std::vector<float> cores;
+                for (u64 s = 2; s <= 6; ++s) {
+                    const RunResult r = runLevel(def, BotKind::Greedy, s, hr);
+                    cores.push_back(r.result == Result::Win ? float(r.core) : 0.0f);
+                }
+                const float c = median(cores);
+                if (c >= 7) okScale = maxv(okScale, scale);  // the strongest enemy greedy holds so far
+                if (c >= 8 && c <= 9) break;
+                if (c > 9) lo = std::log(scale);
+                else hi = std::log(scale);
+            }
+            scale = okScale > 0 ? okScale : std::exp(lo);
+            def.baseFlow = def.fight * R / T * scale;
+            def.spireHealth = 1;
+            Acceptance acc = accept(def, 0, false);
+            for (int fix = 0; fix < 3 && !acc.ok && (acc.why[0] == 'a' || acc.why[0] == 'b'); ++fix) {
+                scale *= 0.85f;
+                def.baseFlow = def.fight * R / T * scale;
+                acc = accept(def, 0, false);
+            }
+            if (acc.ok && def.geodeCount > 0) acc.hungryTime = botTime(def, BotKind::Hungry, 5, acc.hungryWins);
+            b.seed = seed;
+            b.spire = 1;
+            b.baseFlow = def.baseFlow;
+            b.pa = pa / T;
+            b.pn = pn / T;
+            b.m = m;
+            b.ref = R;
+            b.scale = scale;
+            b.fight = def.fight;
+            b.acc = acc;
+            b.rows = def.rowCount;
+            for (int r = 0; r < def.rowCount && r < 15; ++r) b.patterns[r] = "OCTSWPXNHE?"[def.rowPattern[r] < kPatCount ? def.rowPattern[r] : kPatCount];
+            int o = 0;
+            for (int g = 0; g < def.geodeCount && o + 4 < int(sizeof b.boons); ++g) {
+                if (o) b.boons[o++] = ' ';
+                b.boons[o++] = "LQBWKCH"[def.geodes[g].boon % 7];
+                if (def.geodes[g].shield > 0) b.boons[o++] = 's';
+            }
+            b.boons[o] = 0;
+            if (acc.ok) {
+                b.accepted = true;
+                break;
+            }
+            countRejection(acc.why);
             continue;
         }
         // Step 5: the enemy's flow; the share it should cancel of what greedy produces is fight * R / Pa.
@@ -450,8 +575,10 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
             countRejection(b.acc.why);
             continue;
         }
-        // Step 6: the spire.
-        def.spireHealth = twoSignificant(0.85f * delivered);
+        // Step 6: the goal (the spire, the colossus, the twins together: setGoals splits them).
+        i32 goal = twoSignificant(0.85f * delivered);
+        def.spireHealth = goal;
+        setGoals(def);
         // Step 7: acceptance; the real runs end at the win, which cancels a few points more than the bisection's: up to
         // two corrections of the scale toward the target before the next seed.
         Acceptance acc = accept(def, target, false);
@@ -460,12 +587,23 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
             def.baseFlow = def.fight * R / T * scale;
             std::vector<float> d3;
             for (u64 s = 2; s <= 4; ++s) d3.push_back(float(runLevel(def, BotKind::Greedy, s, er).delivered));
-            def.spireHealth = twoSignificant(0.85f * median(d3));
+            goal = twoSignificant(0.85f * median(d3));
+            def.spireHealth = goal;
+            setGoals(def);
+            acc = accept(def, target, false);
+        }
+        // A goal that falls too soon or too late (line c): sized again toward 0.9 T from greedy's median time, twice at most.
+        for (int fix = 0; fix < 1 && !acc.ok && acc.why[0] == 'c' && acc.medTime > 0; ++fix) {
+            // The colossus's time is steep in its health (the nearer it gets, the weaker the stream): small steps there.
+            const bool steep = def.kind == kColossus;
+            goal = twoSignificant(float(goal) * clampv(0.9f * T / acc.medTime, steep ? 0.95f : 0.85f, steep ? 1.06f : 1.2f));
+            def.spireHealth = goal;
+            setGoals(def);
             acc = accept(def, target, false);
         }
         if (acc.ok && def.geodeCount > 0) acc.hungryTime = botTime(def, BotKind::Hungry, 5, acc.hungryWins);  // for the band checks
         b.seed = seed;
-        b.spire = def.spireHealth;
+        b.spire = goal;
         b.baseFlow = def.baseFlow;
         b.pa = pa / T;
         b.pn = pn / T;
@@ -528,8 +666,8 @@ LevelDef fluxLevel() {
     d.gates[d.gateCount++] = fluxGate(-1.4f, 1.5f, 24, 5, true, 2);
     d.gates[d.gateCount++] = fluxGate(2.6f, 1.2f, 24, 3, false, 2);
     d.emitters[d.emitterCount++] = {0.0f, 2.5f, 5.0f, 0.0f};
-    d.bursts[d.burstCount++] = {0.35f * 30.0f, 0, 2, 3, 0};
-    d.bursts[d.burstCount++] = {0.70f * 30.0f, 0, 2, 3, 0};
+    addTwist(d, kTwistSurge, kTrigTime, 0.35f);
+    addTwist(d, kTwistSurge, kTrigTime, 0.70f);
     return d;
 }
 
@@ -613,7 +751,7 @@ int fluxFindings() {
         const float ratios[3] = {0.9f, 1.2f, 1.5f};
         for (float k : ratios) {
             LevelDef d = cal[1];
-            d.burstCount = 0;
+            d.twistCount = 0;
             d.baseFlow = k * p0;
             tune.rampStart = 1000.0f;
             char what[96];
@@ -745,10 +883,10 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
                         "runs in which the core was hit and a gloom came below the first gate row. Podless and Hungry: wins of five, "
                         "median time.\n\n",
                      from, to);
-        std::fprintf(f, "| Level | Accepted | h | Rows | Patterns | Plan | Geodes | Pa /s | Pn /s | m | R | Fight | Target | Cancelled | Scale | "
+        std::fprintf(f, "| Level | Accepted | h | Rows | Patterns | Kind | Plan | Geodes | Pa /s | Pn /s | m | R | Fight | Target | Cancelled | Scale | "
                         "Spire | Greedy wins | Time (T) | Core | Opened | Pip lost | Deep gloom | Podless | Hungry | Naive | Lowest gloom z | "
                         "Peak tide | Peak units | Seeds |\n");
-        std::fprintf(f, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+        std::fprintf(f, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         for (const BakeOut& b : results) {
             const LevelDef d = layoutFor(b.index, b.seed);
             auto botCell = [](char* out, size_t n, int wins, float time) {
@@ -758,9 +896,10 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
             char pod[32], hun[32];
             botCell(pod, sizeof pod, b.acc.podlessWins, b.acc.podlessTime);
             botCell(hun, sizeof hun, b.acc.hungryWins, b.acc.hungryTime);
-            std::fprintf(f, "| %d | %s | %.2f | %d | %s | %s | %s | %.0f | %.0f | %.2f | %.0f | %.0f%% | %.0f%% | %.0f%% | %.2f | %d | %d/10 | "
+            std::fprintf(f, "| %d | %s | %.2f | %d | %s | %s | %s | %s | %.0f | %.0f | %.2f | %.0f | %.0f%% | %.0f%% | %.0f%% | %.2f | %d | %d/10 | "
                             "%.1f (%.0f) | %.0f | %.0f/%.0f | %d | %d | %s | %s | %s | %.1f | %lld | %d | %d |\n",
-                         b.index, b.accepted ? "yes" : b.acc.why, double(d.hardness), b.rows, b.patterns, planName(d.plan),
+                         b.index, b.accepted ? "yes" : b.acc.why, double(d.hardness), b.rows, b.patterns,
+                         d.kind == kBoss ? bossName(d.bossType) : kindName(d.kind), planName(d.plan),
                          b.boons[0] ? b.boons : "-",
                          double(b.pa), double(b.pn), double(b.m), double(b.ref), double(b.fight * 100), double(b.target * 100),
                          double(b.acc.medShare * 100), double(b.scale), b.spire, b.acc.wins, double(b.acc.medTime), double(d.targetT),

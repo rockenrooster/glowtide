@@ -12,6 +12,7 @@
 #include "gfx/palette.h"
 #include "gfx/text.h"
 #include "sim/bots.h"
+#include "sim/level_build.h"
 #include "sim/world.h"
 
 namespace gt::test {
@@ -137,19 +138,17 @@ void testSliders() {
     GT_CHECK_MSG(std::fabs((w.gateX[0] - g.cx) + (w.gateX[1] - h.cx)) < 1e-3f, "crossing sliders move in opposite phase");
 }
 
-// Time bursts double the enemy's flow for their duration; health bursts start when the spire falls to their share and
-// bring their brutes; brutes have the level's brute power.
+// SURGE (the old time burst) doubles the enemy's flow for its duration; one started by the goal starts when the spire
+// falls to its share and brings its brutes; brutes have the level's brute power.
 void testBursts() {
     static World w;
     LevelDef d = emptyLevel();
     d.targetT = 1000;  // no pressure ramp in this window
     d.baseFlow = 12;
     d.emitters[d.emitterCount++] = {0, 0, 5, 0};
-    Burst b;
-    b.t = 3.0f;
+    TwistDef& b = addTwist(d, kTwistSurge, kTrigTime, 3.0f / 1000.0f);
     b.mult = 2.0f;
     b.dur = 3.0f;
-    d.bursts[d.burstCount++] = b;
     w.init(d, 1);
     Input in;
     auto runTo = [&](float seconds) {
@@ -165,13 +164,8 @@ void testBursts() {
     e.baseFlow = 6;
     e.brutePower = 24;
     e.emitters[e.emitterCount++] = {0, 0, 5, 0};
-    Burst hb;
-    hb.t = -1;
-    hb.healthFrac = 0.66f;
-    hb.mult = 2;
+    TwistDef& hb = addTwist(e, kTwistSurge, kTrigGoal, 0.66f, 2);
     hb.dur = 4;
-    hb.brutes = 2;
-    e.bursts[e.burstCount++] = hb;
     w.init(e, 1);
     runTo(2.0f);
     auto brutes = [&]() {
@@ -196,6 +190,128 @@ void testBursts() {
     w.init(f, 1);
     runTo(1.5f + 2.0f * 3 + 0.05f);
     GT_CHECK_MSG(brutes() == 3, "a brute every bruteEvery seconds after the emitters start");
+}
+
+// The kinds (VARIETY_DESIGN 6): each one's win and lose on a minimal level.
+void testKinds() {
+    static World w;
+    Input in;
+    // Holdout: won at dawn with the core above zero; wisps at the top hurt nothing.
+    LevelDef h = emptyLevel();
+    h.kind = kHoldout;
+    h.targetT = 5;
+    w.init(h, 1);
+    place(w.w, 0, h.len - 0.2f, 50);
+    while (w.result == Result::None && w.tickCount < 400) w.tick(in);
+    GT_CHECK_MSG(w.result == Result::Win && w.tickCount == 300 && w.spire == w.spireStart, "Holdout: won at dawn, nothing at the top");
+    w.init(h, 1);
+    w.core = 1;
+    place(w.g, 0, 0.82f, 3);
+    w.tick(in);
+    GT_CHECK_MSG(w.result == Result::Lose, "Holdout: lost when the core falls");
+    // Festival: cannot be lost and ends on its tick.
+    LevelDef f = emptyLevel();
+    f.kind = kFestival;
+    w.init(f, 1);
+    w.core = 0;
+    while (w.result == Result::None && w.tickCount < 2000) w.tick(in);
+    GT_CHECK_MSG(w.result == Result::Win && w.tickCount == int(tune.festivalSeconds * 60.0f), "a festival cannot be lost and ends on its tick");
+    // Colossus: it steps out, absorbs every wisp that touches it in one tick, and wins the level for the enemy at z 3.
+    LevelDef c = emptyLevel();
+    c.kind = kColossus;
+    c.targetT = 10;
+    c.spireHealth = 1000;
+    w.init(c, 1);
+    while (!w.colossusOut) w.tick(in);
+    for (int k = 0; k < 6; ++k) place(w.w, w.colossusX + 0.3f * float(k - 3), w.colossusZ - 1.0f, 10);
+    w.tick(in);
+    GT_CHECK_MSG(w.spire == 940 && tideOf(w) == 0, "the colossus absorbs every wisp that touches it in one tick");
+    while (w.result == Result::None && w.tickCount < 6000) w.tick(in);
+    GT_CHECK_MSG(w.result == Result::Lose && w.colossusZ <= tune.colossusLoseZ + 0.05f, "the colossus reaching the lantern loses the level");
+    w.init(c, 1);
+    while (!w.colossusOut) w.tick(in);
+    place(w.w, w.colossusX, w.colossusZ - 1.0f, 2000);
+    w.tick(in);
+    GT_CHECK_MSG(w.result == Result::Win, "the colossus broken wins");
+    // Twins: a wisp on a fallen spire's side does no damage; both must fall.
+    LevelDef t = emptyLevel();
+    t.kind = kTwins;
+    t.spireHealth = 100;
+    t.goal2 = 100;
+    w.init(t, 1);
+    w.spire = 0;  // the left one has fallen
+    place(w.w, -2.6f, t.len - 0.2f, 40);
+    w.tick(in);
+    GT_CHECK_MSG(w.spire2 == 100 && w.result == Result::None, "a wisp on a fallen twin's side does no damage");
+    place(w.w, 2.6f, t.len - 0.2f, 100);
+    w.tick(in);
+    GT_CHECK_MSG(w.spire2 <= 0 && w.result == Result::Win, "both twins fallen wins");
+}
+
+// Twists (VARIETY_DESIGN 7): each starts once, on its trigger.
+void testTwists() {
+    static World w;
+    Input in;
+    LevelDef d = emptyLevel();
+    d.targetT = 10;
+    d.baseFlow = 6;
+    d.brutePower = 20;
+    d.emitters[d.emitterCount++].x = 0;
+    addTwist(d, kTwistEclipse, kTrigTime, 0.2f);
+    addTwist(d, kTwistBruteGuard, kTrigGoal, 0.5f);
+    addTwist(d, kTwistSecondWind, kTrigCore, 3.0f);
+    Geode wind;
+    wind.x = 0;
+    wind.z0 = 18;
+    wind.speed = 0;
+    wind.hp = 5;
+    wind.boon = kBoonWard;
+    wind.twist = 3;
+    d.geodes[d.geodeCount++] = wind;
+    w.init(d, 1);
+    int fired[3] = {}, starts = 0;
+    for (int t = 0; t < 600; ++t) {
+        if (t == 200) w.spire = w.spireStart / 3;
+        if (t == 300) w.core = 3;
+        w.tick(in);
+        for (int e = 0; e < w.eventCount; ++e)
+            if (w.events[e].type == kEvTwist) ++fired[w.events[e].a], ++starts;
+    }
+    GT_CHECK_MSG(starts == 3 && fired[0] == 1 && fired[1] == 1 && fired[2] == 1, "each twist starts once");
+    GT_CHECK_MSG(w.twistStart[0] == 120 && w.twistStart[1] == 200 && w.twistStart[2] == 300, "on its trigger: time, goal, core");
+    GT_CHECK_MSG(w.geodeState[0] == kGeodeAlive, "SECOND WIND releases its WARD geode");
+    // GOLDEN GATE: the gate counts two more for its eight seconds.
+    LevelDef g = emptyLevel();
+    Gate x2;
+    x2.cx = 0;
+    x2.hw = 1.8f;
+    x2.z = 12;
+    x2.k = 2;
+    g.gates[g.gateCount++] = x2;
+    addTwist(g, kTwistGoldenGate, kTrigTime, 0.0f, 0, 0);
+    w.init(g, 1);
+    w.tick(in);
+    place(w.w, 0, 11.95f, 1);
+    w.tick(in);
+    GT_CHECK_MSG(w.w.n == 4, "GOLDEN GATE: x2 counts as x4");
+    // WARD WALL raises its dormant wall; CUB sends a cub down that takes three pips at the lantern.
+    LevelDef b = emptyLevel();
+    b.spireHealth = 1000;
+    Barrier wall;
+    wall.x0 = -4.9f;
+    wall.x1 = 4.9f;
+    wall.z = 30;
+    wall.health = 60;
+    wall.dormant = 1;
+    b.barriers[b.barrierCount++] = wall;
+    addTwist(b, kTwistWardWall, kTrigTime, 0.0f, 0, 0);
+    addTwist(b, kTwistCub, kTrigTime, 0.0f, 0, 1);
+    w.init(b, 1);
+    const i32 before = w.barrierHealth[0];
+    w.tick(in);
+    GT_CHECK_MSG(before == 0 && w.barrierHealth[0] == 60 && w.cubCount == 1 && w.cubHp[0] == 50, "WARD WALL rises; CUB has 5% of the spire");
+    while (w.cubHp[0] > 0 && w.tickCount < 4000) w.tick(in);
+    GT_CHECK_MSG(w.core == 7, "a cub at the lantern takes three pips");
 }
 
 void testClashAndBarrier() {
@@ -624,7 +740,7 @@ void testGenerator() {
         LevelDef L = generate(index, hash64(u64(s)) & 0xFFFFFFFFull);
         sizeGeodes(L);
         char why[96] = "";
-        bool ok = L.rowCount >= 2 && L.len >= 30 && L.len <= 44 && L.gateCount <= kMaxGates && L.emitterCount >= 1;
+        bool ok = L.rowCount >= 2 && L.len >= 30 && L.len <= 44 && L.gateCount <= kMaxGates && (L.emitterCount >= 1 || L.kind == kFestival);
         if (!ok) std::snprintf(why, sizeof why, "rows %d len %.1f gates %d", L.rowCount, double(L.len), L.gateCount);
         if (ok && (L.rowZ[0] < 8 || L.rowZ[0] > 10)) ok = false, std::snprintf(why, sizeof why, "first row at %.1f", double(L.rowZ[0]));
         for (int r = 1; ok && r < L.rowCount; ++r) {
@@ -667,7 +783,16 @@ void testGenerator() {
                 ok = false, std::snprintf(why, sizeof why, "side door at z %.1f", double(E.z));
         }
         if (ok && shares > 0 && std::fabs(shares - 1.0f) > 1e-3f) ok = false, std::snprintf(why, sizeof why, "shares add to %.3f", double(shares));
-        if (ok && (L.burstCount > (L.boss ? 2 : 0) || L.bruteEvery > 0)) ok = false, std::snprintf(why, sizeof why, "bursts or brutes outside a plan");
+        // Twists: a boss has its two, a level from 43 one more, SECOND WIND from 23; no brutes but through a plan or a twist.
+        int extra = 0, winds = 0;
+        for (int k = 0; k < L.twistCount; ++k) {
+            if (L.twists[k].type == kTwistSecondWind) ++winds;
+            else ++extra;
+        }
+        if (ok && (L.bruteEvery > 0 || extra > (L.boss ? 2 : index >= 43 && L.kind != kFestival ? 1 : 0) || winds != (index >= 23 && L.hasEnemy() ? 1 : 0)))
+            ok = false, std::snprintf(why, sizeof why, "%d twists and %d second winds", extra, winds);
+        if (ok && L.kind != kindFor(index)) ok = false, std::snprintf(why, sizeof why, "kind %s", kindName(L.kind));
+        if (ok && L.kind == kFestival && (L.hasEnemy() || L.geodeCount < 10)) ok = false, std::snprintf(why, sizeof why, "a festival with %d geodes", L.geodeCount);
         if (ok && index < planFrom(L.plan)) ok = false, std::snprintf(why, sizeof why, "plan %s before its level", planName(L.plan));
         // Gaps: a bumper to the walls, to other bumpers and to gate posts at least 1.2 m.
         for (int a = 0; ok && a < L.bumperCount; ++a) {
@@ -690,14 +815,19 @@ void testGenerator() {
         }
         // Geodes (VARIETY_DESIGN 9.3): how many, when, how far apart, at most three kinds, the first lasting up to 60, the
         // budget, and inside the lane where a stream can reach them.
+        // Geodes placed by VARIETY_DESIGN 9.3 (not a festival's rain, not the ones a twist releases).
+        int placed = 0;
+        for (int g = 0; g < L.geodeCount; ++g) placed += L.geodes[g].twist == 0 ? 1 : 0;
         const int maxGeodes = index <= 20 ? 2 : index <= 60 ? 3 : 4;
-        if (ok && (L.geodeCount > maxv(maxGeodes, L.boss ? 2 : 0) || (index >= 6 && L.geodeCount == 0)))
-            ok = false, std::snprintf(why, sizeof why, "%d geodes", L.geodeCount);
+        if (L.kind == kFestival) placed = 1;  // its rain is checked above
+        if (ok && (placed > maxv(maxGeodes, L.boss ? 2 : 0) || (index >= 6 && placed == 0)))
+            ok = false, std::snprintf(why, sizeof why, "%d geodes", placed);
         float worth = 1;
         int lanterns = 1, quicken = 0, bright = 0, kinds = 0;
         bool seen[kBoonCount] = {};
-        for (int g = 0; ok && g < L.geodeCount; ++g) {
+        for (int g = 0; ok && L.kind != kFestival && g < L.geodeCount; ++g) {
             const Geode& G = L.geodes[g];
+            if (G.twist) continue;
             const bool lasting = G.boon != kBoonWard && G.boon != kBoonComet && G.boon != kBoonHush;
             if (g == 0 && (G.t < 0.08f * L.targetT - 1e-3f || G.t > 0.25f * L.targetT + 1e-3f))
                 ok = false, std::snprintf(why, sizeof why, "first geode at %.1f s of %.0f", double(G.t), double(L.targetT));
@@ -791,6 +921,8 @@ void runSimTests() {
     testSnuffer();
     testSliders();
     testBursts();
+    testKinds();
+    testTwists();
     testBumper();
     testGeodes();
     testCapThreeLanterns();

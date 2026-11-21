@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "core/rng.h"
+#include "core/tuning.h"
 
 namespace gt {
 
@@ -205,20 +206,51 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
                  V3(cx - 0.72f, 2.4f, z - 0.05f), gp.crack * 0.75f);
     }
 
-    // The spire: its own range, so the win can take it away when it shatters.
-    const u32 spireI0 = u32(mb.idx.size()), spireE0 = u32(mb.emit.size());
+    // The goal at the lane's end, by kind (VARIETY_DESIGN 6, 13). Holdout: no crystal but a dark gate the glooms pour
+    // from; a festival: a great paper lantern in gold; Colossus: nothing (the colossus is the goal). These are static.
     const float zc = len + 1.4f;
+    if (def.kind == sim::kHoldout) {
+        const Ramp dark{hexColor(0x1E1036), hexColor(0x3A2260), hexColor(0x0C0618)};
+        mb.box(V3(-3.7f, 0, zc - 0.6f), V3(-2.6f, 5.2f, zc + 0.6f), dark, false);
+        mb.box(V3(2.6f, 0, zc - 0.6f), V3(3.7f, 5.2f, zc + 0.6f), dark, false);
+        mb.box(V3(-4.0f, 5.2f, zc - 0.7f), V3(4.0f, 6.3f, zc + 0.7f), dark, false);
+        mb.quadE(V3(-2.6f, 0.02f, zc + 0.3f), V3(2.6f, 0.02f, zc + 0.3f), V3(2.6f, 5.2f, zc + 0.3f), V3(-2.6f, 5.2f, zc + 0.3f),
+                 gp.gloom * 0.85f);
+    } else if (def.kind == sim::kFestival) {
+        const Ramp paper{hexColor(0xFFC654), hexColor(0xFFE6A8), hexColor(0xB87A26)};
+        const Ramp cap{hexColor(0x6A2E14), hexColor(0x9A4A20), hexColor(0x3A160A)};
+        mb.prism(V3(0, 0.5f, zc), 2.4f, 1.6f, 4.4f, 12, paper, false, 0.8f);
+        mb.prism(V3(0, 0.1f, zc), 2.0f, 1.3f, 0.4f, 12, cap, true);
+        mb.prism(V3(0, 4.9f, zc), 1.9f, 1.25f, 0.45f, 12, cap, true);
+        mb.discE(V3(0, 5.36f, zc), 1.2f, hexColor(0xFFE9B0));
+        mb.octa(V3(0, 5.9f, zc), 0.32f, hexColor(0xFFD27A), true);
+    }
+    // The spire: its own range, so the win can take it away when it shatters. Twins: two spires at 70% width, each its own
+    // range so a fallen one can be hidden.
+    const u32 spireI0 = u32(mb.idx.size()), spireE0 = u32(mb.emit.size());
     const Ramp spire{gp.spire, gp.spireLight, gp.spireDark};
-    const float halfW = def.boss ? 3.4f : 2.8f;
-    mb.crystal(V3(0, 0, zc), halfW, 1.4f, 6.3f, 0.15f, spire);
-    const float feet[4][3] = {{-3.8f, 1.7f, 0.5f}, {3.6f, 1.6f, 0.45f}, {-2.7f, 2.5f, 0.55f}, {2.6f, 2.4f, 0.5f}};
-    for (const auto& f : feet) mb.crystal(V3(f[0] * (def.boss ? 1.15f : 1.0f), 0, zc - 0.2f), f[2], f[2] * 0.7f, f[1], 0.1f, spire);
-    if (def.boss) {  // the crown
-        for (int k = 0; k < 5; ++k) {
-            const float a = (float(k) - 2.0f) * 0.42f;
-            mb.crystal(V3(std::sin(a) * 1.5f, 3.6f + std::cos(a) * 0.6f, zc - 0.6f), 0.32f, 0.25f, 2.2f - std::fabs(a) * 0.9f,
-                       std::sin(a) * 0.5f, spire);
+    const bool crystal = def.kind == sim::kSiege || def.kind == sim::kBoss;
+    const float twin = tune.twinX;
+    if (crystal) {
+        const float halfW = def.boss ? 3.4f : 2.8f;
+        mb.crystal(V3(0, 0, zc), halfW, 1.4f, 6.3f, 0.15f, spire);
+        const float feet[4][3] = {{-3.8f, 1.7f, 0.5f}, {3.6f, 1.6f, 0.45f}, {-2.7f, 2.5f, 0.55f}, {2.6f, 2.4f, 0.5f}};
+        for (const auto& f : feet) mb.crystal(V3(f[0] * (def.boss ? 1.15f : 1.0f), 0, zc - 0.2f), f[2], f[2] * 0.7f, f[1], 0.1f, spire);
+        if (def.boss) {  // the crown
+            for (int k = 0; k < 5; ++k) {
+                const float a = (float(k) - 2.0f) * 0.42f;
+                mb.crystal(V3(std::sin(a) * 1.5f, 3.6f + std::cos(a) * 0.6f, zc - 0.6f), 0.32f, 0.25f, 2.2f - std::fabs(a) * 0.9f,
+                           std::sin(a) * 0.5f, spire);
+            }
         }
+    } else if (def.kind == sim::kTwins) {
+        mb.crystal(V3(-twin, 0, zc), 1.95f, 1.0f, 5.4f, 0.1f, spire);
+        mb.crystal(V3(-twin - 1.5f, 0, zc - 0.2f), 0.4f, 0.3f, 1.6f, 0.1f, spire);
+    }
+    const u32 spire2I0 = u32(mb.idx.size()), spire2E0 = u32(mb.emit.size());
+    if (def.kind == sim::kTwins) {
+        mb.crystal(V3(twin, 0, zc), 1.95f, 1.0f, 5.4f, -0.1f, spire);
+        mb.crystal(V3(twin + 1.5f, 0, zc - 0.2f), 0.4f, 0.3f, 1.6f, -0.1f, spire);
     }
     out.opaque.first = 0;
     // Cracks by stage, on the front faces; the heart near the top.
@@ -229,7 +261,7 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
     const u32 beforeCracks = u32(mb.idx.size()), beforeCracksE = u32(mb.emit.size());
     for (int s = 0; s < 3; ++s) {
         const u32 i0 = u32(mb.idx.size()), e0 = u32(mb.emit.size());
-        for (int k = 0; k < 4; ++k) {
+        for (int k = 0; k < 4 && crystal; ++k) {
             const float x0 = cracks[s][k][0], y0 = cracks[s][k][1], x1 = cracks[s][k + 1][0], y1 = cracks[s][k + 1][1];
             const float wdt = 0.07f;
             mb.quadE(V3(x0 - wdt, y0, faceZ(y0)), V3(x0 + wdt, y0, faceZ(y0)), V3(x1 + wdt, y1, faceZ(y1)), V3(x1 - wdt, y1, faceZ(y1)),
@@ -241,15 +273,18 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
     {
         const u32 i0 = u32(mb.idx.size()), e0 = u32(mb.emit.size());
         const float hy = 4.7f, hz = faceZ(hy) - 0.05f, hr = 0.36f;
-        mb.quadE(V3(0.05f, hy - hr * 1.5f, hz), V3(0.05f + hr, hy, hz), V3(0.05f, hy + hr * 1.5f, hz), V3(0.05f - hr, hy, hz),
-                 hexColor(0xFFC8F0));
+        if (crystal)
+            mb.quadE(V3(0.05f, hy - hr * 1.5f, hz), V3(0.05f + hr, hy, hz), V3(0.05f, hy + hr * 1.5f, hz), V3(0.05f - hr, hy, hz),
+                     hexColor(0xFFC8F0));
         out.heart = {int(i0), int(mb.idx.size() - i0)};
         out.heartEmit = {int(e0), int(mb.emit.size() - e0)};
     }
     out.opaque.count = int(spireI0);
     out.emissive = {0, int(spireE0)};
-    out.spire = {int(spireI0), int(beforeCracks - spireI0)};
-    out.spireEmit = {int(spireE0), int(beforeCracksE - spireE0)};
+    out.spire = {int(spireI0), int(spire2I0 - spireI0)};
+    out.spireEmit = {int(spireE0), int(spire2E0 - spireE0)};
+    out.spire2 = {int(spire2I0), int(beforeCracks - spire2I0)};
+    out.spire2Emit = {int(spire2E0), int(beforeCracksE - spire2E0)};
 
     // Barriers: one range each (they shake and break).
     out.barrierCount = def.barrierCount;

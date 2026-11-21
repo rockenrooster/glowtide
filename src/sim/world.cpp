@@ -177,7 +177,7 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
         gateCarry[i] = 0;
     }
     for (int i = 0; i < def.barrierCount; ++i) {
-        barrierHealth[i] = def.barriers[i].health;
+        barrierHealth[i] = def.barriers[i].dormant ? 0 : def.barriers[i].health;  // a WARD WALL rises with its twist
         barrierShift[i] = barrierShiftAt(def.barriers[i], 0);
     }
     for (int i = 0; i < def.snufferCount; ++i) {
@@ -204,6 +204,15 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
     geodesShown = geodesOpened = 0;
     spent = 0;
     spire = spireStart = maxv<i32>(1, def.spireHealth);
+    spire2 = spire2Start = def.kind == kTwins ? maxv<i32>(1, def.goal2) : 0;
+    colossusOut = false;
+    colossusX = colossusZ = 0;
+    cubCount = 0;
+    cubStart = maxv<i32>(10, twoSignificant(tune.cubShare * float(spireStart)));
+    for (int c = 0; c < kMaxCubs; ++c) cubX[c] = cubZ[c] = 0, cubHp[c] = 0;
+    for (int k = 0; k < kMaxTwists; ++k) twistStart[k] = -1;
+    stampedeOwed_ = 0;
+    nextStep_ = 0;
     core = def.coreHealth;
     spireStage = 0;
     result = Result::None;
@@ -219,7 +228,6 @@ void World::init(const LevelDef& d, u64 noiseSeed) {
     owed_ = 0;
     nextBrute_ = tune.emitterDelay + def.bruteEvery;
     emitterNext_ = 0;
-    for (int i = 0; i < kMaxBursts; ++i) burstStart_[i] = -1;
     tideMark_ = 0;
     capW_ = clampv(int(tune.capW), 64, kMaxWisps);
     capG_ = clampv(int(tune.capG), 16, kMaxGlooms);
@@ -281,12 +289,83 @@ void World::emitGloom(float x, i32 power, bool brute) {
     gloomSpawned += power;
 }
 
-// The emitter the next gloom comes from: Pincer's active one of its pair, the shares' weighted round robin, or in turn.
+float World::goalLeft() const {
+    switch (def.kind) {
+        case kTwins: return float(maxv<i32>(0, spire) + maxv<i32>(0, spire2)) / float(maxv<i32>(1, spireStart + spire2Start));
+        case kHoldout: return 1.0f - minv(1.0f, time() / maxv(1.0f, def.targetT));
+        case kFestival: return 1.0f - minv(1.0f, time() / tune.festivalSeconds);
+        default: return float(maxv<i32>(0, spire)) / float(maxv<i32>(1, spireStart));
+    }
+}
+
+bool World::twistOn(int type, float seconds) const {
+    for (int k = 0; k < def.twistCount; ++k)
+        if (def.twists[k].type == type && twistStart[k] >= 0 && float(tickCount - twistStart[k]) * kTick < seconds) return true;
+    return false;
+}
+
+bool World::emitterLives(int e) const {
+    if (def.kind != kTwins) return true;
+    return def.emitters[e].group == 0 ? spire > 0 : spire2 > 0;
+}
+
+// A twist starts (VARIETY_DESIGN 7): its banner's event and what happens at once. SURGE (the flow), ECLIPSE, STAMPEDE and
+// GOLDEN GATE last a while (twistOn); GEODE RAIN and SECOND WIND release their geodes in the geode step.
+int World::startTwist(int k) {
+    const TwistDef& X = def.twists[k];
+    twistStart[k] = tickCount;
+    addEvent(kEvTwist, launcherX, def.len, k, X.type);
+    switch (X.type) {
+        case kTwistSurge: return X.brutes;
+        case kTwistBruteGuard: return maxv<i32>(2, X.brutes);
+        case kTwistWardWall:
+            if (X.param < def.barrierCount) {
+                const Barrier& B = def.barriers[X.param];
+                barrierHealth[X.param] = B.health;
+                addEvent(kEvBarrierHit, (B.x0 + B.x1) * 0.5f, B.z, X.param, 0);
+            }
+            return 0;
+        case kTwistCub:
+            for (int c = 0; c < maxv<int>(1, X.param) && cubCount < kMaxCubs; ++c) {
+                const int i = cubCount++;
+                cubX[i] = X.param >= 2 ? (i == 0 ? -1.6f : 1.6f) : 0.0f;
+                cubZ[i] = def.len - 2.0f;
+                cubHp[i] = cubStart;
+            }
+            return 0;
+        default: return 0;
+    }
+}
+
+// Every wisp that touches a body (the colossus, a cub) gives up to its power, like a geode (VARIETY_TECH 3.1). With
+// `unbreakable` the body takes the power but keeps its health (the bake's measuring runs). Returns the health left.
+i32 World::absorb(float x, float z, float r, i32 hp, bool unbreakable) {
+    i32 left = unbreakable ? (1 << 30) : hp;
+    for (int i = 0; i < w.n && left > 0; ++i) {
+        if (w.power[i] <= 0) continue;
+        const float rr = r + radius(0, i), dz = w.z[i] - z;
+        if (dz >= rr || dz <= -rr) continue;
+        const float dx = w.x[i] - x;
+        if (dx * dx + dz * dz >= rr * rr) continue;
+        const i32 give = minv(w.power[i], left);
+        left -= give;
+        w.power[i] -= give;
+        delivered += give;
+    }
+    return unbreakable ? hp : left;
+}
+
+// The emitter the next gloom comes from: Pincer's active one of its pair, the shares' weighted round robin, or in turn;
+// Twins skip the emitters of a fallen spire.
 int World::nextEmitter(float t) {
     if (def.plan == kPlanPincer && def.emitterCount >= 2) return int(t / tune.pincerSeconds) % 2;
     if (!weighted_) {
-        const int e = emitterNext_;
-        emitterNext_ = (emitterNext_ + 1) % def.emitterCount;
+        int e = emitterNext_;
+        for (int tries = 0; tries < def.emitterCount; ++tries) {
+            e = emitterNext_;
+            emitterNext_ = (emitterNext_ + 1) % def.emitterCount;
+            if (emitterLives(e)) break;
+        }
         return e;
     }
     int best = 0;
@@ -438,6 +517,19 @@ void World::tick(const Input& in) {
         addEvent(kEvFire, launcherX, kMuzzleZ, lanterns, 0);
     }
 
+    // 3a. Twists that are due start (VARIETY_DESIGN 7): by the clock, by the goal's progress, by the core.
+    int brutesNow = 0;
+    for (int k = 0; k < def.twistCount; ++k) {
+        if (twistStart[k] >= 0) continue;
+        const TwistDef& X = def.twists[k];
+        bool go;
+        if (X.trigger == kTrigTime) go = t >= X.at * def.targetT;
+        else if (X.trigger == kTrigCore) go = core <= i32(X.at);
+        else if (def.kind == kSiege || def.kind == kBoss || def.kind == kColossus) go = spire <= i32(X.at * float(spireStart));
+        else go = goalLeft() <= X.at;
+        if (go) brutesNow += startTwist(k);
+    }
+
     // 3. Emitters (GAME_DESIGN 5.9).
     if (def.hasEnemy() && !enemyOff && t >= tune.emitterDelay) {
         for (int e = 0; e < def.emitterCount; ++e) {
@@ -445,18 +537,12 @@ void World::tick(const Input& in) {
             emitterX[e] = E.amp > 0 ? E.x + E.amp * easedWave(t / E.period + E.phase) : E.x;
         }
         float mult = 1.0f;
-        int brutesNow = 0;
-        for (int b = 0; b < def.burstCount; ++b) {
-            const Burst& B = def.bursts[b];
-            if (burstStart_[b] < 0) {
-                const bool go = B.t >= 0 ? t >= B.t : (spire <= i32(B.healthFrac * float(spireStart)));
-                if (go) {
-                    burstStart_[b] = tickCount;
-                    brutesNow += B.brutes;
-                }
-            }
-            if (burstStart_[b] >= 0 && float(tickCount - burstStart_[b]) * dt < B.dur) mult = maxv(mult, B.mult);
+        for (int k = 0; k < def.twistCount; ++k) {  // SURGE: the old bursts
+            const TwistDef& X = def.twists[k];
+            if (X.type == kTwistSurge && twistStart[k] >= 0 && float(tickCount - twistStart[k]) * dt < X.dur) mult = maxv(mult, X.mult);
         }
+        // Holdout: the enemy grows through the night (the late surge's shape on top of the plan, averaging 1 over T).
+        if (def.kind == kHoldout) mult *= tune.holdoutLow + 2.0f * (1.0f - tune.holdoutLow) * minv(1.0f, t / maxv(1.0f, def.targetT));
         float ramp = 1.0f;
         const float rampT = tune.rampStart * def.targetT;
         if (t > rampT) ramp += (t - rampT) / tune.rampSlope;
@@ -486,6 +572,17 @@ void World::tick(const Input& in) {
                 owed_ -= 1.0f;
             }
         }
+        // STAMPEDE: sixteen runners from one emitter over two seconds, on top of the flow.
+        if (twistOn(kTwistStampede, tune.stampedeSeconds)) {
+            int e = 0;
+            for (int k = 0; k < def.twistCount; ++k)
+                if (def.twists[k].type == kTwistStampede) e = def.twists[k].param % def.emitterCount;
+            stampedeOwed_ += tune.stampedeRunners / tune.stampedeSeconds * dt;
+            while (stampedeOwed_ >= 1.0f && g.n < capG_) {
+                if (!hushed && emitterLives(e)) emitGloomAt(e, 1, kRunner);
+                stampedeOwed_ -= 1.0f;
+            }
+        }
         int spawned = 0;
         while (owed_ >= 1.0f && spawned < 30 && g.n < capG_) {
             // At the cap the owed power waits and joins the next gloom that fits (GAME_DESIGN 5.3).
@@ -499,12 +596,20 @@ void World::tick(const Input& in) {
     // Geodes that are due appear (VARIETY_DESIGN 2.1).
     for (int gi = 0; gi < def.geodeCount; ++gi) {
         const Geode& G = def.geodes[gi];
-        if (geodeState[gi] != kGeodeWaiting || t < G.t) continue;
+        if (geodeState[gi] != kGeodeWaiting) continue;
+        if (G.twist ? (G.twist > def.twistCount || twistStart[G.twist - 1] < 0) : t < G.t) continue;
         geodeState[gi] = kGeodeAlive;
         geodeX[gi] = G.amp > 0 ? G.x + G.amp * easedWave(t / G.period + G.phase) : G.x;
         geodeZ[gi] = geodePrevZ_[gi] = G.z0 > 0 ? G.z0 : len - 3.0f;
         ++geodesShown;
         addEvent(kEvGeodeAppear, geodeX[gi], geodeZ[gi], gi, 0);
+    }
+
+    if (def.kind == kColossus && !colossusOut && t >= tune.colossusDelay) {
+        colossusOut = true;
+        colossusZ = len - 2.0f;
+        colossusX = tune.colossusSway * easedWave(t / tune.colossusSwayPeriod);
+        nextStep_ = tickCount;
     }
 
     // 4. Steer and move.
@@ -519,7 +624,12 @@ void World::tick(const Input& in) {
         w.vx[i] *= fanKeep_;
         const float z = w.z[i] + wispStep;
         if (z > funnelZ) {
-            const float fx = clampv(x, -tune.funnelX, tune.funnelX);
+            float fx = clampv(x, -tune.funnelX, tune.funnelX);
+            if (def.kind == kTwins) {  // toward the nearer living spire's half of the funnel
+                const bool left = spire > 0 && (x < 0 || spire2 <= 0);
+                const float cx = left ? -tune.twinX : tune.twinX, half = 0.5f * tune.funnelX;
+                fx = clampv(x, cx - half, cx + half);
+            }
             x += clampv(fx - x, -funnelStep, funnelStep);
         }
         const float r = radius(0, i);
@@ -527,6 +637,7 @@ void World::tick(const Input& in) {
         w.z[i] = z;
     }
     const float homeStep = tune.homing * dt;
+    const bool eclipse = def.twistCount > 0 && twistOn(kTwistEclipse, tune.eclipseSeconds);
     for (int i = 0; i < g.n; ++i) {
         g.xp[i] = g.x[i];
         g.zp[i] = g.z[i];
@@ -540,7 +651,8 @@ void World::tick(const Input& in) {
             }
             continue;
         }
-        const float speed = (g.flags[i] & kBrute) ? tune.bruteSpeed : (g.flags[i] & kRunner) ? tune.runnerSpeed : tune.gloomSpeed;
+        float speed = (g.flags[i] & kBrute) ? tune.bruteSpeed : (g.flags[i] & kRunner) ? tune.runnerSpeed : tune.gloomSpeed;
+        if (eclipse) speed *= tune.eclipseSpeed;
         const float x = g.x[i] + clampv(launcherX - g.x[i], -homeStep, homeStep);
         g.x[i] = clampv(x, -kHW + r, kHW - r);
         g.z[i] -= speed * dt;
@@ -570,6 +682,27 @@ void World::tick(const Input& in) {
         if (geodeZ[gi] <= tune.geodeSlipZ) {  // it slipped past: gone, at no cost
             geodeState[gi] = kGeodeLost;
             addEvent(kEvGeodeLost, geodeX[gi], geodeZ[gi], gi, 0);
+        }
+    }
+
+    if (colossusOut) {  // it walks down at a pace that reaches the lantern at colossusPace T, swaying
+        const float speed = (len - 6.0f) / (tune.colossusPace * maxv(1.0f, def.targetT));
+        colossusZ = maxv(unbreakableSpire || noDamage ? tune.colossusLoseZ : -10.0f, colossusZ - speed * dt);
+        colossusX = tune.colossusSway * easedWave(t1 / tune.colossusSwayPeriod);
+        if (tickCount >= nextStep_) {
+            addEvent(kEvColossusStep, colossusX, colossusZ, 0, 0);
+            nextStep_ = tickCount + int(tune.colossusStep * 60.0f);
+        }
+    }
+    for (int c = 0; c < cubCount; ++c) {
+        if (cubHp[c] <= 0) continue;
+        cubZ[c] -= tune.cubSpeed * dt;
+        if (cubZ[c] <= tune.colossusLoseZ) {  // it reached the lantern: three pips, and it is gone
+            if (!noDamage) core -= i32(tune.cubCore);
+            coreHit = true;
+            cubHp[c] = 0;
+            addEvent(kEvCoreHit, cubX[c], kCoreZ, i32(tune.cubCore), 0);
+            addEvent(kEvCubDown, cubX[c], cubZ[c], c, 1);
         }
     }
 
@@ -603,6 +736,10 @@ void World::tick(const Input& in) {
     float passX[kMaxGates] = {};
     i32 divSnuffed[kMaxGates] = {};
     const int nBefore = w.n;
+    int golden = -1;
+    for (int k = 0; k < def.twistCount; ++k)
+        if (def.twists[k].type == kTwistGoldenGate && twistStart[k] >= 0 && float(tickCount - twistStart[k]) * dt < tune.goldenSeconds)
+            golden = def.twists[k].param;
     for (int i = 0; i < nBefore; ++i) {
         if (w.power[i] <= 0) continue;
         for (int gi = 0; gi < def.gateCount; ++gi) {
@@ -613,7 +750,8 @@ void World::tick(const Input& in) {
             if (w.bits[i] & bit) continue;
             w.bits[i] |= bit;
             // KINDLE: a multiply gate counts one more (at most kindleMax); a wisp that passed before is not touched again.
-            const int k = G.kind == kGateMul ? minv(int(tune.kindleMax), int(G.k) + kindle) : int(G.k);
+            int k = G.kind == kGateMul ? minv(int(tune.kindleMax), int(G.k) + kindle) : int(G.k);
+            if (golden == gi) k += int(tune.goldenExtra);  // GOLDEN GATE: two more for eight seconds
             if (G.kind == kGateMul) {
                 const i32 p = w.power[i];
                 const int room = maxv(0, capW_ - reserve_ - w.n);
@@ -718,6 +856,18 @@ void World::tick(const Input& in) {
         if (dmg) addEvent(kEvGeodeHit, gx, gz, gi, dmg);
         if (geodeHp[gi] <= 0) openGeode(gi);
     }
+    if (colossusOut && spire > 0) {  // the colossus: its health is the level's goal (`spire`)
+        const i32 before = spire;
+        spire = absorb(colossusX, colossusZ, tune.colossusRadius, spire, unbreakableSpire || noDamage);
+        if (spire < before) addEvent(kEvColossusHit, colossusX, colossusZ, before - spire, 0);
+    }
+    for (int c = 0; c < cubCount; ++c) {
+        if (cubHp[c] <= 0) continue;
+        const i32 before = cubHp[c];
+        cubHp[c] = absorb(cubX[c], cubZ[c], tune.cubRadius, cubHp[c], noDamage);
+        if (cubHp[c] < before) addEvent(kEvCubHit, cubX[c], cubZ[c], c, before - cubHp[c]);
+        if (cubHp[c] <= 0) addEvent(kEvCubDown, cubX[c], cubZ[c], c, 0);
+    }
 
     // 11. Snuffers.
     for (int s = 0; s < def.snufferCount; ++s) {
@@ -781,12 +931,24 @@ void World::tick(const Input& in) {
     // 13. Spire and core.
     i32 spireDmg = 0, n = 0;
     float sumX = 0;
+    i32 spire2Dmg = 0;
+    const bool spireTakes = def.kind == kSiege || def.kind == kBoss;
     for (int i = 0; i < w.n; ++i) {
         if (w.power[i] <= 0 || w.z[i] < len - 0.3f) continue;
-        spireDmg += w.power[i];
+        if (spireTakes) {
+            spireDmg += w.power[i];
+            delivered += w.power[i];
+        } else if (def.kind == kTwins) {  // the spire on its side of the middle, if it stands; else wasted
+            const bool left = w.x[i] < 0;
+            if (left ? spire > 0 : spire2 > 0) {
+                (left ? spireDmg : spire2Dmg) += w.power[i];
+                delivered += w.power[i];
+            }
+        } else if (def.kind != kColossus) {
+            delivered += w.power[i];  // Holdout, Festival: nothing takes it; counted as the stream's measure for the bake
+        }  // Colossus: what reaches the top is gone (the colossus took what it could on the way)
         sumX += w.x[i];
         ++n;
-        delivered += w.power[i];
         if (wrap) {
             w.z[i] = kMuzzleZ;
             w.zp[i] = w.z[i];
@@ -796,6 +958,8 @@ void World::tick(const Input& in) {
             w.power[i] = 0;
         }
     }
+    if (spire2Dmg && !noDamage && !unbreakableSpire) spire2 -= spire2Dmg;
+    if (spire2Dmg) addEvent(kEvSpireHit, tune.twinX, len, spire2Dmg, 1);
     if (spireDmg) {
         if (!noDamage && !unbreakableSpire) spire -= spireDmg;
         addEvent(kEvSpireHit, sumX / float(n), len, spireDmg, 0);
@@ -835,12 +999,27 @@ void World::tick(const Input& in) {
 
     // 15. Win and lose.
     ++tickCount;
-    if (!noDamage && !unbreakableSpire && spire <= 0) {
-        spire = 0;
+    const bool canEnd = !noDamage && !unbreakableSpire;
+    bool won = false;
+    switch (def.kind) {
+        case kTwins: won = canEnd && spire <= 0 && spire2 <= 0; break;
+        case kColossus: won = canEnd && colossusOut && spire <= 0; break;
+        case kHoldout: won = canEnd && float(tickCount) * dt >= def.targetT && core > 0; break;
+        case kFestival: won = !noDamage && float(tickCount) * dt >= tune.festivalSeconds; break;
+        default: won = canEnd && spire <= 0; break;
+    }
+    if (won) {
+        spire = maxv<i32>(0, spire);
+        spire2 = maxv<i32>(0, spire2);
         result = Result::Win;
         endTick = tickCount;
+        if (def.kind == kHoldout) addEvent(kEvDawn, 0, len, 0, 0);
         addEvent(kEvWin, 0, len, 0, 0);
-    } else if (!noDamage && core <= 0) {
+    } else if (!noDamage && def.kind == kColossus && colossusOut && colossusZ <= tune.colossusLoseZ && !unbreakableSpire) {
+        result = Result::Lose;  // the colossus reached the lantern
+        endTick = tickCount;
+        addEvent(kEvLose, launcherX, 0, 0, 0);
+    } else if (!noDamage && core <= 0 && def.kind != kFestival) {  // a festival cannot be lost
         core = 0;
         result = Result::Lose;
         endTick = tickCount;
@@ -927,6 +1106,14 @@ u64 World::hash() const {
         h = fnv(h, &hushUntil, sizeof hushUntil);
     }
     if (weighted_) h = fnv(h, credit_, sizeof credit_);
+    if (def.kind != kSiege) {  // Siege keeps the hashes it had before kinds existed
+        h = fnv(h, &spire2, sizeof spire2);
+        h = fnv(h, &colossusZ, sizeof colossusZ);
+        h = fnv(h, cubHp, sizeof cubHp);
+        h = fnv(h, cubZ, sizeof cubZ);
+    }
+    for (int k = 0; k < def.twistCount; ++k)
+        if (def.twists[k].type != kTwistSurge) h = fnv(h, &twistStart[k], sizeof twistStart[k]);
     h = fnv(h, &rng_.state, sizeof rng_.state);
     return h;
 }

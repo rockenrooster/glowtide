@@ -60,6 +60,12 @@ void main() {
         float h1 = sdUnevenCapsule((p - vec2(-0.52, 0.55)) * mat2(0.94, 0.34, -0.34, 0.94), 0.3, 0.1, 0.8);
         float h2 = sdUnevenCapsule((p - vec2(0.52, 0.55)) * mat2(0.94, -0.34, 0.34, 0.94), 0.3, 0.1, 0.8);
         d = smin(body, min(h1, h2), 0.14);
+        if ((vFlags & 64) != 0) {  // the colossus's crown: three more horn bumps between the two
+            float c1 = sdUnevenCapsule(p - vec2(0.0, 0.8), 0.22, 0.07, 0.6);
+            float c2 = sdUnevenCapsule((p - vec2(-0.26, 0.74)) * mat2(0.97, 0.24, -0.24, 0.97), 0.17, 0.06, 0.45);
+            float c3 = sdUnevenCapsule((p - vec2(0.26, 0.74)) * mat2(0.97, -0.24, 0.24, 0.97), 0.17, 0.06, 0.45);
+            d = smin(d, min(c1, min(c2, c3)), 0.1);
+        }
         float inner = -d;
         col = mix(uGloom[2].rgb, uGloom[0].rgb, smoothstep(0.0, 0.16, inner));
         float hl = length((p - vec2(-0.12, 0.42)) / vec2(0.56, 0.34));

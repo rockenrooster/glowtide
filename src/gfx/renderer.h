@@ -64,7 +64,8 @@ struct Scene {
     const PropDraw* props = nullptr;
     int propCount = 0;
     int spireStage = 0;        // cracks shown: 0..3
-    bool spireGone = false;  // the win shattered it
+    bool spireGone = false;  // the win shattered it (Twins: the left one fell)
+    bool spire2Gone = false; // Twins: the right one fell
     float heartGain = 1;
     bool barrierAlive[sim::kMaxBarriers] = {};
     V3 barrierOffset[sim::kMaxBarriers];

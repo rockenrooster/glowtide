@@ -34,6 +34,8 @@ Fingerprint fingerprintOf(const LevelDef& L) {
     fp.recipe = L.recipe;
     fp.plan = L.plan;
     fp.lengthClass = L.lengthClass;
+    for (int k = 0; k < L.twistCount && fp.twistCount < 4; ++k)  // the set of twists (SECOND WIND, everywhere from 23, aside)
+        if (L.twists[k].type != kTwistSecondWind) fp.twists[fp.twistCount++] = L.twists[k].type;
     Map m{fp, 4.0f, maxv(1.0f, L.len - 8.0f) / float(kFpBands)};
     for (int i = 0; i < L.gateCount; ++i) {
         const Gate& G = L.gates[i];

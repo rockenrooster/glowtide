@@ -10,7 +10,7 @@ if (-not $NoBuild) { & "$PSScriptRoot\build-desktop.ps1" -Config $Config }
 $exe = Join-Path $GT_ROOT "build\desktop-$Config\glowtide.exe"
 $root = Join-Path $GT_ROOT 'captures\flash'
 $strips = [ordered]@{ win_strip = 210; boss_win_strip = 210; lose_strip = 150; core_hit_strip = 120; geode_strip = 60; ward_strip = 60
-            kindle_strip = 60; comet_strip = 60 }
+            kindle_strip = 60; comet_strip = 60; twist_eclipse = 150; dawn_strip = 120; colossus_fall_strip = 90 }
 $failed = 0
 foreach ($mode in 'normal', 'reduced') {
     $dir = Join-Path $root $mode

@@ -23,9 +23,9 @@ Step 'unit tests' { & (Join-Path $bin 'glowtide_tests.exe') $out }
 Step 'png opens in PIL' { python -I -B -c "import sys; from PIL import Image; im = Image.open(sys.argv[1]); im.load(); assert im.size == (3, 2) and im.getpixel((2, 1))[0] == 200, im.getpixel((2, 1))" (Join-Path $out 'test_png.png') }
 $headless = Join-Path $bin 'glowtide_headless.exe'
 Step 'determinism, levels 1-5' { & $headless --sim determinism --from 1 --to 5 --seconds 60 }
-Step 'determinism, geode levels 6, 11, 23, 47' {
+Step 'determinism, geode levels 6, 11, 23, 47 and a level of each kind (10, 15, 21, 31, 41)' {
     $bad = 0
-    foreach ($l in 6, 11, 23, 47) { & $headless --sim determinism --level $l --seconds 60; if ($LASTEXITCODE -ne 0) { ++$bad } }
+    foreach ($l in 6, 11, 23, 47, 10, 15, 21, 31, 41) { & $headless --sim determinism --level $l --seconds 60; if ($LASTEXITCODE -ne 0) { ++$bad } }
     $global:LASTEXITCODE = $bad
 }
 if (-not $Quick) {

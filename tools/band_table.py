@@ -39,7 +39,7 @@ def rows(path):
             "time": float(t.group(1)), "T": float(t.group(2)), "core": float(c["Core"]), "opened": opened, "shown": shown,
             "pip": int(c["Pip lost"]), "deep": int(c["Deep gloom"]), "pw": pw, "pt": pt, "hw": hw, "ht": ht,
             "naive_loses": c["Naive"] == "loses", "seeds": int(c["Seeds"]),
-            "plan": c.get("Plan", "Steady"), "lowz": float(c["Lowest gloom z"]),
+            "plan": c.get("Plan", "Steady"), "lowz": float(c["Lowest gloom z"]), "kind": c.get("Kind", "Siege"),
         })
     return out
 
@@ -96,7 +96,22 @@ def main(argv):
             rs = plans[name]
             lines.append(f"| {name} | {len(rs)} | {min(r['core'] for r in rs):.0f} | {share(rs, lambda r: r['pip'] >= 5):.0f}% | "
                          f"{statistics.median(r['lowz'] for r in rs):.1f} | {share(rs, lambda r: r['deep'] >= 5):.0f}% |")
-    bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0]
+    # By kind (VARIETY_PLAN V3 task 9): greedy's median time against T, its core, the cancelled share against target.
+    kinds = {}
+    for r in data:
+        if r["level"] > 5:
+            kinds.setdefault(r["kind"], []).append(r)
+    if len(kinds) > 1:
+        lines += ["", "| Kind | Levels | Greedy time (T), median and range | Core, median and lowest | Cancelled / target | Pip lost |",
+                  "|---|---|---|---|---|---|"]
+        for name in sorted(kinds, key=lambda k: -len(kinds[k])):
+            rs = kinds[name]
+            tt = [r["time"] / r["T"] for r in rs]
+            lines.append(f"| {name} | {len(rs)} | {statistics.median(tt):.2f} ({min(tt):.2f}-{max(tt):.2f}) | "
+                         f"{statistics.median(r['core'] for r in rs):.0f} ({min(r['core'] for r in rs):.0f}) | "
+                         f"{statistics.median(r['cancelled'] for r in rs):.0f}% / {statistics.median(r['target'] for r in rs):.0f}% | "
+                         f"{share(rs, lambda r: r['pip'] >= 5):.0f}% |")
+    bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0 and r["kind"] not in ("Holdout", "Festival")]
     not_acc = [r["level"] for r in data if not r["accepted"]]
     lines += ["", f"Levels: {len(data)}, not accepted: {len(not_acc)} {not_acc[:30]}",
               f"Cancelled share more than 5 points from its target: {len(bad_share)} "

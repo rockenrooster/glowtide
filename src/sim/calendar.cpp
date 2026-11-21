@@ -28,14 +28,39 @@ const char* twistName(int twist) {
                                               "SECOND WIND", "GOLDEN GATE", "GATE STORM", "WARD WALL", "CUB"};
     return nameIn(n, twist);
 }
+const char* bossName(int boss) {
+    static const char* const n[kBossCount] = {"THE OLD SPIRE", "THE WARDEN", "THE TEMPEST", "THE HYDRA"};
+    return nameIn(n, boss);
+}
 const char* boonName(int boon) {
     static const char* const n[kBoonCount] = {"LANTERN", "QUICKEN", "BRIGHT", "WARD", "KINDLE", "COMET", "HUSH"};
     return nameIn(n, boon);
 }
 
+// V3's simple schedule (VARIETY_PLAN V3 task 8; the calendar proper is V4): levels ending in 5 are festivals from 15,
+// in 0 bosses; places 3 and 7 of each world take Holdout, Colossus and Twins in turn, each from the level that introduces
+// it (21, 31, 41). No kind but Siege comes twice in a row (3 and 7 are never next to 5 or 0).
+int kindFor(int index) {
+    if (index <= 5) return kSiege;
+    if (index % 10 == 0) return kBoss;
+    if (index % 10 == 5 && index >= 15) return kFestival;
+    if (index == 21) return kHoldout;
+    if (index == 31) return kColossus;
+    if (index == 41) return kTwins;
+    const int place = index % 10;
+    if ((place == 3 || place == 7) && index > 21) {
+        const int slot = (index / 10 - 2) * 2 + (place == 7 ? 1 : 0);  // 23 is 0, 27 is 1, 33 is 2, ...
+        const int avail = index > 41 ? 3 : index > 31 ? 2 : 1;
+        static const int order[3] = {kHoldout, kColossus, kTwins};
+        return order[slot % avail];
+    }
+    return kSiege;
+}
+
 float targetTime(int index) {
     static const float intro[5] = {8, 14, 18, 22, 26};
     if (index >= 1 && index <= 5) return intro[index - 1];
+    if (kindFor(index) == kFestival) return tune.festivalSeconds;
     const float t = 24.0f + 0.4f * float(minv(index, 30));
     return index % 10 == 0 ? t * 1.4f : t;
 }
@@ -51,7 +76,9 @@ float hardnessFor(int index) {
     return byPlace[(index - 1) % 10];
 }
 
-bool isHandMade(int index) { return index <= 6 || index == 11 || index == 16 || index == 23 || index == 38; }
+bool isHandMade(int index) {
+    return index <= 6 || index == 11 || index == 15 || index == 16 || index == 21 || index == 23 || index == 31 || index == 38 || index == 41;
+}
 
 int planFrom(int plan) {
     static const int from[kPlanCount] = {2, 18, 22, 27, 34, 28, 37, 30};

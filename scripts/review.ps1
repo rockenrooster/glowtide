@@ -65,6 +65,28 @@ $sets = @{
         level_16 = '--picture level_top --level 16 --no-hud --frames 4 --res 540x1200'
         level_38 = '--picture level_top --level 38 --no-hud --frames 4 --res 540x1200'
     }
+    v3 = [ordered]@{
+        kind_holdout = '--picture kind_holdout'
+        kind_colossus = '--picture kind_colossus'
+        kind_twins = '--picture kind_twins'
+        kind_festival = '--picture kind_festival'
+        boss_old_spire = '--picture boss_old_spire'
+        boss_warden = '--picture boss_warden'
+        boss_tempest = '--picture boss_tempest'
+        boss_hydra = '--picture boss_hydra'
+        colossus_strip = '--picture colossus_strip --strip 8 --strip-step 10 --frames 82'
+        colossus_fall_strip = '--picture colossus_fall_strip --strip 8 --strip-step 8 --frames 66'
+        dawn_strip = '--picture dawn_strip --strip 8 --strip-step 10 --frames 82'
+        twist_surge = '--picture twist_surge'
+        twist_brute_guard = '--picture twist_brute_guard'
+        twist_geode_rain = '--picture twist_geode_rain'
+        twist_eclipse = '--picture twist_eclipse'
+        twist_stampede = '--picture twist_stampede'
+        twist_second_wind = '--picture twist_second_wind'
+        twist_golden_gate = '--picture twist_golden_gate'
+        twist_ward_wall = '--picture twist_ward_wall'
+        twist_cub = '--picture twist_cub'
+    }
     p5 = [ordered]@{
         world_1 = '--picture world_1'
         world_2 = '--picture world_2'
@@ -81,6 +103,10 @@ if ($sets.ContainsKey($Set)) { foreach ($k in $sets[$Set].Keys) { $list[$k] = $s
 if ($Set -eq 'p3') {
     foreach ($s in $screens) { foreach ($r in $matrix) { $list["${s}_$r"] = "--picture $s --res $r" } }
     $list['button_strip'] = '--picture button_strip --strip 3 --strip-step 6'
+}
+if ($Set -eq 'v3') {
+    # Each kind's HUD across the aspect matrix, for the layout lint (VARIETY_PLAN V3 task 11).
+    foreach ($k in 'holdout', 'colossus', 'twins', 'festival', 'boss') { foreach ($r in $matrix) { $list["hud_${k}_$r"] = "--picture hud_$k --res $r" } }
 }
 if ($Set -eq 'v1') {
     # The HUD with a full boon tray across the aspect matrix, for the layout lint (VARIETY_PLAN V1 task 7).

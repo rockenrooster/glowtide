@@ -28,6 +28,10 @@ const char* kHints[] = {
     "BREAK ITS SHIELD FIRST",          // 7: the first shielded geode
     "IT GOT AWAY: CATCH THEM EARLY",   // 8: the first geode that slips past
     "IT JUMPS: WATCH THE GHOST",       // 9: the first hopper (level 16)
+    "NOTHING CAN GO WRONG HERE",       // 10: the first festival (15)
+    "KEEP THEM OFF YOUR LANTERN UNTIL DAWN",  // 11: the first holdout (21)
+    "BRING IT DOWN BEFORE IT ARRIVES", // 12: the first colossus (31)
+    "BOTH MUST FALL",                  // 13: the first twins (41)
 };
 
 Rect centered(const Layout& L, float cy, float wDp, float hDp) {
@@ -81,6 +85,8 @@ void Game::drawHome(float dt) {
     const float chipX = L.safe.left + L.px(12);
     uiBatch_.rect(chipX + chipW * 0.5f, top + L.px(24), chipW, L.px(40), L.px(20), rgba(kInk, 205), rgba(kWhite, 46), L.px(1));
     uiBatch_.text(buf, chipX + chipW * 0.5f, top + L.px(24), L.px(19), rgba(kWhite), rgba(kInk, 0), 0, Align::Center);
+    if (const char* kind = goalBanner(world_.def))  // the kind under the chip, for anything but a siege (VARIETY_TECH 9.1)
+        uiBatch_.text(kind, chipX, top + L.px(62), L.px(15), rgba(kGold), rgba(kInk), L.px(2), Align::Left);
     std::snprintf(buf, sizeof buf, "%d", save_.totalStars());
     const float sw = UiBatch::textWidth(buf, L.px(19)) + L.px(52);
     uiBatch_.rect(chipX + chipW + L.px(10) + sw * 0.5f, top + L.px(24), sw, L.px(40), L.px(20), rgba(kInk, 205), rgba(kGold, 120), L.px(1));
@@ -176,7 +182,8 @@ void Game::drawResult(bool won) {
     if (won) {
         // CLEARED! drops in; stars land 250 ms apart.
         const float drop = (1.0f - in) * L.px(-40);
-        uiBatch_.text("CLEARED!", float(L.w) * 0.5f, float(L.h) * 0.24f + drop, L.px(56) * scale, rgba(kGold, u8(255 * in)),
+        const char* title = world_.def.kind == sim::kHoldout ? "DAWN!" : world_.def.kind == sim::kFestival ? "FESTIVAL!" : "CLEARED!";
+        uiBatch_.text(title, float(L.w) * 0.5f, float(L.h) * 0.24f + drop, L.px(56) * scale, rgba(kGold, u8(255 * in)),
                       rgba(0x5A2A08, u8(255 * in)), L.px(5), Align::Center);
         for (int k = 0; k < 3; ++k) {
             const float landAt = 0.2f + 0.25f * float(k);
@@ -196,7 +203,9 @@ void Game::drawResult(bool won) {
         }
         char tide[32];
         formatThousands(world_.peakTide, tide, sizeof tide);
-        if (world_.geodesShown > 0)
+        if (world_.def.kind == sim::kFestival)
+            std::snprintf(buf, sizeof buf, "GEODES %d/%d   TIDE %s", world_.geodesOpened, world_.def.geodeCount, tide);
+        else if (world_.geodesShown > 0)
             std::snprintf(buf, sizeof buf, "TIME %.1f S   TIDE %s   BOONS %d/%d", double(world_.time()), tide, world_.geodesOpened,
                           world_.geodesShown);
         else
@@ -313,6 +322,12 @@ void Game::drawScreens(float dt) {
         HudState hs;
         hs.level = level_;
         hs.spireFrac = float(world_.spire) / float(maxv<i32>(1, world_.spireStart));
+        hs.kind = world_.def.kind;
+        hs.spire2Frac = float(world_.spire2) / float(maxv<i32>(1, world_.spire2Start));
+        hs.clockFrac = world_.def.kind == sim::kFestival ? minv(1.0f, world_.time() / tune.festivalSeconds)
+                                                         : minv(1.0f, world_.time() / maxv(1.0f, world_.def.targetT));
+        hs.geodesOpened = world_.geodesOpened;
+        hs.geodesTotal = world_.def.geodeCount;
         hs.tide = world_.tide;
         hs.tidePunch = view_.tidePunch;
         std::snprintf(hs.banner, sizeof hs.banner, "%s", bannerNow_);
@@ -611,7 +626,53 @@ void Game::flowStep() {
                 next();
             }
             break;
-        case 27: {
+        case 27:
+        case 28:
+        case 29:
+        case 30: {
+            // The kinds (VARIETY_PLAN V3 task 10): each introduction level, played by greedy to its end in one step, reaches
+            // its result screen with the stars of its kind.
+            static const int levels[4] = {15, 21, 31, 41};
+            const int lv = levels[flowStep_ - 27];
+            enterLevel(lv, false);
+            coldStart_ = false;
+            bot_.init(sim::BotKind::Greedy, 3);
+            useBot_ = true;
+            startPlaying();
+            for (int t = 0; t < 60 * 90 && world_.result == sim::Result::None; ++t) world_.tick(bot_.think(world_));
+            const bool won = world_.result == sim::Result::Win;
+            finishLevel(won);
+            int want = 1;
+            const sim::LevelDef& d = world_.def;
+            if (d.kind == sim::kHoldout) want = world_.core >= 8 ? 3 : world_.core >= 5 ? 2 : 1;
+            else if (d.kind == sim::kFestival) want = world_.geodesOpened >= d.goal2 ? 3 : float(world_.geodesOpened) >= 0.6f * float(d.geodeCount) ? 2 : 1;
+            else want = world_.time() <= d.targetT ? 3 : world_.time() <= 1.3f * d.targetT ? 2 : 1;
+            char what[64];
+            std::snprintf(what, sizeof what, "level %d (%s) is won with its kind's stars", lv, sim::kindName(d.kind));
+            check(won && screen_ == Screen::Win && stars_ == want, what);
+            next();
+            break;
+        }
+        case 31: {
+            // SECOND WIND: on level 24 the core forced to 3 starts it and releases its WARD geode.
+            enterLevel(24, false);
+            coldStart_ = false;
+            startPlaying();
+            sim::Input none;
+            for (int t = 0; t < 120; ++t) world_.tick(none);
+            world_.core = 3;
+            world_.tick(none);
+            bool fired = false;
+            for (int e = 0; e < world_.eventCount; ++e)
+                fired = fired || (world_.events[e].type == sim::kEvTwist && world_.events[e].b == sim::kTwistSecondWind);
+            bool ward = false;
+            for (int g = 0; g < world_.def.geodeCount; ++g)
+                ward = ward || (world_.def.geodes[g].twist && world_.geodeState[g] == sim::kGeodeAlive && world_.def.geodes[g].boon == sim::kBoonWard);
+            check(fired && ward, "SECOND WIND fires when the core falls to 3");
+            next();
+            break;
+        }
+        case 32: {
             GT_TAG("FLOW", "done: %d checks, %d failed", flowChecks_, flowFailures_);
             std::remove(savePath_);
             quit_ = true;

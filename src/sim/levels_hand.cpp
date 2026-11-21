@@ -57,7 +57,7 @@ LevelDef introLevel(int index) {
             addGate(L, mulGate(-2.2f, 1.8f, 9, 2, 0));
             addGate(L, mulGate(-2.0f, 1.5f, 17, 3, 1));
             addEmitter(L, -1.6f);
-            addBurst(L, 0.6f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
+            addTwist(L, kTwistSurge, kTrigTime, 0.6f);
             Geode g;
             g.x = 2.6f;
             g.t = 0.15f * L.targetT;
@@ -84,8 +84,8 @@ LevelDef introLevel(int index) {
             addGate(L, mulGate(-2.4f, 1.4f, 22, 2, 2));
             addEmitter(L, -2.0f);
             addEmitter(L, 2.0f);
-            addBurst(L, 0.4f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
-            addBurst(L, 0.75f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
+            addTwist(L, kTwistSurge, kTrigTime, 0.4f);
+            addTwist(L, kTwistSurge, kTrigTime, 0.75f);
             Geode g;
             g.x = -2.6f;
             g.t = 0.07f * L.targetT;
@@ -94,6 +94,88 @@ LevelDef introLevel(int index) {
             g.hpSeconds = 1.0f;
             g.shieldSeconds = 2.0f;
             L.geodes[L.geodeCount++] = g;
+            break;
+        }
+        case 15: {
+            // The first festival: no enemy, rich gates, twelve small geodes falling over twenty seconds. Hint: NOTHING CAN
+            // GO WRONG HERE.
+            L.kind = kFestival;
+            L.targetT = tune.festivalSeconds;
+            L.len = 32;
+            addRow(L, 9, kPatHand);
+            addRow(L, 16, kPatHand);
+            addRow(L, 23, kPatHand);
+            addGate(L, mulGate(-2.6f, 1.7f, 9, 2, 0));
+            addGate(L, mulGate(2.6f, 1.6f, 9, 3, 0));
+            addGate(L, mulGate(0, 1.8f, 16, 3, 1));
+            addGate(L, mulGate(-2.6f, 1.6f, 23, 2, 2));
+            addGate(L, mulGate(2.6f, 1.5f, 23, 4, 2));
+            static const u8 boons[12] = {kBoonLantern, kBoonQuicken, kBoonBright, kBoonQuicken, kBoonLantern, kBoonBright,
+                                         kBoonQuicken, kBoonComet, kBoonComet, kBoonComet, kBoonComet, kBoonComet};
+            static const float xs[12] = {-3.0f, 1.0f, 3.2f, -1.2f, 2.2f, -3.4f, 0.0f, 3.0f, -2.2f, 1.6f, -0.6f, 2.8f};
+            for (int k = 0; k < 12; ++k) {
+                Geode g;
+                g.x = xs[k];
+                g.t = 1.0f + 1.3f * float(k);
+                g.speed = 2.2f;
+                g.radius = 0.6f;
+                g.hpSeconds = 0.7f;
+                g.boon = boons[k];
+                L.geodes[L.geodeCount++] = g;
+            }
+            break;
+        }
+        case 21: {
+            // The first holdout: no spire, a dark gate the enemy pours from; keep them off the lantern until dawn. Plain gates
+            // so the night is the new thing. Hint: KEEP THEM OFF YOUR LANTERN UNTIL DAWN.
+            L.kind = kHoldout;
+            L.len = 34;
+            addRow(L, 9, kPatHand);
+            addRow(L, 16, kPatHand);
+            addRow(L, 23, kPatHand);
+            // A halving gate in the middle: a stream that stays put up the middle cannot hold the night.
+            addGate(L, mulGate(-2.6f, 1.6f, 9, 2, 0));
+            addGate(L, divGate(0.6f, 1.2f, 9, 2, 0));
+            addGate(L, mulGate(3.4f, 1.2f, 9, 3, 0));
+            addGate(L, mulGate(-2.4f, 1.6f, 16, 3, 1));
+            addGate(L, mulGate(2.6f, 1.5f, 16, 2, 1));
+            addGate(L, mulGate(-1.0f, 1.6f, 23, 3, 2));
+            addEmitter(L, -2.0f);
+            addEmitter(L, 2.0f);
+            break;
+        }
+        case 31: {
+            // The first colossus: a giant gloom walks down the lane; bring it down before it arrives. The nearer it gets,
+            // the fewer gates lie between it and the lantern. Hint: BRING IT DOWN BEFORE IT ARRIVES.
+            L.kind = kColossus;
+            L.len = 36;
+            addRow(L, 9, kPatHand);
+            addRow(L, 16, kPatHand);
+            addRow(L, 23, kPatHand);
+            addGate(L, mulGate(0, 1.8f, 9, 3, 0));
+            addGate(L, mulGate(-2.6f, 1.6f, 16, 2, 1));
+            addGate(L, mulGate(2.6f, 1.5f, 16, 3, 1));
+            addGate(L, mulGate(0, 1.8f, 23, 2, 2));
+            addEmitter(L, -2.0f);
+            addEmitter(L, 2.0f);
+            break;
+        }
+        case 41: {
+            // The first twins: two spires, each with its own emitter that stops when it falls; a stream on a fallen spire's
+            // side is wasted, so it must cross over. Hint: BOTH MUST FALL.
+            L.kind = kTwins;
+            L.len = 36;
+            addRow(L, 9, kPatHand);
+            addRow(L, 16, kPatHand);
+            addRow(L, 23, kPatHand);
+            addGate(L, mulGate(-2.6f, 1.6f, 9, 2, 0));
+            addGate(L, mulGate(2.6f, 1.6f, 9, 2, 0));
+            addGate(L, mulGate(0, 1.8f, 16, 3, 1));
+            addGate(L, mulGate(-2.6f, 1.5f, 23, 3, 2));
+            addGate(L, mulGate(2.6f, 1.5f, 23, 3, 2));
+            addEmitter(L, -tune.twinX);
+            addEmitter(L, tune.twinX);
+            L.emitters[1].group = 1;
             break;
         }
         case 16: {
@@ -163,8 +245,8 @@ LevelDef introLevel(int index) {
             addEmitter(L, -1.5f);
             addEmitter(L, 0);
             addEmitter(L, 1.5f);
-            addBurst(L, 0.35f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
-            addBurst(L, 0.55f * L.targetT, 0, tune.burstMult, tune.burstSeconds, 0);
+            addTwist(L, kTwistSurge, kTrigTime, 0.35f);
+            addTwist(L, kTwistSurge, kTrigTime, 0.55f);
             L.fight = fightFor(index) + 0.05f;  // the enemy gets close here on purpose
             Geode b;
             b.x = 2.9f;  // a detour: the best line is on the left
@@ -196,11 +278,15 @@ LevelDef introLevel(int index) {
             L.bumpers[L.bumperCount++] = {3.1f, 22.0f, 0.7f};
             addEmitter(L, -2);
             addEmitter(L, 2);
-            addBurst(L, -1, 0.5f, tune.burstMult, tune.burstSeconds, 0);
+            addTwist(L, kTwistSurge, kTrigGoal, 0.5f);
             break;
         }
     }
     applyEnemyDefaults(L);
+    if (index >= 23) {  // SECOND WIND from level 23 on (VARIETY_DESIGN 10.1)
+        Rng r(L.seed, 9);
+        addTwists(L, r);
+    }
     return L;
 }
 

@@ -130,6 +130,112 @@ void placeGeodes(LevelDef& L, Rng& r) {
     }
 }
 
+// A festival's rain (VARIETY_DESIGN 6): 10 to 14 small geodes falling over its 20 s, boons from the pool and under their
+// limits (no WARD or HUSH: there is no enemy), COMET for the rest.
+void placeFestivalGeodes(LevelDef& L, Rng& r) {
+    const int n = r.rangei(10, 14);
+    int lanterns = 1, quicken = 0, bright = 0, kindle = 0;
+    for (int k = 0; k < n && L.geodeCount < kMaxGeodes; ++k) {
+        Geode g;
+        g.t = 1.0f + 15.0f * float(k) / float(n) + r.range(0.0f, 0.6f);
+        g.x = r.range(-3.6f, 3.6f);
+        g.speed = r.range(1.8f, 2.6f);
+        g.radius = 0.6f;
+        g.hpSeconds = r.range(0.5f, 0.9f);
+        int b = kBoonComet;
+        const float roll = r.f01();
+        if (roll < 0.25f && lanterns < int(tune.lanternMax)) b = kBoonLantern, ++lanterns;
+        else if (roll < 0.5f && quicken < int(tune.quickenMax)) b = kBoonQuicken, ++quicken;
+        else if (roll < 0.7f && bright < int(tune.brightMax)) b = kBoonBright, ++bright;
+        else if (roll < 0.8f && kindle < 1 && L.index >= 36) b = kBoonKindle, ++kindle;
+        g.boon = u8(b);
+        L.geodes[L.geodeCount++] = g;
+    }
+}
+
+// A dormant wall across the whole lane, 6 m below the spire, raised by WARD WALL; its health is set with the spire's.
+static u8 addWardWall(LevelDef& L) {
+    if (L.barrierCount >= kMaxBarriers) return 0;
+    Barrier b;
+    b.x0 = -kHW + 0.1f;
+    b.x1 = kHW - 0.1f;
+    b.z = L.len - 6.0f;
+    b.health = 10;
+    b.dormant = 1;
+    L.barriers[L.barrierCount] = b;
+    return u8(L.barrierCount++);
+}
+
+// The boss's script (VARIETY_DESIGN 8): two twists at 66% and 33% of its health.
+void addBossScript(LevelDef& L) {
+    switch (L.bossType) {
+        case kBossWarden:
+            addTwist(L, kTwistWardWall, kTrigGoal, 0.66f, 0, addWardWall(L));
+            addTwist(L, kTwistBruteGuard, kTrigGoal, 0.33f, 2);
+            break;
+        case kBossTempest:
+            addTwist(L, kTwistStampede, kTrigGoal, 0.66f, 0, 0);
+            addTwist(L, kTwistEclipse, kTrigGoal, 0.33f);
+            break;
+        case kBossHydra:
+            addTwist(L, kTwistCub, kTrigGoal, 0.66f, 0, 1);
+            addTwist(L, kTwistCub, kTrigGoal, 0.33f, 0, 2);
+            break;
+        default: {  // THE OLD SPIRE: today's boss, a surge with two brutes at each threshold
+            TwistDef& a = addTwist(L, kTwistSurge, kTrigGoal, 0.66f, 2);
+            a.dur = 4.0f;
+            TwistDef& b = addTwist(L, kTwistBruteGuard, kTrigGoal, 0.33f, 2);
+            b.dur = 4.0f;
+            break;
+        }
+    }
+}
+
+// A geode a twist releases (GEODE RAIN's runners, SECOND WIND's WARD).
+static void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed, float radius, float hpSeconds, u8 boon) {
+    if (L.geodeCount >= kMaxGeodes) return;
+    Geode g;
+    g.x = x;
+    g.z0 = z0;
+    g.speed = speed;
+    g.radius = radius;
+    g.hpSeconds = hpSeconds;
+    g.boon = boon;
+    g.twist = u8(twist + 1);
+    L.geodes[L.geodeCount++] = g;
+}
+
+// Twists on a generated level (VARIETY_PLAN V3 task 8): SECOND WIND from level 23 wherever there is an enemy (the one
+// comeback: it fires only when the core falls to 3); from level 43 one more, chosen by the seed, on levels that are not
+// bosses or festivals.
+void addTwists(LevelDef& L, Rng& r) {
+    if (!L.hasEnemy()) return;
+    if (L.index >= 43 && L.kind != kBoss && L.kind != kFestival && L.twistCount < kMaxTwists - 1) {
+        static const u8 pool[6] = {kTwistSurge, kTwistBruteGuard, kTwistGeodeRain, kTwistEclipse, kTwistStampede, kTwistGoldenGate};
+        const u8 type = pool[r.rangei(0, 5)];
+        const int k = L.twistCount;
+        TwistDef& x = addTwist(L, type, kTrigTime, r.range(0.3f, 0.65f), type == kTwistBruteGuard ? 2 : 0);
+        if (type == kTwistStampede) x.param = u8(r.rangei(0, L.emitterCount - 1));
+        if (type == kTwistGoldenGate) {  // the strongest multiply gate of the middle row
+            const int row = L.rowCount / 2;
+            int best = -1;
+            for (int g = 0; g < L.gateCount; ++g)
+                if (L.gates[g].row == row && L.gates[g].kind == kGateMul && (best < 0 || L.gates[g].k > L.gates[best].k)) best = g;
+            x.param = u8(maxv(0, best));
+        }
+        if (type == kTwistGeodeRain) {  // three runner geodes at once, across the lane
+            static const u8 boons[3] = {kBoonQuicken, kBoonBright, kBoonLantern};
+            for (int j = 0; j < 3; ++j)
+                addTwistGeode(L, k, -2.6f + 2.6f * float(j) + r.range(-0.4f, 0.4f), 0, 3.0f, 0.6f, r.range(0.6f, 0.9f), boons[(j + r.rangei(0, 2)) % 3]);
+        }
+    }
+    if (L.index >= 23 && L.twistCount < kMaxTwists) {
+        const int k = L.twistCount;
+        addTwist(L, kTwistSecondWind, kTrigCore, 3.0f);
+        addTwistGeode(L, k, 0.0f, 0.5f * L.len, 1.0f, 0.9f, 0.8f, kBoonWard);
+    }
+}
+
 LevelDef generate(int index, u64 seed) {
     LevelDef L;
     L.index = index;
@@ -138,10 +244,17 @@ LevelDef generate(int index, u64 seed) {
     L.targetT = targetTime(index);
     L.hardness = hardnessFor(index);
     L.fight = fightFor(index) + (L.hardness - 0.5f) * 0.08f;  // a world's rhythm moves the enemy's share (VARIETY_DESIGN 10.2)
-    L.boss = index % 10 == 0;
+    L.kind = u8(kindFor(index));
+    L.boss = L.kind == kBoss;
+    if (L.boss) L.bossType = u8((index / 10 - 1) % kBossCount);
+    const bool festival = L.kind == kFestival;
     Rng r(seed, 7);
 
-    const Band band = bandFor(index);
+    Band band = bandFor(index);
+    if (festival) {  // rich gates: no traps, patrols or crossing divides, one factor more
+        band.strongest = minv(5, band.strongest + 1);
+        band.patternWeight[kPatTrap] = band.patternWeight[kPatPatrol] = band.patternWeight[kPatCrossing] = 0;
+    }
     const int strongest = band.strongest;
     const float* wt = band.patternWeight;  // Open, Choice, Trap, Slider, Wall, Pillars, Patrol, Crossing, Hopper, Breathing
     const int rows = r.rangei(band.rowsLo, band.rowsHi);
@@ -288,10 +401,23 @@ LevelDef generate(int index, u64 seed) {
     const float last = L.rowZ[L.rowCount - 1] + (L.rowPattern[L.rowCount - 1] == kPatWall ? 2.0f : 0.0f);
     L.len = clampv(last + 12.0f, 30.0f, 44.0f);
 
-    // The enemy (GAME_DESIGN 5.9, 7.3 step 3) and its plan (VARIETY_DESIGN 5.1).
+    // The enemy (GAME_DESIGN 5.9, 7.3 step 3) and its plan (VARIETY_DESIGN 5.1); a boss's plan is its own (8).
     L.plan = u8(planFor(index, r));
+    if (L.boss) {
+        static const u8 bossPlan[kBossCount] = {kPlanSteady, kPlanSteady, kPlanRunnerPacks, kPlanPulse};
+        L.plan = bossPlan[L.bossType];
+    }
+    if (L.kind == kTwins && (L.plan == kPlanPincer || L.plan == kPlanFlank)) L.plan = kPlanPulse;  // each spire has its emitter
+    if (festival) L.plan = kPlanSteady;
     const int emitters = index <= 9 ? 1 : index <= 29 ? 2 : 3;
-    if (L.plan == kPlanPincer) {  // two emitters far apart, one at a time
+    if (festival) {
+        // No enemy (VARIETY_DESIGN 6).
+    } else if (L.kind == kTwins) {  // an emitter at each spire's foot; it stops when its spire falls
+        L.twinShare = r.f01() < 0.5f ? 0.5f : (r.f01() < 0.5f ? 0.4f : 0.6f);
+        addEmitter(L, -tune.twinX);
+        addEmitter(L, tune.twinX);
+        L.emitters[1].group = 1;
+    } else if (L.plan == kPlanPincer) {  // two emitters far apart, one at a time
         const float x = r.range(2.8f, 3.4f);
         addEmitter(L, -x);
         addEmitter(L, x);
@@ -306,7 +432,7 @@ LevelDef generate(int index, u64 seed) {
         addEmitter(L, 0);
         addEmitter(L, 2.5f);
     }
-    if (index >= 20 && L.plan != kPlanPincer && r.f01() < 0.4f) {
+    if (index >= 20 && L.plan != kPlanPincer && L.emitterCount > 0 && r.f01() < 0.4f) {
         Emitter& e = L.emitters[r.rangei(0, L.emitterCount - 1)];
         e.amp = r.range(1.0f, 1.5f);
         e.period = r.range(4, 7);
@@ -329,12 +455,11 @@ LevelDef generate(int index, u64 seed) {
             addDoor(L, d == 0 ? side : -side, dz, (1.0f / 3.0f) / float(doors));
         }
     }
-    if (L.boss) {
-        addBurst(L, -1, 0.66f, tune.burstMult, 4.0f, 2);
-        addBurst(L, -1, 0.33f, tune.burstMult, 4.0f, 2);
-    }
+    if (L.boss) addBossScript(L);
     applyEnemyDefaults(L);
-    placeGeodes(L, r);
+    if (festival) placeFestivalGeodes(L, r);
+    else placeGeodes(L, r);
+    addTwists(L, r);
     return L;
 }
 

@@ -106,6 +106,21 @@ int levelForPlay(int index) {
     return 101 + (index - 301) % 200;
 }
 
+// The table's goal number by kind (VARIETY_DESIGN 12.2 step 6): Twins split it between the spires; a festival's is the
+// geodes opened for three stars; a WARD WALL and a cub are shares of a boss's spire.
+void setGoals(LevelDef& L) {
+    if (L.kind == kTwins) {
+        const i32 total = L.spireHealth;
+        L.spireHealth = twoSignificant(float(total) * L.twinShare);
+        L.goal2 = maxv<i32>(1, twoSignificant(float(total) - float(L.spireHealth)));
+    } else if (L.kind == kFestival) {
+        L.goal2 = maxv<i32>(1, L.spireHealth);
+        L.spireHealth = 1;
+    }
+    for (int b = 0; b < L.barrierCount; ++b)
+        if (L.barriers[b].dormant) L.barriers[b].health = maxv<i32>(10, twoSignificant(tune.wardWallShare * float(L.spireHealth)));
+}
+
 LevelDef layoutFor(int index, u64 seed) {
     LevelDef L = isHandMade(index) ? introLevel(index) : generate(index, seed);
     sizeGeodes(L);
@@ -121,12 +136,15 @@ LevelDef levelFor(int playIndex) {
         L.spireHealth = kBaked[index - 1].spire;
         L.baseFlow = kBaked[index - 1].baseFlow;
         L.ref = kBaked[index - 1].ref;
+        setGoals(L);
     } else {
         // Before the bake: a first guess from the layout (the bake replaces it).
         const float p0 = estimateP0(L);
         L.baseFlow = L.fight * p0;
         L.spireHealth = maxv<i32>(40, i32(0.85f * p0 * L.targetT * (1.0f - L.fight)));
         L.ref = p0 * L.targetT;
+        if (L.kind == kFestival) L.spireHealth = maxv(1, L.geodeCount - 2);
+        setGoals(L);
     }
     return L;
 }

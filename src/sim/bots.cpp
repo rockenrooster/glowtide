@@ -150,6 +150,15 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
     float bonus = 0;
     const float t = w.time();
     const float base = w.fireRate() * float(w.shotPower()) * float(w.lanterns);
+    // Colossus: the stream counts where it meets the colossus (it walks and sways while the stream climbs); the gates
+    // above it do not matter (VARIETY_TECH 4).
+    float colZ = 1e9f, colX = 0;
+    if (d.kind == kColossus && w.colossusOut) {
+        const float speed = (d.len - 6.0f) / (tune.colossusPace * maxv(1.0f, d.targetT));
+        const float ta = maxv(0.0f, w.colossusZ - kMuzzleZ) / (tune.wispSpeed + speed);
+        colZ = maxv(tune.colossusLoseZ, w.colossusZ - speed * ta);
+        colX = tune.colossusSway * easedWave((t + ta) / tune.colossusSwayPeriod);
+    }
     // What KINDLE would multiply this line by: each multiply gate on it, as it will be on arrival, counts one more.
     float kindle = 1.0f;
     if (worth && !w.kindle)
@@ -181,6 +190,7 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
     };
     for (int k = 0; k < n; ++k) {
         const int id = order[k];
+        if (zs[k] >= colZ) break;
         if (std::fabs(zs[k] - rowZ) > 0.01f) {
             closeRow();
             rowZ = zs[k];
@@ -241,8 +251,10 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
                 // so g / (1 + g) of the rest is saved (the time spent opening it is already out of this line's budget).
                 // When the spire cannot fall (the bake's measuring runs) the window's end bounds it instead.
                 const float g = G.boon == kBoonKindle ? kindle - 1.0f : boonGain(G.boon, w.lanterns, w.quicken, w.bright);
-                const float rest = w.unbreakableSpire ? maxv(0.0f, d.targetT - t - spentTime) * (1.0f + g)
-                                                      : minv(float(w.spire) / maxv(1.0f, bestRate), 2.0f * d.targetT);
+                // Holdout: until dawn; Twins: both spires.
+                const float goal = float(maxv<i32>(0, w.spire) + maxv<i32>(0, w.spire2));
+                const float rest = w.unbreakableSpire || d.kind == kHoldout ? maxv(0.0f, d.targetT - t - spentTime) * (1.0f + g)
+                                                                           : minv(goal / maxv(1.0f, bestRate), 2.0f * d.targetT);
                 bonus += bestRate * rest * g / (1.0f + g);
             }
         } else {
@@ -254,7 +266,15 @@ float Bot::score(const World& w, float x, bool worth, float bestRate) const {
         }
     }
     closeRow();
-    return base * mult * maxv(0.0f, budget) + bonus;
+    // The share of the stream that reaches the goal: the colossus's body; a fallen twin's side is wasted (the funnel
+    // carries a stream up to a metre past the middle toward the living spire).
+    float goalShare = 1.0f;
+    if (colZ < 1e8f) {
+        goalShare = overlap(colX - tune.colossusRadius, colX + tune.colossusRadius);
+    } else if (d.kind == kTwins && (w.spire <= 0) != (w.spire2 <= 0)) {
+        goalShare = w.spire > 0 ? overlap(-kHW, 1.0f) : overlap(-1.0f, kHW);
+    }
+    return base * mult * maxv(0.0f, budget) * goalShare + bonus;
 }
 
 Input Bot::think(const World& w) {
@@ -289,11 +309,13 @@ Input Bot::think(const World& w) {
         nextDecision_ = tick + kDecisionTicks;
         float decided = aim_;
         bool defend = false;
-        // Defend rule: a gloom nearer than z = 12 with no wisp within 0.8 m of its line.
+        // Defend rule: a gloom nearer than z = 12 (Holdout: most of the lane, VARIETY_TECH 4) with no wisp within 0.8 m of
+        // its line.
+        const float defendZ = w.def.kind == kHoldout ? 0.6f * w.def.len : 12.0f;
         if (tick >= defendUntil_) {
             float nearest = 1e9f, gx = 0;
             for (int i = 0; i < w.g.n; ++i) {
-                if (w.g.z[i] >= 12.0f || w.g.z[i] >= nearest) continue;
+                if (w.g.z[i] >= defendZ || w.g.z[i] >= nearest) continue;
                 bool covered = false;
                 for (int j = 0; j < w.w.n && !covered; ++j)
                     covered = w.w.z[j] < w.g.z[i] && std::fabs(w.w.x[j] - w.g.x[i]) < 0.8f;
@@ -312,7 +334,8 @@ Input Bot::think(const World& w) {
         }
         if (!defend) {
             float gx = 0;
-            if (kind == BotKind::Hungry && nearestGeode(w, &gx) >= 0) {
+            // A festival is geodes only: greedy takes them in turn (VARIETY_TECH 4).
+            if ((kind == BotKind::Hungry || (kind == BotKind::Greedy && w.def.kind == kFestival)) && nearestGeode(w, &gx) >= 0) {
                 decided = gx;
             } else {
                 const float lo = w.aimMin(), hi = w.aimMax();

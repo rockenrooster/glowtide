@@ -8,7 +8,7 @@ param(
     [int]$TimeoutSeconds = 240
 )
 . "$PSScriptRoot\env.ps1"
-$levels = 1, 2, 3, 4, 5, 6, 11, 23, 47
+$levels = 1, 2, 3, 4, 5, 6, 11, 23, 47, 10, 15, 21, 31, 41
 $Serial = Resolve-GtSerial $Serial
 Assert-GtDevice $Serial
 $lock = Enter-GtDeviceLock $Serial 'glowtide-simhash'
@@ -39,7 +39,10 @@ try {
 }
 $phone = @{}
 foreach ($l in $log) { if ($l -match 'determinism level (\d+): hash ([0-9a-f]+)') { $phone[[int]$Matches[1]] = $Matches[2] } }
-$headless = Join-Path $GT_ROOT "build\desktop-$Config\glowtide_headless.exe"
+# GT_PC_BUILD: a frozen copy of a desktop build folder, so a phone is checked against the build its APK came from while
+# the source moves on.
+$pcBuild = if ($env:GT_PC_BUILD) { $env:GT_PC_BUILD } else { Join-Path $GT_ROOT "build\desktop-$Config" }
+$headless = Join-Path $pcBuild 'glowtide_headless.exe'
 $bad = 0
 foreach ($lv in $levels) {
     $pc = "$(& $headless --sim determinism --level $lv --seconds 60)"

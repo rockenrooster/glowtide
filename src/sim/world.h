@@ -58,6 +58,12 @@ enum EventType : u8 {
     kEvGeodeOpen,    // a = geode, b = boon
     kEvGeodeLost,    // a = geode, b = 0 slipped past, 1 dissolved (its pair was opened)
     kEvBoon,         // a = boon, b = how many of it the stream holds now (WARD: glooms popped)
+    kEvTwist,        // a = twist index, b = its type
+    kEvColossusStep, // x, z (its foot falls)
+    kEvColossusHit,  // a = damage this tick
+    kEvCubHit,       // a = cub, b = damage this tick
+    kEvCubDown,      // a = cub (broken; b = 1 when it reached the lantern)
+    kEvDawn,         // a Holdout won
 };
 
 enum GeodeState : u8 { kGeodeWaiting, kGeodeAlive, kGeodeOpened, kGeodeLost };
@@ -112,6 +118,16 @@ public:
     float snufferX[kMaxSnuffers] = {};
     float emitterX[kMaxEmitters] = {};
     i32 spire = 0, spireStart = 0, core = 0;
+    // The kinds' goals (VARIETY_DESIGN 6): Twins' right spire; the colossus (its health is `spire`); cubs (twist CUB).
+    i32 spire2 = 0, spire2Start = 0;
+    bool colossusOut = false;
+    float colossusX = 0, colossusZ = 0;
+    int cubCount = 0;
+    float cubX[kMaxCubs] = {}, cubZ[kMaxCubs] = {};
+    i32 cubHp[kMaxCubs] = {}, cubStart = 0;
+    int twistStart[kMaxTwists] = {};  // the tick each twist started (-1: not yet)
+    float goalLeft() const;           // the share of the level's goal still to go (Holdout: of the night)
+    bool twistOn(int type, float seconds) const;  // a twist of this type started less than `seconds` ago
     // Geodes (VARIETY_DESIGN 2) and the boons held this level (3).
     u8 geodeState[kMaxGeodes] = {};
     float geodeX[kMaxGeodes] = {}, geodeZ[kMaxGeodes] = {};
@@ -142,6 +158,9 @@ private:
     void emitGloom(float x, i32 power, bool brute);
     void emitGloomAt(int emitter, i32 power, u8 flags);
     int nextEmitter(float t);
+    bool emitterLives(int e) const;  // Twins: an emitter stops with its spire
+    int startTwist(int k);           // its effect; returns the brutes it sends now
+    i32 absorb(float x, float z, float r, i32 hp, bool unbreakable);  // like a geode: every wisp that touches gives
     void addEvent(u8 type, float x, float z, i32 a, i32 b);
     void buildGrid(const Units& u, int* start, int* order);
     void separate(Units& u, const int* start, const int* order, int team);
@@ -154,7 +173,9 @@ private:
     float credit_[kMaxEmitters] = {};  // shares: a weighted round robin
     bool weighted_ = false;
     float nextPack_ = 0, nextLineBrute_ = 0;
-    int burstStart_[kMaxBursts] = {};
+    float stampedeOwed_ = 0;
+    int nextStep_ = 0;  // the tick of the colossus's next step
+
     int tideMark_ = 0;
     float geodePrevZ_[kMaxGeodes] = {};
     int capW_ = 2400, capG_ = 1000, reserve_ = 64;

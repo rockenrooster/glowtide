@@ -17,7 +17,12 @@ struct Layout {
 
 struct HudState {
     int level = 1;
-    float spireFrac = 1;   // 0..1
+    float spireFrac = 1;   // 0..1 (Twins: the left spire)
+    // The goal bar by kind (VARIETY_DESIGN 14): Twins two half-bars, Holdout a dawn clock that fills, a festival its
+    // clock and the geodes opened, a boss notches at 66% and 33%.
+    u8 kind = 0;
+    float spire2Frac = 0, clockFrac = 0;
+    int geodesOpened = 0, geodesTotal = 0;
     long long tide = 0;
     float tidePunch = 0;
     // The banner showing now (a boon, the flood's marks; later a goal or a twist): one at a time, 0.9 s.

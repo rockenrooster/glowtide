@@ -54,12 +54,13 @@ bool Game::init(const Args& args, const GameEnv& env) {
     }
 
     if (!std::strcmp(args.scenario, "sim_hash")) {
-        // The determinism hash on this device (P2): levels 1-5 and four geode levels (VARIETY_PLAN V1), the greedy bot, 60 s
+        // The determinism hash on this device (P2): levels 1-5, four geode levels (VARIETY_PLAN V1) and one level of each kind
+        // (V3: a boss, a festival, a holdout, a colossus, twins), the greedy bot, 60 s
         // each, the same runs as glowtide_headless --sim determinism on the PC (seed 1 unless --seed;
         // scripts\simhash-android.ps1 compares them).
         mode_ = Mode::Debug;
         const u64 seed = args.seed >= 0 ? u64(args.seed) : 1u;
-        for (int level : {1, 2, 3, 4, 5, 6, 11, 23, 47}) {
+        for (int level : {1, 2, 3, 4, 5, 6, 11, 23, 47, 10, 15, 21, 31, 41}) {
             world_.init(sim::levelFor(level), seed);
             bot_.init(sim::BotKind::Greedy, seed);
             for (int t = 0; t < 60 * 60; ++t) world_.tick(bot_.think(world_));
@@ -167,6 +168,10 @@ void Game::enterLevel(int index, bool fade) {
     else if (level_ == 4) showHint(3);
     else if (level_ == 5) showHint(4);
     else if (level_ == 16) showHint(9);
+    else if (level_ == 15) showHint(10);
+    else if (level_ == 21) showHint(11);
+    else if (level_ == 31) showHint(12);
+    else if (level_ == 41) showHint(13);
 }
 
 const char* screenName(Screen s) {
@@ -190,6 +195,19 @@ void Game::startPlaying() {
     coldStart_ = false;
     resumeRamp_ = 1;
     if (level_ == 1) showHint(0);
+    if (const char* b = goalBanner(world_.def)) pushBanner(b);  // the goal, for the level's first second (VARIETY_DESIGN 14)
+}
+
+// The goal's banner (VARIETY_DESIGN 6, 8): none for a siege.
+const char* goalBanner(const sim::LevelDef& d) {
+    switch (d.kind) {
+        case sim::kHoldout: return "HOLD UNTIL DAWN";
+        case sim::kColossus: return "STOP THE COLOSSUS";
+        case sim::kTwins: return "TWO SPIRES";
+        case sim::kFestival: return "LANTERN FESTIVAL";
+        case sim::kBoss: return sim::bossName(d.bossType);
+        default: return nullptr;
+    }
 }
 
 void Game::finishLevel(bool won) {
@@ -206,6 +224,9 @@ void Game::finishLevel(bool won) {
     if (won) {
         const float t = world_.time(), T = world_.def.targetT;
         stars_ = t <= T ? 3 : t <= 1.3f * T ? 2 : 1;  // GAME_DESIGN 5.11: stars are for speed
+        if (world_.def.kind == sim::kHoldout) stars_ = world_.core >= 8 ? 3 : world_.core >= 5 ? 2 : 1;  // by the core left
+        if (world_.def.kind == sim::kFestival)  // by geodes opened (VARIETY_DESIGN 6)
+            stars_ = world_.geodesOpened >= world_.def.goal2 ? 3 : float(world_.geodesOpened) >= 0.6f * float(world_.def.geodeCount) ? 2 : 1;
         const int idx = level_ - 1;  // levels past the array keep no stars (they replay earlier ones)
         if (idx >= 0 && idx < int(sizeof save_.stars) && save_.stars[idx] < stars_) save_.stars[idx] = u8(stars_);
         save_.level = maxv(save_.level, level_ + 1);
@@ -448,6 +469,8 @@ void Game::tick() {
             formatThousands(ev.a, num, sizeof num);
             std::snprintf(b, sizeof b, "FLOOD \xC3\x97%s", num);
             pushBanner(b);
+        } else if (ev.type == sim::kEvTwist) {
+            pushBanner(sim::twistName(ev.b));
         } else if (ev.type == sim::kEvGeodeAppear) {
             showHint(world_.def.geodes[ev.a].shield > 0 && (save_.hints & (1u << 6)) ? 7 : 6);
         } else if (ev.type == sim::kEvGeodeLost && ev.b == 0) {
@@ -556,6 +579,9 @@ void Game::update(float dt, float alpha) {
         startPlaying();
     } else if (screen_ == Screen::Home || screen_ == Screen::Play) {
         view_.cheer = view_.brighten = view_.desaturate = view_.gloomCheer = 0;
+        // Holdout: the night brightens toward the dawn the level is heading for (VARIETY_DESIGN 6).
+        if (world_.def.kind == sim::kHoldout && screen_ == Screen::Play)
+            view_.brighten = 0.4f * minv(1.0f, world_.time() / maxv(1.0f, world_.def.targetT)) * (save_.reduceEffects ? 0.5f : 1.0f);
     }
     view_.update(viewDt * view_.timeScale, world_);
     // Haptics the feedback asked for.

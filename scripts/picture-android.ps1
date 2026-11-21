@@ -62,7 +62,8 @@ if ("$frameLine" -notmatch 'frame (\d+)x(\d+) px, dp scale ([\d.]+), safe top ([
 }
 $w, $h, $dp, $top, $bottom = $Matches[1], $Matches[2], [double]$Matches[3], [double]$Matches[4], [double]$Matches[5]
 $safe = '{0:0.###},{1:0.###}' -f ($top / $dp), ($bottom / $dp)
-$exe = Join-Path $GT_ROOT "build\desktop-$Config\glowtide.exe"
+$pcBuild = if ($env:GT_PC_BUILD) { $env:GT_PC_BUILD } else { Join-Path $GT_ROOT "build\desktop-$Config" }  # see simhash-android.ps1
+$exe = Join-Path $pcBuild 'glowtide.exe'
 & $exe --picture $Against --silent --offscreen --res "${w}x$h" --dp-scale $dp --safe $safe --screenshot $pcPng --frames $Frames | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "[picture] the PC render failed ($LASTEXITCODE)"; exit 1 }
 Write-Host "[picture] $Picture on $id (${w}x$h, dp $dp, safe $safe dp) against the PC's $Against"

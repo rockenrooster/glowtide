@@ -269,6 +269,7 @@ void Renderer::drawProps(const Scene& s, bool glow) {
         drawRange(glow ? level_.heartEmit : level_.heart);
         glUniform4f(uTint, 1, 1, 1, s.emissiveGain);
     }
+    if (!s.spire2Gone) drawRange(glow ? level_.spire2Emit : level_.spire2);
     for (int b = 0; b < level_.barrierCount; ++b) {
         if (!s.barrierAlive[b]) continue;
         const M4 m = translation(s.barrierOffset[b]);

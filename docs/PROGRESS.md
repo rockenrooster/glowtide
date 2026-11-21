@@ -28,6 +28,7 @@ listed under "Choices" below; the owner can reverse any of them.
 | V0 Baseline and tools | Done 2026-11-20 (device matrix deferred to V1's runs) | Split of `levels.cpp` proven neutral; version stamps and their test; `--sim variety`; baseline below; consecutive-level sheets; `picture-android.ps1`; stars past level 1,000 not recorded. Also the owner's barrel fix (below) |
 | V1 Geodes and boons | Done 2026-11-20 (version 0.2.0) | Geodes, plates, four boons, three lanterns, bake v2; levels 2-300 baked and accepted; step 8 missed (below); the checkpoint decided here (Choices) |
 | V2 Lane and enemy | Done 2026-11-20 (phones: below) | Hoppers, breathing gates, sliding walls, side doors, runners, eight plans, `KINDLE`, `COMET`, `HUSH`; levels 2-300 baked again and accepted; stretch items not built |
+| V3 Kinds, twists, bosses | Done on the PC 2026-11-20 (phones: waiting) | Holdout, Colossus, Twins, Festival, four bosses, eight twists; every kind's lines pass in the bake; Siege unchanged |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -298,6 +299,74 @@ as a doorway (a lit opening in a dark arch), a runner by its streak (`captures/v
 lane is built once a tick instead of once a scored line (42 lines a decision): the same results (every determinism
 hash equal before and after).
 
+### V3: kinds, twists, bosses — what was built and what changed from the design
+
+Built: the five goals (VD 6) in the data and the rules: Siege as before (levels 1 to 5 hash as they did), Holdout (a dark
+gate instead of the spire, won at dawn with the core above zero, the enemy growing 0.6 to 1.4 times across the night,
+the backdrop brightening), Colossus (a body with the spire's health that steps out at 3 s, walks to the lantern by 1.25 T
+swaying 1.5 m, absorbs every wisp that touches it, and loses the level at z 3; drawn by the unit shader at 1.8 m with a
+crown), Twins (two spires at x -2.6 and +2.6 with a range each, damage by side, the funnel toward the nearer living
+spire, an emitter each that stops with its spire, a fallen spire's side wasted), Festival (no enemy, 10 to 14 small
+geodes over 20 s, a paper lantern in gold where the spire stands, cannot be lost, stars by geodes opened); bosses (the
+four scripts as twists at 66% and 33%: THE OLD SPIRE, THE WARDEN with WARD WALL, THE TEMPEST with STAMPEDE and ECLIPSE,
+THE HYDRA with CUBs; the name as the goal banner and under the chip on HOME, notches on the goal bar). Twists replace
+bursts (SURGE and BRUTE GUARD are the old bursts; GEODE RAIN with runner geodes, ECLIPSE, STAMPEDE, SECOND WIND,
+GOLDEN GATE drawn gold, WARD WALL, CUB), each with a banner and a cue. The schedule of V3 (task 8). The goal bar, the
+goal banner, the result titles (CLEARED!, DAWN!, FESTIVAL!) and stars by kind. Hand-made introductions 15, 21, 31, 41
+with their hints. Bots by kind (the colossus where the stream meets it, the living twin's side, Holdout's defence over
+60% of the lane, a festival's geodes in turn). The bake by kind, its report's kind column and a by-kind table. Pictures
+`kind_*`, `boss_*`, `twist_*`, `colossus_strip`, `colossus_fall_strip`, `dawn_strip`, `hud_*`; the flow test's kind
+steps; a level of each kind in the determinism checks (PC and phone).
+
+| Design said | Built | Why |
+|---|---|---|
+| Holdout: bisect the flow until greedy's median core at dawn is 7 to 9 | The strongest enemy greedy holds with a median core of 7 or more (five runs a bisection step), then the flow stepped down until greedy wins nine of ten | Near the edge a holdout is all or nothing: a step of the flow turned a median core of 10 into a collapse, so a band of 7 to 9 was not reachable; greedy's median core is 10 on most holdouts (lowest 7), and the first lost pips of the whole game are there (10% of the 21-30 band) |
+| Holdout's line: `podless` loses | `podless` loses, or keeps fewer pips than greedy, on holdouts with a lasting boon | As above: the core is the measure, and "loses" alone threw away every holdout where both held |
+| A goal resized (line c) freely | Once, by at most 20% (the colossus 6%) | The colossus's time is steep in its health (the nearer it gets the weaker the stream): a 33% step turned a 24 s win into ten losses |
+| Lines g, h, i on every level with a geode | On the level's own geodes: SECOND WIND's `WARD` (from 23 on every level) comes only when the core falls to 3 | Otherwise every introduction level without geodes failed lines h and i |
+| THE OLD SPIRE: SURGE and BRUTE GUARD | A surge with two brutes at 66% (4 s), two brutes at 33% | Today's boss, split into the two twists |
+| Every level from 43 has one twist; SECOND WIND from 23 | As designed, the twist drawn from SURGE, BRUTE GUARD, GEODE RAIN, ECLIPSE, STAMPEDE and GOLDEN GATE by the seed | GATE STORM (stretch) not built |
+| Introductions laid out by hand | 15, 21, 31, 41 by hand with no geode of their own | One new thing each, as 16 and 38 |
+| The festival's three stars: greedy's median geodes opened, less one | As designed; naive must not earn them | — |
+
+### V3: measured
+
+**The bake** (generator 8, rules 5): levels 2-300 accepted, 1,894 s at 4 jobs (V2: 1,262 s; the holdout bisection's five
+runs a step and 33 levels in the repair pass, 13 to 27 seeds). Seeds thrown away by line: g 968, x 173, a 75, f 38,
+h 35, c 33, n 29, e 6, i 1. By kind (`captures/levels/bands.md`):
+
+| Kind | Levels | Greedy time (T), median and range | Core, median and lowest | Cancelled / target | Pip lost |
+|---|---|---|---|---|---|
+| Siege | 178 | 0.93 (0.76-1.09) | 10 (10) | 25% / 26% | 0% |
+| Festival | 29 | 1.00 (its 20 s) | - | - | - |
+| Holdout | 20 | 1.00 (dawn) | 10 (7) | 44% / - | 10% |
+| Colossus | 20 | 0.79 (0.73-0.96) | 10 (10) | 26% / 28% | 0% |
+| Twins | 18 | 1.00 (0.85-1.17) | 10 (10) | 26% / 27% | 0% |
+| THE OLD SPIRE | 8 | 0.96 (0.91-0.99) | 10 (10) | 30% / 28% | 0% |
+| THE WARDEN | 8 | 0.95 (0.90-1.02) | 10 (10) | 26% / 28% | 0% |
+| THE TEMPEST | 7 | 0.92 (0.90-1.02) | 10 (10) | 27% / 28% | 0% |
+| THE HYDRA | 7 | 0.97 (0.87-0.98) | 10 (10) | 24% / 27% | 0% |
+
+Every level passes its kind's lines (Colossus and Twins inside 0.7 to 1.2 `T`; every festival's three stars earned by
+greedy in nine runs of ten and not by naive). Step 8 still misses where it did (greedy's pips: 10% in two bands, 0%
+elsewhere). Siege's band numbers match V2's within the bake's noise.
+
+**The variety report:** neighbours 1-12 apart p10 / p50 / p90 0.33 / 0.44 / 0.64 (V2 0.49 / 0.55 / 0.65), 47.6% above
+0.45 (V2 97.5%); 13-40 apart 17.2% above 0.60 (V2 23.8%). Kinds per hundred levels: Holdout 7, 7, 6; Colossus 7, 6, 7;
+Twins 5, 7, 6; Festival 10; Boss 10. The longest run of one kind is 4 (Siege): no other kind twice in a row.
+
+**Other checks** (PC): unit tests 111 checks, 0 failed (each kind's win and lose on a minimal level, the colossus's
+absorbing and arriving, the fallen twin's wasted side, a festival that cannot be lost and ends on its tick, each twist
+starting once on its trigger, GOLDEN GATE's two more, WARD WALL's rising, a cub's health and its three pips);
+determinism on levels 1-5 (the hashes of V2: a0044282ee3746e4, 601366e2542f5bd0, 5d5bae122c1f906e, c0487fc8f504ccc5,
+17c5087585247415), the geode levels and a level of each kind; acceptance 1-5; soak 1-300 with greedy, hungry and sweep
+(900 runs, 0 failed); flow test 53 checks, 0 failed; layout lint over every kind's HUD in the eight frames; flashing
+audit with ECLIPSE, dawn and the colossus's fall (with and without REDUCE EFFECTS): pass; an eclipsed frame in greyscale
+tells the wisps (bright teardrops) from the glooms.
+
+**On the phones:** waiting. The Moto has shown a Google Play Protect prompt about the dev build since 17:48 (the owner's
+privacy choice: not touched) and the tablet has been in use by someone else.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -488,5 +557,9 @@ another level, every level has one goal and one enemy plan, and the greedy bot i
    SETTINGS' level stepper. Is this the upgrade you meant? Did you choose between a geode and the enemy, or was it always
    obvious? Too many, too few, too tough, too soft, too fast? Two and three lanterns: fun, too strong? Should a boon ever
    last past its level? (Answered by best judgment for now: Choices.)
+9. **Kinds, twists, bosses (V3):** levels 15 (festival), 21 (holdout), 31 (colossus), 41 (twins), the bosses 10, 20,
+   30, 40, and twists from 43. Which kinds are fun, any to drop? Holdout tense or tedious, the colossus fair, do you see
+   that the twins make you cross over? Is a festival every tenth level welcome? Did ECLIPSE and GOLDEN GATE read without
+   being told? Are the bosses different from each other? (Answered by best judgment for now: kept as built.)
 8. **The lane and the enemy (V2):** ten levels between 16 and 60. Does any new gate annoy rather than interest (hoppers
    are the candidate)? Do side doors read as doors? Is `KINDLE` as good as it should be?
