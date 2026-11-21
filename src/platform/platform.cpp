@@ -29,6 +29,7 @@ jmethodID g_haptic = nullptr;
 jmethodID g_refresh = nullptr;
 jmethodID g_requestRefresh = nullptr;
 jmethodID g_checkUpdate = nullptr;
+jmethodID g_startUpdate = nullptr;
 
 // Present timestamps
 bool g_presentOk = false;
@@ -119,6 +120,7 @@ void init(SDL_Window*) {
     g_refresh = env->GetStaticMethodID(g_activityClass, "refreshRate", "()F");
     g_requestRefresh = env->GetStaticMethodID(g_activityClass, "requestRefreshRate", "(F)V");
     g_checkUpdate = env->GetStaticMethodID(g_activityClass, "checkForUpdate", "()V");
+    g_startUpdate = env->GetStaticMethodID(g_activityClass, "startUpdate", "()V");
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(cls);
     env->DeleteLocalRef(activity);
@@ -138,6 +140,14 @@ void checkForUpdate() {
     JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
     if (!env) return;
     env->CallStaticVoidMethod(g_activityClass, g_checkUpdate);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+void startUpdate() {
+    if (!g_startUpdate) return;
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    if (!env) return;
+    env->CallStaticVoidMethod(g_activityClass, g_startUpdate);
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
@@ -243,6 +253,9 @@ void init(SDL_Window*) {}
 void haptic(int) {}
 void requestRefreshRate(float) {}
 void checkForUpdate() {}
+void startUpdate() {
+    if (!SDL_OpenURL(kReleasesUrl)) GT_WARN("update: %s", SDL_GetError());
+}
 float refreshRateHz(SDL_Window* window) {
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
     return mode && mode->refresh_rate > 0 ? mode->refresh_rate : 60.0f;
@@ -257,14 +270,20 @@ int presentCollect(double*, int) { return 0; }
 
 namespace {
 std::atomic<int> g_latestBuild{0};
+std::atomic<float> g_updateProgress{-1.0f};
 }  // namespace
 
 int latestBuild() { return g_latestBuild.load(std::memory_order_relaxed); }
+float updateProgress() { return g_updateProgress.load(std::memory_order_relaxed); }
 
 #if defined(__ANDROID__)
 // GlowtideActivity.nativeUpdateFound(int): the latest GitHub release's build number, from its update thread.
 extern "C" JNIEXPORT void JNICALL Java_dev_glowtide_game_GlowtideActivity_nativeUpdateFound(JNIEnv*, jclass, jint build) {
     g_latestBuild.store(static_cast<int>(build), std::memory_order_relaxed);
+}
+// GlowtideActivity.nativeUpdateProgress(float): the in-app download's fraction, -1 when it ends without installing.
+extern "C" JNIEXPORT void JNICALL Java_dev_glowtide_game_GlowtideActivity_nativeUpdateProgress(JNIEnv*, jclass, jfloat fraction) {
+    g_updateProgress.store(static_cast<float>(fraction), std::memory_order_relaxed);
 }
 #endif
 

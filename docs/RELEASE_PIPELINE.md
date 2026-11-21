@@ -56,6 +56,10 @@ no build). The keystore goes to `keys\glowtide-release.keystore`, ignored by git
 `*.pfx`): never commit it, the repository is public. Back the keystore and its password up off this PC: a build signed with
 any other key cannot update an installed copy.
 
+**The key is set** (2026-11-21, from build 26 on; certificate CN=GLOWTIDE, SHA-256 `82cb59e0...c9b3` in full in the
+release notes). Builds 1 to 23 were signed with a key of their own: a copy of one of them cannot be updated, by the
+updater or by Android; uninstall it once and install a newer build.
+
 **Without the secrets** (as on the first builds) the APK is signed with a debug key the run makes for itself, a different
 one every run. Android installs an update only when it is signed with the same key as the installed app, so such an APK
 installs only where GLOWTIDE is not installed: uninstall first, and the phone's progress goes with it. The release notes and
@@ -65,7 +69,8 @@ build instead, build the dev APK with `GT_APP_ID_SUFFIX=.dev` (package `dev.glow
 
 ## The updater
 
-As RAVEFORM's: a button that shows when an update is available and opens the release page.
+A button that shows when an update is available; from build 27 it downloads the release in the game, checks it and opens
+Android's own update dialog (Trueform's in-app updater, `ApkUpdater.java` and `ApkInstallReceiver.java`).
 
 - Every GitHub build carries its build number: the workflow sets `GT_BUILD_NUMBER` (the commit count, the number in its tag
   `build-<n>`), `android/app/build.gradle` passes it to CMake (`-DGT_BUILD_NUMBER`), and `cmake/BuildStamp.cmake` writes it
@@ -75,8 +80,15 @@ As RAVEFORM's: a button that shows when an update is available and opens the rel
   `https://api.github.com/repos/rockenrooster/glowtide/releases/latest` (no account; GitHub allows 60 such requests an hour
   from an address), takes the number from `tag_name`, and hands it to native code (`nativeUpdateFound`). Nothing is sent
   but the request; no answer (offline, rate-limited) means no button. This is the only use of the INTERNET permission.
-- While that number is higher than the build's own, HOME shows a gold `UPDATE: BUILD <n>` pill under the top row; tapping
-  it opens the latest release's page in the browser (`SDL_OpenURL`), where the APK is.
+- While that number is higher than the build's own, HOME shows a gold `UPDATE: BUILD <n>` pill under the top row. Tapping
+  it (`platform::startUpdate`, `GlowtideActivity.startUpdate`, `ApkUpdater.downloadAndInstall`): the first time Android
+  opens "Install unknown apps" for GLOWTIDE (allow, back, tap again); then the APK downloads into the app's cache with
+  its progress on the pill (`DOWNLOADING 42%`), is checked (its size, the SHA-256 in `glowtide.apk.sha256`, the same
+  package, a higher `versionCode`, the same signing key) and goes to a `PackageInstaller` session, whose confirmation
+  (`ApkInstallReceiver`) is Android's "Do you want to update this app?". Any failed check is a message (a Toast) and
+  nothing installed. The desktop opens the release page instead.
+- The permission it needs (`REQUEST_INSTALL_PACKAGES`) and its receiver are in `android/app/src/github/AndroidManifest.xml`,
+  which `build.gradle` merges only into a release built with a build number: a local or Play build has neither.
 - The picture `--picture home_update` shows the pill as if GitHub had build 999 (desktop builds never ask).
 - A build for the Play store must not have it (Play's policy: an app updates only through Play): build it without
   `GT_BUILD_NUMBER`.
@@ -84,8 +96,8 @@ As RAVEFORM's: a button that shows when an update is available and opens the rel
 ## Version
 
 `versionName` is `android/app/build.gradle`'s (kept equal to `CMakeLists.txt`'s project VERSION); SETTINGS shows it with
-the build number and the commit. `versionCode` stays 1 on every build: Android refuses an install with a lower versionCode
-than the installed one, and the phones get builds from this PC and from GitHub. Raise it for a store release.
+the build number and the commit. `versionCode` is the build number on GitHub builds (from build 27; Android and the
+updater know "newer" by it) and 1 on local builds.
 
 ## Cost
 

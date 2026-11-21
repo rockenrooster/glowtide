@@ -25,6 +25,11 @@ void requestRefreshRate(float hz);
 // (Android; a no-op on the desktop); latestBuild() is 0 until an answer arrives.
 void checkForUpdate();
 int latestBuild();
+// HOME's UPDATE button: on Android the game downloads the latest release itself, checks it and opens Android's
+// installer (the activity's startUpdate); on the desktop it opens the releases page. updateProgress() is the download's
+// fraction, or -1 while nothing downloads.
+void startUpdate();
+float updateProgress();
 constexpr const char* kReleasesUrl = "https://github.com/rockenrooster/glowtide/releases/latest";
 
 // A path for an output file: absolute paths stay; relative ones go to the app's external files directory on

@@ -16,7 +16,7 @@ What the release build is, what was checked, and the steps only the owner can ta
 | 16 KB pages | Shared libraries stored uncompressed and 16 KB aligned in the APK; every `LOAD` segment aligned to 0x4000 | `zipalign -c -P 16 -v 4` (build-tools 36), `llvm-readelf -l` |
 | Debuggable | No | `aapt2 dump badging` (no `application-debuggable`) |
 | App arguments | Ignored: `getArguments()` returns nothing unless the build is debuggable | `GlowtideActivity.java`; launch with `--es args` on the Moto (see PROGRESS.md) |
-| Permissions | Two: `android.permission.VIBRATE` (haptics) and `android.permission.INTERNET` (the update check) | `aapt2 dump badging` |
+| Permissions | `android.permission.VIBRATE` (haptics) and `android.permission.INTERNET` (the update check); GitHub builds also `android.permission.REQUEST_INSTALL_PACKAGES` (the in-app updater; never in a build for Play) | `aapt2 dump badging` |
 | Network | One request a launch, from GitHub builds only: the latest release's number from GitHub's API (docs/RELEASE_PIPELINE.md). No analytics, no ads, no accounts | `GlowtideActivity.checkForUpdate` |
 | Data collected | None. The only file written is the save (`save.txt`: level, stars, settings) in the app's private storage; the update request sends nothing but itself | `src/game/save.cpp` |
 | Orientation | Portrait | Manifest and `SDL_HINT_ORIENTATIONS` |
@@ -43,15 +43,16 @@ What the release build is, what was checked, and the steps only the owner can ta
 ## GitHub releases (done 2026-11-20)
 
 Every push to `main` of the public repository `rockenrooster/glowtide` builds and publishes a release APK
-(`docs/RELEASE_PIPELINE.md`); the game's UPDATE button points at it. Until the owner runs `scripts\release-key.ps1`, those
-builds are signed with a key made by each run, so one does not install over another (uninstall first).
+(`docs/RELEASE_PIPELINE.md`). Since build 26 every build is signed with the owner's release key (set 2026-11-21), and from
+build 27 the game's UPDATE button downloads and installs the newer build itself. Builds 1 to 23 had keys of their own:
+a copy of one of them is uninstalled once and a newer build installed.
 
 ## The owner's own steps (not done for you)
 
-1. **A release key.** `scripts\release-key.ps1` makes it (keytool asks you for its password), gives it to the GitHub
-   workflow as secrets and starts a build; from then on every GitHub build updates the one before it. Back the
-   keystore and its password up. A local release build signs with it when `GT_KEYSTORE` and its three companions are
-   set (`android/app/build.gradle`).
+1. **The release key: done 2026-11-21** (`scripts\release-key.ps1`; certificate CN=GLOWTIDE). Back up
+   `keys\glowtide-release.keystore` and its password off this PC: without them no later build can update an installed
+   copy. A local release build signs with it when `GT_KEYSTORE` and its three companions are set
+   (`android/app/build.gradle`).
 2. **An App Bundle** for Google Play: `gradlew bundleRelease` with your key (Play wants an `.aab`, not an `.apk`), built
    without `GT_BUILD_NUMBER` so it has no updater (Play's policy: apps update through Play).
 3. **The store listing:** the name, a short and a long description, the icon at 512 px (`tools/make_icon.py` can

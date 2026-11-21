@@ -17,7 +17,9 @@ android {
         applicationId 'dev.glowtide.game'
         minSdk 29
         targetSdk 36
-        versionCode 1
+        // GitHub builds number themselves (the commit count): Android and the in-app updater know "newer" by it. Local
+        // builds stay at 1 and never ask GitHub.
+        versionCode((gtBuildNumber as int) > 0 ? (gtBuildNumber as int) : 1)
         versionName '0.2.0'  // (CMakeLists.txt's project VERSION)
         ndk {
             abiFilters 'arm64-v8a'
@@ -74,6 +76,12 @@ android {
     sourceSets {
         main {
             java.srcDirs += ['../../third_party/SDL/android-project/app/src/main/java']
+        }
+        // A GitHub release (built with a build number) adds the in-app updater's permission and receiver.
+        if ((gtBuildNumber as int) > 0) {
+            release {
+                manifest.srcFile 'src/github/AndroidManifest.xml'
+            }
         }
     }
 

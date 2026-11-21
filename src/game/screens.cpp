@@ -105,19 +105,21 @@ void Game::drawHome(float dt) {
     }
     cogGlyph(uiBatch_, cog, L);
     // The updater (docs/RELEASE_PIPELINE.md): a GitHub build asks once a launch; while the latest release is newer, a gold pill
-    // under the top row opens its page in the browser, where the APK is.
+    // under the top row downloads it in the game, checks it and opens Android's installer (the download's progress on the pill).
     if (!updateAsked_ && GT_BUILD_NUMBER > 0) {
         updateAsked_ = true;
         platform::checkForUpdate();
     }
     const int latest = updateOverride_ > 0 ? updateOverride_ : platform::latestBuild();
     if (latest > GT_BUILD_NUMBER && (GT_BUILD_NUMBER > 0 || updateOverride_ > 0)) {
-        std::snprintf(buf, sizeof buf, "UPDATE: BUILD %d", latest);
+        const float progress = platform::updateProgress();
+        if (progress >= 0) std::snprintf(buf, sizeof buf, "DOWNLOADING %d%%", int(progress * 100.0f + 0.5f));
+        else std::snprintf(buf, sizeof buf, "UPDATE: BUILD %d", latest);
         const float w = UiBatch::textWidth(buf, L.px(19)) + L.px(48);
         const Rect r{float(L.w) * 0.5f - w * 0.5f, top + L.px(60), w, L.px(48)};
-        if (ui_.button(buf, r, Ui::kPrimary, 0.8f)) {
+        if (ui_.button(buf, r, Ui::kPrimary, 0.8f) && progress < 0) {
             feedback_.uiTap();
-            if (!SDL_OpenURL(platform::kReleasesUrl)) GT_WARN("update: %s", SDL_GetError());
+            platform::startUpdate();
         }
     }
     // The hint: HOLD AND DRAG, pulsing, with a thumb sweeping an arc.

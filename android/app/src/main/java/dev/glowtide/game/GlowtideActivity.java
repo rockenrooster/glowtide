@@ -190,6 +190,35 @@ public class GlowtideActivity extends SDLActivity {
 
     static native void nativeUpdateFound(int build);
 
+    /** HOME's UPDATE button (from native code): download the latest release, check it, open Android's own installer. */
+    static void startUpdate() {
+        final Activity activity = mSingleton;
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                ApkUpdater.downloadAndInstall(activity, "rockenrooster/glowtide", "glowtide.apk", new ApkUpdater.Listener() {
+                    @Override
+                    public void onProgress(float fraction) {
+                        nativeUpdateProgress(fraction);
+                    }
+
+                    @Override
+                    public void onFailed(String reason) {
+                        Log.w(TAG, "update: not installed: " + reason);
+                        nativeUpdateProgress(-1.0f);
+                        android.widget.Toast.makeText(activity, "Update not installed: " + reason, android.widget.Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        });
+    }
+
+    /** The download's progress for the button (0..1), or -1 when nothing is downloading. */
+    static native void nativeUpdateProgress(float fraction);
+
     /** Native code asks for the mode of the current size nearest `hz` (the 60 Hz fallback); on the UI thread. */
     static void requestRefreshRate(final float hz) {
         final Activity activity = mSingleton;
