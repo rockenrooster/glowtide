@@ -654,6 +654,15 @@ here holds an older GitHub build to see it). Until the owner runs `scripts\relea
 with a key made for that run, so its UPDATE download does not install over the build that showed it (uninstall first):
 RELEASE_PIPELINE.md, Signing.
 
+**After the release** (2026-11-21, the owner's requests): the release key is set (the owner ran `scripts\release-key.ps1`
+and typed its password; build 26 is the first signed with it, certificate CN=GLOWTIDE). The in-app updater (build 27,
+Trueform's `ApkUpdater`/`ApkInstallReceiver`, RELEASE_PIPELINE.md): UPDATE downloads the newer build in the game, checks
+it and opens Android's update dialog; GitHub builds' `versionCode` is the build number and only they carry
+`REQUEST_INSTALL_PACKAGES` (a local release built with build number 999 showed both, the receiver not exported). Build 27
+was installed from its verified download (SHA-256 equal to the release's) on every device on Wi-Fi adb: the 12R, the
+three Tab A11+ (`R5GL362AKGK`, `R5GL362AGPA`, `R5GL362BEHX`) and the Fire 7 (`GN41WE044297000Q`), after removing their
+debug copies (the owner's word); the Moto was off the network.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
