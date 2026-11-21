@@ -3,6 +3,10 @@
 #   scripts\release-check-android.ps1 -Serial moto
 param([Parameter(Mandatory)][string]$Serial)
 . "$PSScriptRoot\env.ps1"
+# The release build has no id suffix (android/app/build.gradle gives GT_APP_ID_SUFFIX to dev builds only): the checks
+# drive that package. Installing it replaces only a build with the same key (a local one); a GitHub copy refuses it.
+$GT_APP_ID = 'dev.glowtide.game'
+$GT_ACTIVITY = "$GT_APP_ID/dev.glowtide.game.GlowtideActivity"
 
 $Serial = Resolve-GtSerial $Serial
 Assert-GtDevice $Serial

@@ -81,7 +81,7 @@ private:
     std::atomic<float> intensity_{0};
     std::atomic<bool> tone_{false};
     bool effectsOn_ = true, musicOn_ = true;
-    float musicGain_ = 0.62f;  // the music renders sit 10-11 dB under the flood render (V5: the flood grew 0.9 dB since P4)
+    float musicGain_ = 0.73f;  // the music renders sit 10-11 dB under the flood render (V5: the flood grew 2.1 dB since P4)
     float duck_ = 1, duckTarget_ = 1, duckHold_ = 0;
     double padPos_ = 0;
     double musicClock_ = 0;  // seconds

@@ -30,7 +30,6 @@
     X(brutePowerPerLevel, 0.5f)                                                                                      \
     X(brutePowerMax, 60.0f)                                                                                          \
     X(bruteEvery, 8.0f)                                                                                              \
-    X(bruteFromLevel, 8.0f)                                                                                          \
     X(dragGain, 1.15f)                                                                                               \
     X(dragSmoothing, 0.040f)    /* s */                                                                              \
     X(emitterDelay, 1.5f)                                                                                            \

@@ -8,11 +8,11 @@ What the release build is, what was checked, and the steps only the owner can ta
 
 | Item | Value | Checked how |
 |---|---|---|
-| Package | `dev.glowtide.game`, version 0.1.0 (code 1) | `aapt2 dump badging` |
+| Package | `dev.glowtide.game`, version 0.2.0 (code 1; GitHub builds number themselves `build-<n>`) | `aapt2 dump badging` |
 | Android | minSdk 29 (Android 10), targetSdk 36 | `android/app/build.gradle` |
 | ABI | arm64-v8a only | `aapt2 dump badging` (`native-code`) |
-| Native code | CMake `Release`, stripped; `libmain.so` 1.06 MB, `libSDL3.so` 1.78 MB | `unzip -l` |
-| Size | 3.31 MB (limit 15 MB) | file size |
+| Native code | CMake `Release`, stripped; `libmain.so` 1.37 MB (the 600-level table, the recipes and the ten worlds' music in it), `libSDL3.so` 1.78 MB | `unzip -l` |
+| Size | 3.60 MB (limit 15 MB; 0.1.0 was 3.31 MB) | file size |
 | 16 KB pages | Shared libraries stored uncompressed and 16 KB aligned in the APK; every `LOAD` segment aligned to 0x4000 | `zipalign -c -P 16 -v 4` (build-tools 36), `llvm-readelf -l` |
 | Debuggable | No | `aapt2 dump badging` (no `application-debuggable`) |
 | App arguments | Ignored: `getArguments()` returns nothing unless the build is debuggable | `GlowtideActivity.java`; launch with `--es args` on the Moto (see PROGRESS.md) |
@@ -31,7 +31,12 @@ What the release build is, what was checked, and the steps only the owner can ta
   EFFECTS: at most two swings of 10% in any second). REDUCE EFFECTS removes camera shake, slow motion and the edge
   flashes and halves the bloom.
 - **Accessibility:** AUTO-FIRE for players who cannot hold; gates carry symbols (× and ÷), not only colours; the two
-  crowds differ by shape (teardrops against horned blobs), checked on a greyscale sheet.
+  crowds differ by shape (teardrops against horned blobs), and a geode is the only round faceted thing with a number,
+  checked on greyscale sheets.
+- **What the listing can say (0.2):** 600 levels, no two alike within forty of each other, then mirrored replays; ten
+  worlds with their own colours, sky, props and music; six kinds of level (sieges, holdouts, colossi, twin spires,
+  festivals, bosses), geodes holding seven boons, eight twists, twelve set pieces. Still no ads, purchases, accounts
+  or data collected.
 - **Credits** (in SETTINGS): Roboto (Apache 2.0), SDL 3 (zlib). Everything else, the sound and the music included,
   is made in code. See `docs/LICENSES.md`.
 

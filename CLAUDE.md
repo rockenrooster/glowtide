@@ -3,8 +3,9 @@
 Read `docs/PLAN.md` first, then `docs/PROGRESS.md` (phase status, measured numbers, deviations, choices made for the
 owner). `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` by the sections a phase names; `docs/subplans/P*.md` per phase.
 
-**The variety and content pass, under way (2026-11-20)**: geodes and boons, six kinds of level, twists and bosses, a
-recipe catalogue, a calendar, 600 levels under a no-repeat rule. Read `docs/VARIETY_PLAN.md` first; it names the
+**The variety and content pass, built (V0-V6, 2026-11-21; version 0.2.0, its release waits for the owner's word)**:
+geodes and boons, six kinds of level, twists and bosses, a recipe catalogue, a calendar, 600 levels under a no-repeat
+rule, ten worlds with their own music. Read `docs/VARIETY_PLAN.md` first; it names the
 sections of `docs/VARIETY_DESIGN.md` and `docs/VARIETY_TECH.md` and the work orders `docs/subplans/V0_*.md` to
 `V6_*.md`; `docs/PROGRESS.md` says which phases are done and every choice made for the owner.
 
@@ -53,7 +54,8 @@ Desktop exit codes: 0 ok, 1 start-up failed, 2 bad arguments, 3 GL errors or deb
 App arguments: TECH_SPEC 2.5 (`--scenario`, `--level`, `--bot`, `--picture`, `--screenshot`, `--frames`, `--strip`,
 `--strip-step`, `--seconds`, `--warmup`, `--res`, `--dp-scale`, `--safe`, `--set name=value`, `--silent`, `--no-audio`,
 `--offscreen`, `--tone`, `--fps`, `--world N` (another world's colours, sky, props and music), `--palette-alt 1|2` (a
-world's palette candidates not picked), ...). On Android they come from the `args` intent extra (debuggable builds only):
+world's palette candidates not picked), `--alternate` (`bench_play` plays `--level N` and N + 1 in turn: a world change
+when N ends a world), ...). On Android they come from the `args` intent extra (debuggable builds only):
 `adb -s <serial> shell "am start -n dev.glowtide.game/.GlowtideActivity --es args '--scenario bench_idle --seconds 30'"`.
 
 Log tags: `GLOWTIDE`, `GTBENCH` (one JSON line per benchmark; the full JSON is `bench_<scenario>.json` in the app's
