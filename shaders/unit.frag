@@ -29,15 +29,51 @@ void main() {
     vec2 p = vLocal;
     bool gloom = (vFlags & 1) != 0;
     highp float t = uTime.w;
-    float d;
-    vec3 col;
     float aa = 1.0 / vPx;  // one pixel in radius units
+    // The shape first: a fragment outside it (half the quad) is discarded before any shading, unless it is on a runner's
+    // streak or a comet's tail, which lie outside the body and need no body shading.
+    float d;
     if (!gloom) {
         // The tip leans and wobbles; the body is a circle joined smoothly to it.
         float lean = (vSeed - 0.5) * 0.7 + 0.18 * sin(t * 6.0 + vSeed * 30.0);
         vec2 q = vec2(p.x - lean * clamp(p.y, 0.0, 2.0) / 1.85, p.y);
         d = sdUnevenCapsule(q, 1.0, 0.12, 1.75);
-        float inner = -d;
+    } else {
+        // Body, slightly flattened; two horn bumps smoothly joined.
+        float body = length(p * vec2(1.0, 1.06)) - 1.0;
+        float h1 = sdUnevenCapsule((p - vec2(-0.52, 0.55)) * mat2(0.94, 0.34, -0.34, 0.94), 0.3, 0.1, 0.8);
+        float h2 = sdUnevenCapsule((p - vec2(0.52, 0.55)) * mat2(0.94, -0.34, 0.34, 0.94), 0.3, 0.1, 0.8);
+        d = smin(body, min(h1, h2), 0.14);
+        if ((vFlags & 64) != 0) {  // the colossus's crown: three more horn bumps between the two
+            float c1 = sdUnevenCapsule(p - vec2(0.0, 0.8), 0.22, 0.07, 0.6);
+            float c2 = sdUnevenCapsule((p - vec2(-0.26, 0.74)) * mat2(0.97, 0.24, -0.24, 0.97), 0.17, 0.06, 0.45);
+            float c3 = sdUnevenCapsule((p - vec2(0.26, 0.74)) * mat2(0.97, -0.24, 0.24, 0.97), 0.17, 0.06, 0.45);
+            d = smin(d, min(c1, min(c2, c3)), 0.1);
+        }
+    }
+    float fw = clamp(aa * 1.2, 0.02, 0.35);
+    float alpha = clamp(0.5 - d / fw, 0.0, 1.0);
+    // A runner leaves a streak of three fading lines up the lane behind it; a comet a tail down toward the lantern.
+    float extra = 0.0;
+    vec3 extraCol = vec3(1.0, 0.95, 0.8);
+    if (gloom && (vFlags & 16) != 0 && p.y > 0.7) {
+        float lines = 1.0 - smoothstep(0.07, 0.07 + aa * 2.0, abs(fract(p.x * 1.6 + 0.5) - 0.5) / 1.6);
+        extra = lines * (1.0 - smoothstep(0.9, 2.5, p.y)) * step(abs(p.x), 0.8) * 0.75;
+        extraCol = uGloom[1].rgb;
+    } else if (!gloom && (vFlags & 8) != 0 && p.y < -0.6) {
+        float u = clamp((-0.6 - p.y) / 3.3, 0.0, 1.0);
+        float halfW = 0.75 * (1.0 - u);
+        extra = (1.0 - smoothstep(halfW * 0.4, halfW + aa, abs(p.x))) * (1.0 - u) * 0.9;
+    }
+    if (alpha <= 0.0) {
+        if (extra <= 0.0) discard;
+        float a = extra * vFade;  // the trail alone
+        oColor = vec4(grade(extraCol) * a, a);
+        return;
+    }
+    float inner = -d;
+    vec3 col;
+    if (!gloom) {
         vec3 body = uWisp[0].rgb;
         vec3 rim = uWisp[2].rgb;
         col = mix(rim, body, smoothstep(0.0, 0.16, inner));
@@ -55,18 +91,6 @@ void main() {
             }
         }
     } else {
-        // Body, slightly flattened; two horn bumps smoothly joined.
-        float body = length(p * vec2(1.0, 1.06)) - 1.0;
-        float h1 = sdUnevenCapsule((p - vec2(-0.52, 0.55)) * mat2(0.94, 0.34, -0.34, 0.94), 0.3, 0.1, 0.8);
-        float h2 = sdUnevenCapsule((p - vec2(0.52, 0.55)) * mat2(0.94, -0.34, 0.34, 0.94), 0.3, 0.1, 0.8);
-        d = smin(body, min(h1, h2), 0.14);
-        if ((vFlags & 64) != 0) {  // the colossus's crown: three more horn bumps between the two
-            float c1 = sdUnevenCapsule(p - vec2(0.0, 0.8), 0.22, 0.07, 0.6);
-            float c2 = sdUnevenCapsule((p - vec2(-0.26, 0.74)) * mat2(0.97, 0.24, -0.24, 0.97), 0.17, 0.06, 0.45);
-            float c3 = sdUnevenCapsule((p - vec2(0.26, 0.74)) * mat2(0.97, -0.24, 0.24, 0.97), 0.17, 0.06, 0.45);
-            d = smin(d, min(c1, min(c2, c3)), 0.1);
-        }
-        float inner = -d;
         col = mix(uGloom[2].rgb, uGloom[0].rgb, smoothstep(0.0, 0.16, inner));
         float hl = length((p - vec2(-0.12, 0.42)) / vec2(0.56, 0.34));
         col = mix(col, uGloom[1].rgb, (1.0 - smoothstep(0.6, 1.0, hl)) * 0.8);
@@ -81,20 +105,10 @@ void main() {
         }
         if ((vFlags & 2) != 0) col *= 1.08;  // brutes are a touch brighter
     }
-    float fw = clamp(aa * 1.2, 0.02, 0.35);
-    float alpha = clamp(0.5 - d / fw, 0.0, 1.0);
-    // A runner leaves a streak of three fading lines up the lane behind it; a comet a tail down toward the lantern.
-    float extra = 0.0;
-    vec3 extraCol = col;
-    if (gloom && (vFlags & 16) != 0 && p.y > 0.7) {
-        float lines = 1.0 - smoothstep(0.07, 0.07 + aa * 2.0, abs(fract(p.x * 1.6 + 0.5) - 0.5) / 1.6);
-        extra = lines * (1.0 - smoothstep(0.9, 2.5, p.y)) * step(abs(p.x), 0.8) * 0.75;
-        extraCol = uGloom[1].rgb;
-    } else if (!gloom && (vFlags & 8) != 0 && p.y < -0.6) {
-        float u = clamp((-0.6 - p.y) / 3.3, 0.0, 1.0);
-        float halfW = 0.75 * (1.0 - u);
-        extra = (1.0 - smoothstep(halfW * 0.4, halfW + aa, abs(p.x))) * (1.0 - u) * 0.9;
-        extraCol = vec3(1.0, 0.95, 0.8);
+    if (extra <= 0.0) {  // the shape alone (almost every fragment)
+        float a = alpha * vFade;
+        oColor = vec4(grade(col) * a, a);
+        return;
     }
     vec3 outc = col * alpha + extraCol * extra * (1.0 - alpha);
     float outa = (alpha + extra * (1.0 - alpha)) * vFade;

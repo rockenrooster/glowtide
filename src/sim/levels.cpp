@@ -13,7 +13,8 @@ struct BakedLevel {
     u64 seed;
     i32 spire;
     float baseFlow;
-    float ref;  // R: geode health is a share of it
+    float ref;         // R: geode health is a share of it
+    i32 recipe = -1;   // the recipe the bake chose (-1: the calendar's draw from the seed)
 };
 #include "sim/levels_baked.h"
 
@@ -33,6 +34,12 @@ float estimateP0(const LevelDef& L) {
 }  // namespace
 
 int bakedGeneratorVersion() { return kBakedGeneratorVersion; }
+bool bakedRow(int index, u64& seed, i32& spire, float& baseFlow, float& ref, int& recipe) {
+    if (index < 1 || index > kBakedCount) return false;
+    const BakedLevel& b = kBaked[index - 1];
+    seed = b.seed, spire = b.spire, baseFlow = b.baseFlow, ref = b.ref, recipe = b.recipe;
+    return true;
+}
 int bakedRulesVersion() { return kBakedRulesVersion; }
 
 i32 twoSignificant(float v) {
@@ -123,16 +130,19 @@ void setGoals(LevelDef& L) {
         if (L.barriers[b].dormant) L.barriers[b].health = maxv<i32>(10, twoSignificant(tune.wardWallShare * float(L.spireHealth)));
 }
 
-LevelDef layoutFor(int index, u64 seed) {
-    LevelDef L = isHandMade(index) ? introLevel(index) : generate(index, seed);
+LevelDef layoutFor(int index, u64 seed, int recipe) {
+    LevelDef L = isHandMade(index) ? introLevel(index) : recipe >= 0 ? generateWith(index, seed, recipe) : generate(index, seed);
     sizeGeodes(L);
     return L;
 }
 
 LevelDef levelFor(int playIndex) {
     const int index = levelForPlay(maxv(1, playIndex));
-    const bool baked = index >= 1 && index <= kBakedCount && kBaked[index - 1].spire > 0;
-    LevelDef L = layoutFor(index, baked ? kBaked[index - 1].seed : defaultSeed(index));
+    // A row's layout is the level's even when the bake left it without numbers (spire 0: no strength of the enemy let
+    // greedy win); its numbers are then the first guess below, as before the bake.
+    const bool row = index >= 1 && index <= kBakedCount;
+    const bool baked = row && kBaked[index - 1].spire > 0;
+    LevelDef L = layoutFor(index, row ? kBaked[index - 1].seed : defaultSeed(index), row ? kBaked[index - 1].recipe : -1);
     if (isReplay(playIndex)) {  // VARIETY_DESIGN 16: mirrored, in another world; the rules are symmetric, so the numbers hold
         mirrorLayout(L);
         L.world = (L.world - 1 + kReplayWorldShift) % kWorldCount + 1;

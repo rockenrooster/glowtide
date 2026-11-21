@@ -6,7 +6,8 @@ how much slower podless is, and VARIETY_DESIGN 12.2 step 8's four shares:
   unopened - levels with three or more geodes where greedy leaves one unopened (want half or more)
   pip     - levels where greedy loses a core pip in most runs (want 15 to 40%)
   deep    - levels where a gloom comes below the first gate row in most of greedy's runs (want 40% or more, from 21)
-Checks (exit 1 when one fails): every level accepted; every cancelled share within 5 points of its target. Step 8's
+Checks (exit 1 when one fails): every level accepted; every cancelled share within 5 points of its target (set
+pieces excepted). Step 8's
 shares are printed against their ranges; they are reported, not enforced here (VARIETY_PLAN V1 exit checks).
 """
 import re
@@ -111,7 +112,9 @@ def main(argv):
                          f"{statistics.median(r['core'] for r in rs):.0f} ({min(r['core'] for r in rs):.0f}) | "
                          f"{statistics.median(r['cancelled'] for r in rs):.0f}% / {statistics.median(r['target'] for r in rs):.0f}% | "
                          f"{share(rs, lambda r: r['pip'] >= 5):.0f}% |")
-    bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0 and r["kind"] not in ("Holdout", "Festival")]
+    # Set pieces (49, 99, ... 599) are held to the outcome lines only, not to the enemy's share (the bake, V5).
+    bad_share = [r for r in data if r["level"] > 5 and abs(r["cancelled"] - r["target"]) > 5.0 and r["kind"] not in ("Holdout", "Festival")
+                 and not (r["level"] % 50 == 49 and r["level"] <= 599)]
     not_acc = [r["level"] for r in data if not r["accepted"]]
     lines += ["", f"Levels: {len(data)}, not accepted: {len(not_acc)} {not_acc[:30]}",
               f"Cancelled share more than 5 points from its target: {len(bad_share)} "

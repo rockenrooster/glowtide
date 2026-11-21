@@ -94,7 +94,7 @@ std::vector<float> renderFlood(int timbre, float seconds, int level) {
 
 }  // namespace
 
-int renderAudio(const char* scene, const char* out, float seconds, int level) {
+int renderAudio(const char* scene, const char* out, float seconds, int level, int world, bool boss) {
     if (!out) {
         std::fprintf(stderr, "--render-audio needs --out x.wav\n");
         return 2;
@@ -174,9 +174,11 @@ int renderAudio(const char* scene, const char* out, float seconds, int level) {
         const int left = int(total * float(kRate)) - int(pcm.size() / 2);
         if (left > 0) mixInto(m, pcm, left);
     } else if (!std::strcmp(scene, "music")) {
-        // The bed alone at a mid tide (no effects), long enough to repeat the four-bar loop several times.
+        // The bed alone at a mid tide (no effects), long enough to repeat the four-bar loop several times; --world N plays
+        // that world's music (VARIETY_DESIGN 15), --boss with the pulse on every beat.
         audio::Mixer m;
-        m.init(kRate, 0);
+        m.init(kRate, 0, world);
+        m.setWorld(world, boss);
         m.setEnabled(false, true);
         m.setIntensity(0.5f);
         const int frames = int((seconds > 0 ? seconds : 60.0f) * float(kRate));

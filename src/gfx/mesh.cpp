@@ -146,8 +146,10 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
         }
     }
 
-    // Floating islets off both sides, with tiny lights.
+    // Floating props off both sides, with tiny lights: a family a world (VARIETY_DESIGN 15): islets, arches, lantern
+    // clusters. The same eight draws place each family's pieces.
     Rng r(def.seed ^ 0xA11E7ull, 3);
+    const int family = propFamily(def.world);
     for (int i = 0; i < 8; ++i) {
         const float side = (i & 1) ? 1.0f : -1.0f;
         const float x = side * r.range(7.5f, 13.0f);
@@ -156,6 +158,27 @@ void buildLevelMesh(LevelMeshData& out, const sim::LevelDef& def, const WorldPal
         const float size = r.range(0.9f, 2.0f);
         const Ramp islet{lerp(wp.propBody, wp.backdrop[1], 0.45f), lerp(wp.propLight, wp.backdrop[0], 0.4f),
                          lerp(wp.propDark, wp.backdrop[2], 0.3f)};
+        if (family == 1) {
+            // An arch: two pillars standing in the void and a lintel across them, a light under its middle.
+            const float h = size * 1.8f, w = size * 0.8f, t = 0.14f * size;
+            g_center = V3(x, y - h * 0.5f, z);
+            mb.prism(V3(x - w, y - h, z), t, t, h, 6, islet, false);
+            mb.prism(V3(x + w, y - h, z), t, t, h, 6, islet, false);
+            mb.box(V3(x - w - 0.25f * size, y, z - 0.2f * size), V3(x + w + 0.25f * size, y + 0.3f * size, z + 0.2f * size), islet, true);
+            mb.octa(V3(x, y - 0.25f * size, z), 0.1f, hexColor(0xFFD7A0), true);
+            continue;
+        }
+        if (family == 2) {
+            // A lantern cluster: three to five lights hanging at different heights from threads.
+            const int n = 3 + (i % 3);
+            for (int k = 0; k < n; ++k) {
+                const float lx = x + (float(k) - 0.5f * float(n - 1)) * 0.45f * size, ly = y + 1.2f - 0.5f * float((k * 7) % 3) * size;
+                g_center = V3(lx, ly, z);
+                mb.prism(V3(lx, ly, z), 0.012f, 0.012f, 2.5f, 3, islet, false);
+                mb.octa(V3(lx, ly - 0.1f, z), 0.16f + 0.05f * size, k % 2 ? hexColor(0xFFD7A0) : lerp(wp.rail, hexColor(0xFFFFFF), 0.4f), true);
+            }
+            continue;
+        }
         g_center = V3(x, y - size, z);
         const int n = 7;
         for (int k = 0; k < n; ++k) {  // inverted cone with a flat top

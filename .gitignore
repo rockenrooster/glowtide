@@ -16,3 +16,5 @@ __pycache__/
 *.p12
 *.pfx
 /out/
+# Desktop benchmark output (the app writes bench_<scenario>.json in its working directory)
+/bench_*.json

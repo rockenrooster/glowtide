@@ -4,6 +4,15 @@ What the game is. Every number here is a starting value and a tweakable (TECH_SP
 play and the bot tables override them. Changes are logged in `PROGRESS.md`. Section numbers are referred
 to from `PLAN.md`, `TECH_SPEC.md` and the subplans: keep them stable.
 
+**Version 0.2's variety pass (`VARIETY_DESIGN.md`, "VD") replaces parts of this document; where the two
+differ, VD is right.** 5.9's brutes and bursts: VD 5 (eight plans; the bursts are the SURGE twist). 7.3
+the generator and 7.5 worlds and bosses: VD 6 (six kinds), 8 (four bosses), 9 (recipes), 10 (the
+calendar, set pieces) and 15 (ten worlds of ten levels, each with its own palette, sky, props, music and
+signature). 7.4 and 8, the bake and the bots: VD 11 (no repeats) and 12 (more bots, more lines, 600
+levels). 9.2's palettes: VD 15 (ten). 9.3's elements, 10's juice, 12's sound and 13's haptics: VD 4
+and 13 add to them. 11's HUD: VD 14 (the boon tray, level names, hint lines). New in VD: geodes and
+boons (2, 3), twists (7), after level 600 (16). `PROGRESS.md` records how each was built.
+
 ---
 
 ## 1. The feel target

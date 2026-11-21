@@ -202,6 +202,11 @@ int varietyReportOn(const std::vector<Fingerprint>& all, int from, int to, bool 
         float like, limit, map;
     };
     std::vector<Pair> over;
+    struct Hit {
+        int a, b;
+        const char* what;
+    };
+    std::vector<Hit> hits;  // pairs breaking a recipe or boon line
     long recipeHits = 0, recipeKindHits = 0, boonHits = 0;
     for (int i = 0; i < n; ++i)
         for (int j = i + 1; j < n; ++j) {
@@ -214,9 +219,11 @@ int varietyReportOn(const std::vector<Fingerprint>& all, int from, int to, bool 
             if (like > c.worst) c.worst = like, c.wa = from + i, c.wb = from + j;
             if (d <= 40) c.values.push_back(like);
             if (d <= 40) over.push_back({from + i, from + j, like, limit, mapLikeness(a, b)});
-            if (sameRecipeTooSoon(a, b, d)) ++recipeHits;
-            if (sameRecipeKindTooSoon(a, b, d)) ++recipeKindHits;
-            if (sameBoonListTooSoon(a, b, d)) ++boonHits;
+            const bool hr = sameRecipeTooSoon(a, b, d), hk = sameRecipeKindTooSoon(a, b, d), hb = sameBoonListTooSoon(a, b, d);
+            recipeHits += hr;
+            recipeKindHits += hk;
+            boonHits += hb;
+            if (hr || hk || hb) hits.push_back({from + i, from + j, hr ? "the same recipe" : hk ? "the same recipe and kind" : "the same boon list"});
         }
     std::printf("# Variety report, levels %d to %d\n\n", from, to);
     std::printf("| Levels apart | Pairs | Limit | Above it | Share | Likeness p10 / p50 / p90 | Most alike pair |\n|---|---|---|---|---|---|---|\n");
@@ -236,6 +243,7 @@ int varietyReportOn(const std::vector<Fingerprint>& all, int from, int to, bool 
     std::printf("\nCounts: a recipe twice within %d levels: %ld; a (recipe, kind) pair twice within %d: %ld; a boon list twice within %d: "
                 "%ld.\n",
                 kRecipeWindow + 1, recipeHits, kRecipeKindWindow + 1, recipeKindHits, kBoonListWindow + 1, boonHits);
+    for (const Hit& h : hits) std::printf("Rule broken by levels %d and %d: %s.\n", h.a, h.b, h.what);
 
     // The longest runs of one kind, one recipe, and both.
     auto longest = [&](auto same, int& at) {
@@ -394,44 +402,68 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
     std::vector<int> next(out.size(), 0);  // where a level's search goes on when the pass steps back to it
     char lintWhy[96];
     int stepsBack = 0;
-    // How often a recipe has been used in a level's hundred so far: of the first few seeds that keep the rule, the pass
-    // takes the one whose recipe its hundred has used least, so every recipe shows two to twelve times a hundred (the
-    // variety contract) and the ones made for one kind come round on it.
-    // First by its uses on the level's kind in the last thirty levels (the (recipe, kind) window, so a later level is not
-    // left without a recipe it may take), then by its uses in the hundred.
-    auto usedInHundred = [&](int l, int recipe, int kind) {
-        int window = 0, hundred = 0;
-        for (int j = maxv(1, l - 30); j < l; ++j) window += fixed[size_t(j)] && fps[size_t(j)].recipe == recipe && fps[size_t(j)].kind == kind ? 1 : 0;
-        for (int j = ((l - 1) / 100) * 100 + 1; j < l; ++j) hundred += fixed[size_t(j)] && fps[size_t(j)].recipe == recipe ? 1 : 0;
-        return window * 1000 + hundred;
+    // A level's candidates, in the pass's order of preference: for a level whose recipe is forced (by hand, an
+    // introduction, a set piece) its seeds; otherwise its recipes, the one used least on the level's kind in the last thirty
+    // levels first (the (recipe, kind) window, so a later level is not left without a recipe it may take), then the one its
+    // hundred has used least (two to twelve a hundred: the contract), then the calendar's weight, kSeedsPerRecipe seeds of
+    // each. Pass 1 takes the first that passes the lints, keeps the rule and passes `viable`.
+    constexpr int kSeedsPerRecipe = 8;
+    auto order = [&](int l, int* recipes) {
+        const int kind = kindFor(l);
+        int n = 0;
+        float key[64];
+        for (int rc = 0; rc < recipeCount() && n < 64; ++rc) {
+            const float w = recipeWeight(l, kind, rc);
+            if (w <= 0) continue;
+            int window = 0, hundred = 0;
+            for (int j = maxv(1, l - 30); j < l; ++j) window += fixed[size_t(j)] && fps[size_t(j)].recipe == rc && fps[size_t(j)].kind == kind ? 1 : 0;
+            for (int j = ((l - 1) / 100) * 100 + 1; j < l; ++j) hundred += fixed[size_t(j)] && fps[size_t(j)].recipe == rc ? 1 : 0;
+            recipes[n] = rc;
+            key[n] = float(window * 1000 + hundred * 10) - w + float(hash64(u64(l) * 131u + u64(rc)) % 997u) * 1e-4f;
+            ++n;
+        }
+        for (int a = 1; a < n; ++a)  // a few dozen: insertion sort
+            for (int b = a; b > 0 && key[b] < key[b - 1]; --b) {
+                std::swap(key[b], key[b - 1]);
+                std::swap(recipes[b], recipes[b - 1]);
+            }
+        return n;
     };
     for (int l = from; l <= to;) {
         const size_t i = size_t(l - from);
         LayoutChoice& c = out[i];
-        const int seeds = isHandMade(l) ? 1 : maxSeeds;
+        const bool forced = forcedRecipe(l);
+        int recipes[64], nr = 0;
+        if (!forced) nr = order(l, recipes);
+        const int seeds = isHandMade(l) ? 1 : forced ? maxSeeds : nr * kSeedsPerRecipe;
+        auto candidate = [&](int k, int& recipe, int& t) {
+            recipe = forced ? -1 : recipes[k / kSeedsPerRecipe];
+            t = forced ? k : k % kSeedsPerRecipe;
+        };
         struct Cand {
-            int t, use;
+            int recipe, t;
             Fingerprint f;
         };
         bool found = false, settled = false;
         while (!settled) {
-            // Up to six seeds that pass the lints and keep the rule, the hundred's least used recipe first.
+            // Up to six candidates that pass the lints and keep the rule, in order.
             Cand cands[6];
             int nc = 0;
-            for (int t = next[i]; t < seeds && nc < 6; ++t) {
-                const LevelDef def = layoutFor(l, seedFor(l, t));
+            for (int k = next[i]; k < seeds && nc < 6; ++k) {
+                int recipe, t;
+                candidate(k, recipe, t);
+                const LevelDef def = layoutFor(l, seedFor(l, t), recipe);
                 ++c.looked;
-                next[i] = t + 1;
+                next[i] = k + 1;
                 if (!isHandMade(l) && !lintLevel(def, l, lintWhy, sizeof lintWhy)) {
                     ++c.lintFails;
                     continue;
                 }
                 const Fingerprint f = fingerprintOf(def);
                 if (!ruleHolds(fps, fixed, l, f, nullptr, nullptr, 1)) continue;
-                cands[nc++] = {t, usedInHundred(l, f.recipe, f.kind), f};
+                cands[nc++] = {recipe, t, f};
             }
             if (nc == 0) break;
-            std::stable_sort(cands, cands + nc, [](const Cand& x, const Cand& y) { return x.use < y.use; });
             int pick = 0;
             if (viable && !isHandMade(l)) {
                 // The viability test on `jobs` candidates at a time, in their order; none passing, the first of the first six.
@@ -441,7 +473,7 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
                     bool ok[6] = {};
                     std::vector<std::thread> pool;
                     for (int k = k0; k < k1; ++k)
-                        pool.emplace_back([&, k] { ok[k] = viable(layoutFor(l, seedFor(l, cands[k].t))); });
+                        pool.emplace_back([&, k] { ok[k] = viable(layoutFor(l, seedFor(l, cands[k].t), cands[k].recipe)); });
                     for (std::thread& th : pool) th.join();
                     for (int k = k0; k < k1 && pick < 0; ++k)
                         if (ok[k]) pick = k;
@@ -451,17 +483,17 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
                     if (!found) {  // keep the first batch's best as the fallback, and look further
                         fps[size_t(l)] = cands[0].f;
                         c.tries = cands[0].t;
+                        c.recipe = cands[0].recipe;
                         found = true;
                     }
-                    if (next[i] < minv(seeds, 4 * 64)) continue;
-                    // None passed: the fallback, and a later step back to this level goes on from just after it.
-                    next[i] = c.tries + 1;
+                    if (next[i] < seeds) continue;
                     settled = true;
                     break;
                 }
             }
             fps[size_t(l)] = cands[pick].f;
             c.tries = cands[pick].t;
+            c.recipe = cands[pick].recipe;
             found = settled = true;
         }
         if (found) {
@@ -475,7 +507,7 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
         // say). Step back to the generated level before (up to eight levels back), take its next seed, and come forward again.
         int back = l - 1;
         while (back >= from && isHandMade(back)) --back;
-        if (back >= from && l - back <= 8 && stepsBack < 4000 && next[size_t(back - from)] < maxSeeds) {
+        if (back >= from && l - back <= 8 && stepsBack < 4000) {
             ++stepsBack;
             for (int k = back; k <= l; ++k) {
                 fixed[size_t(k)] = false;
@@ -484,11 +516,13 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
             l = back;
             continue;
         }
-        // Still none: the seed that breaks the fewest pairs, said in the report.
+        // Still none: the candidate that breaks the fewest pairs, said in the report.
         int bestBroken = 1 << 30;
-        Fingerprint bestFp = fingerprintOf(layoutFor(l, seedFor(l, 0)));
-        for (int t = 0; t < seeds; ++t) {
-            const LevelDef def = layoutFor(l, seedFor(l, t));
+        Fingerprint bestFp = fingerprintOf(layoutFor(l, seedFor(l, 0), forced ? -1 : recipes[0]));
+        for (int k = 0; k < seeds; ++k) {
+            int recipe, t;
+            candidate(k, recipe, t);
+            const LevelDef def = layoutFor(l, seedFor(l, t), recipe);
             if (!isHandMade(l) && !lintLevel(def, l, lintWhy, sizeof lintWhy)) continue;
             const Fingerprint f = fingerprintOf(def);
             int broken = 0;
@@ -498,6 +532,7 @@ std::vector<LayoutChoice> chooseLayouts(int from, int to, int keepTo, std::vecto
                 bestBroken = broken;
                 bestFp = f;
                 c.tries = t;
+                c.recipe = recipe;
                 c.broken = broken;
                 std::snprintf(c.why, sizeof c.why, "%s", w ? w : "");
             }

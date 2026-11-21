@@ -63,9 +63,10 @@ void View::resize(const ViewEnv& env) {
     cam.fit(def.len, env.w, env.h, env.safe, env.dp);
 }
 
-void View::setLevel(const sim::LevelDef& d, int worldOverride) {
+void View::setLevel(const sim::LevelDef& d, int worldOverride, int paletteAlt) {
     def = d;
-    wp = &worldPalette(worldOverride > 0 ? worldOverride : d.world);
+    skyWorld = worldOverride > 0 ? worldOverride : d.world;
+    wp = &worldPaletteAlt(skyWorld, paletteAlt);
     gp = &gamePalette();
     cam.fit(def.len, env_.w, env_.h, env_.safe, env_.dp);
     followX_ = followV_ = 0;
@@ -549,7 +550,7 @@ void View::buildUnits(const sim::World& w) {
     }
 }
 
-void View::label(const char* text, V3 at, float emMetres, V3 strokeColor, float punch, UiBatch& b, float alpha) {
+void View::label(const char* text, V3 at, float emMetres, V3 strokeColor, float punch, UiBatch& b, float alpha, Align align) {
     float sx, sy;
     if (cam.project(at, sx, sy) <= cam.nearZ) return;
     const float ppm = cam.pixelsPerMetre(at);
@@ -560,7 +561,7 @@ void View::label(const char* text, V3 at, float emMetres, V3 strokeColor, float 
     minLabelStrokePx = minv(minLabelStrokePx, stroke);
     const Rgba fill{255, 255, 255, u8(255 * alpha)};
     const Rgba st{u8(strokeColor.x * 255), u8(strokeColor.y * 255), u8(strokeColor.z * 255), u8(255 * alpha)};
-    b.text(text, sx, sy, em, fill, st, stroke, Align::Center, true);
+    b.text(text, sx, sy, em, fill, st, stroke, align, true);
 }
 
 void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
@@ -584,6 +585,7 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
     fu.lane = V4(sim::kHW, def.len, 1.0f / (2.0f * sim::kHW + 2.0f), 1.0f / (def.len + 6.0f));
     fu.fog = V4(wp->backdrop[2], 0.55f);
     for (int i = 0; i < 4; ++i) fu.backdrop[i] = V4(wp->backdrop[i], 1);
+    fu.backdrop[0].w = float(skyFeature(skyWorld));  // the world's sky feature (backdrop.frag)
     fu.laneFar = V4(wp->laneFar, 1);
     fu.laneNear = V4(wp->laneNear, 1);
     fu.rail = V4(wp->rail, 1);
@@ -787,7 +789,13 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
             if (w.barrierHealth[b] <= 0) continue;
             const sim::Barrier& B = def.barriers[b];
             std::snprintf(buf, sizeof buf, "%d", int(w.barrierHealth[b]));
-            label(buf, V3((B.x0 + B.x1) * 0.5f + w.barrierShift[b], 0.85f, B.z - 0.3f), 1.1f, gp->spireDark, barrierPunch_[b], labels);
+            // Spans of one wall (The tollgate's five, a toll road's three) take turns high and low, so narrow neighbours'
+            // numbers do not run together.
+            int rank = 0;
+            for (int o = 0; o < def.barrierCount; ++o)
+                rank += o != b && std::fabs(def.barriers[o].z - B.z) < 0.5f && def.barriers[o].x0 < B.x0 ? 1 : 0;
+            label(buf, V3((B.x0 + B.x1) * 0.5f + w.barrierShift[b], rank % 2 ? 1.9f : 0.85f, B.z - 0.3f), 1.1f, gp->spireDark,
+                  barrierPunch_[b], labels);
         }
         for (int i = 0; i < w.g.n; ++i) {
             if (!(w.g.flags[i] & sim::kBrute)) continue;
@@ -813,7 +821,9 @@ void View::build(Scene& s, const sim::World& w, float alpha, UiBatch& labels) {
                 const i32 hp = s == 0 ? w.spire : w.spire2;
                 if (hp <= 0) continue;
                 formatThousands(int(hp), buf, sizeof buf);
-                label(buf, V3(s == 0 ? -tune.twinX - 0.5f : tune.twinX + 0.5f, 2.2f, zc - 0.9f), 1.1f, gp->spireDark, spirePunch_, labels);
+                // Each grows outward from the middle, so two six-figure goals never run into one number.
+                label(buf, V3(s == 0 ? -0.4f : 0.4f, 2.2f, zc - 0.9f), 1.1f, gp->spireDark, spirePunch_, labels, 1.0f,
+                      s == 0 ? Align::Right : Align::Left);
             }
         } else if (def.kind == sim::kColossus && w.colossusOut && w.spire > 0) {
             formatThousands(int(w.spire), buf, sizeof buf);

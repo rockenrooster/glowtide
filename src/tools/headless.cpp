@@ -20,9 +20,10 @@ namespace {
 
 struct Opt {
     const char* cmd = nullptr;
-    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, keepTo = 0, repairSeeds = 8;
+    int level = 1, from = 1, to = 5, seeds = 1, jobs = 1, keepTo = 0, repairSeeds = 8, repairFrom = 0;
     const char* repairOnly = nullptr;
-    bool levelSet = false, pairs = false, noEnemy = false, unbreakable = false, hashLevels = false;
+    bool levelSet = false, pairs = false, noEnemy = false, unbreakable = false, hashLevels = false, boss = false;
+    int world = 1;
     float seconds = 0;
     char bots[64] = "greedy";
     const char* out = nullptr;
@@ -58,9 +59,12 @@ bool parse(int argc, char** argv, Opt& o) {
         else if (!std::strcmp(k, "--keep-to")) o.keepTo = std::atoi(take());
         else if (!std::strcmp(k, "--repair-seeds")) o.repairSeeds = std::atoi(take());
         else if (!std::strcmp(k, "--repair-only")) o.repairOnly = take();
+        else if (!std::strcmp(k, "--repair-from")) o.repairFrom = std::atoi(take());
         else if (!std::strcmp(k, "--bot") || !std::strcmp(k, "--bots")) std::snprintf(o.bots, sizeof o.bots, "%s", take());
         else if (!std::strcmp(k, "--pairs")) o.pairs = true;
         else if (!std::strcmp(k, "--hash-levels")) o.hashLevels = true;
+        else if (!std::strcmp(k, "--world")) o.world = std::atoi(take());
+        else if (!std::strcmp(k, "--boss")) o.boss = true;
         else if (!std::strcmp(k, "--no-enemy")) o.noEnemy = true;
         else if (!std::strcmp(k, "--unbreakable")) o.unbreakable = true;
         else if (!std::strcmp(k, "--out")) o.out = take();
@@ -323,8 +327,8 @@ int main(int argc, char** argv) {
     if (!std::strcmp(o.cmd, "layouts")) return layoutsReport(o.from, o.to);
     if (!std::strcmp(o.cmd, "forecast")) return o.levelSet ? forecastReport(o.level, maxv(1, o.seeds)) : forecastRecipes(maxv(1, o.seeds));
     if (!std::strcmp(o.cmd, "balance")) return balanceReport(maxv(1, o.from), o.to);
-    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.keepTo, o.out, o.report, o.repairSeeds, o.repairOnly);
-    if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25);
+    if (!std::strcmp(o.cmd, "bake")) return bakeLevels(o.from, o.to, o.jobs, o.keepTo, o.out, o.report, o.repairSeeds, o.repairOnly, o.repairFrom);
+    if (!std::strcmp(o.cmd, "audio")) return renderAudio(o.scene, o.out, o.seconds, o.levelSet ? o.level : 25, o.world, o.boss);
     std::fprintf(stderr, "unknown command %s\n", o.cmd);
     return 2;
 }

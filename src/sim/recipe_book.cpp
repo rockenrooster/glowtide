@@ -597,10 +597,12 @@ void longWalk(LevelDef& L, Rng& r, const RecipeCtx& c) {
     float z[kMaxRows];
     const int rows = layRows(L, r, lc, z);
     L.lengthClass = kLong;
-    const float col = (r.f01() < 0.5f ? -1.0f : 1.0f) * r.range(0.9f, 1.9f);
+    // The column keeps off the middle (its gates' inner edges 0.2-1.0 m from it): up the middle a still stream took every
+    // gate, and naive beat the colossus as fast as greedy.
+    const float col = (r.f01() < 0.5f ? -1.0f : 1.0f) * r.range(1.8f, 2.3f);
     for (int k = 0; k < rows; ++k) {  // the strongest gates lowest
         const int f = maxv(2, minv(5, c.strongest + 1) - k);
-        const float x = clampv(col + r.range(-0.5f, 0.5f), -1.9f, 1.9f);
+        const float x = col + (col > 0 ? 1.0f : -1.0f) * r.range(0.0f, 0.3f);
         addGate(L, mulGate(x, 1.6f, z[k], f, k));
         if (r.f01() < 0.5f) addGate(L, mulGate(x > 0 ? -3.6f : 3.6f, 1.2f, z[k], 2, k));
     }
@@ -712,6 +714,9 @@ void lateBloom(LevelDef& L, Rng& r, const RecipeCtx& c) {
 void pieceLane(LevelDef& L, u8 cls, float len, std::initializer_list<float> rows) {
     L.lengthClass = cls;
     L.len = len;
+    // The show is the lane: a set piece's enemy is a quarter milder (the hard place of its world met the contest's edge
+    // there, where an enemy strong enough to cancel its share overran greedy: the bake's bisection could not hold it).
+    L.fight *= 0.75f;
     L.targetT = targetTime(L.index, cls);
     for (float z : rows) addRow(L, z, kPatHand);
 }
@@ -771,7 +776,7 @@ void pieceStaircase(LevelDef& L, Rng& r, const RecipeCtx&) {
     static const int k[5] = {2, 2, 3, 3, 4};
     for (int row = 0; row < 5; ++row) {
         const float s = row % 2 ? 1.0f : -1.0f;
-        addGate(L, moving(mulGate(0, 1.3f, L.rowZ[row], k[row], row), kGateHop, 1.2f, 1.8f, 0.25f * float(row)));
+        addGate(L, moving(mulGate(s * 2.2f, 1.2f, L.rowZ[row], k[row], row), kGateHop, 0.9f, 1.8f, 0.25f * float(row)));  // off the middle line
         addGate(L, mulGate(-s * 3.8f, 1.2f, L.rowZ[row], 2, row));
     }
     L.plan = kPlanPulse;
@@ -865,24 +870,25 @@ void pieceClockwork(LevelDef& L, Rng& r, const RecipeCtx&) {
     addTwist(L, kTwistStampede, kTrigTime, 0.6f);
 }
 
-// 249. The fortress: three walls, three keys. Each wall across the lane is thin in one span (left, middle, right), the
-// best gate behind it; a vault above the last.
+// 249. The fortress: three walls, three keys. Each wall across the lane is thin in one span (left, right, left), the best
+// gate behind it; a vault above the last.
 void pieceFortress(LevelDef& L, Rng& r, const RecipeCtx&) {
     pieceLane(L, kLong, 44, {9.0f, 16.5f, 24.0f, 31.5f});
     addGate(L, mulGate(0, 1.8f, 9.0f, 2, 0));
     static const float edges[4] = {-4.9f, -1.63f, 1.63f, 4.9f};
     static const float wz[3] = {12.75f, 20.25f, 27.75f};
+    static const int thin[3] = {0, 2, 0};  // left, right, left: a stream that stays down the middle breaks three thick spans
     for (int w = 0; w < 3; ++w)
         for (int sp = 0; sp < 3; ++sp) {
             const float cx = 0.5f * (edges[sp] + edges[sp + 1]);
-            addWall(L, wall(edges[sp] + 0.02f, edges[sp + 1] - 0.02f, wz[w], i32((sp == w ? 1.0f : 4.0f) * streamAt(L, cx, wz[w]))));
+            addWall(L, wall(edges[sp] + 0.02f, edges[sp + 1] - 0.02f, wz[w], i32((sp == thin[w] ? 1.0f : 4.0f) * streamAt(L, cx, wz[w]))));
         }
     addGate(L, mulGate(-2.6f, 1.5f, 16.5f, 3, 1));
     addGate(L, mulGate(2.6f, 1.5f, 16.5f, 2, 1));
-    addGate(L, mulGate(0, 1.5f, 24.0f, 3, 2));
-    addGate(L, mulGate(-3.6f, 1.2f, 24.0f, 2, 2));
-    addGate(L, mulGate(2.6f, 1.5f, 31.5f, 4, 3));
-    addGate(L, mulGate(-2.6f, 1.5f, 31.5f, 2, 3));
+    addGate(L, mulGate(2.6f, 1.5f, 24.0f, 4, 2));
+    addGate(L, mulGate(-2.6f, 1.5f, 24.0f, 2, 2));
+    addGate(L, mulGate(-2.6f, 1.5f, 31.5f, 4, 3));
+    addGate(L, mulGate(2.6f, 1.5f, 31.5f, 2, 3));
     addGeode(L, pieceGeode(L, r, 3.4f, 0.12f, kBoonQuicken, 2.0f));
     pieceVault(L, -3.4f, 36.0f, L.geodes[0].t + 6.0f, kBoonLantern, 2.0f);
     addGeode(L, pieceGeode(L, r, 0.0f, 0.58f, kBoonComet, 1.5f));
@@ -905,22 +911,23 @@ void pieceMirrors(LevelDef& L, Rng& r, const RecipeCtx&) {
     addTwist(L, kTwistGoldenGate, kTrigTime, 0.4f, 0, u8(golden));
 }
 
-// 349. Siege of doors: they come from every side. Four side doors and one emitter at the foot, gates down the middle.
+// 349. Siege of doors: they come from every side. Two emitters at the foot and a side door on each rail.
 void pieceDoors(LevelDef& L, Rng& r, const RecipeCtx&) {
+    // The gates in a column off the middle, as Crossfire's: a stream there meets one rail's doors (down the middle it met
+    // none, and the doors' glooms overran greedy at every strength).
     pieceLane(L, kStandard, 40, {9.0f, 16.0f, 23.0f, 30.0f});
-    addGate(L, mulGate(0.3f, 1.6f, 9.0f, 2, 0));
-    addGate(L, mulGate(-0.4f, 1.6f, 16.0f, 3, 1));
-    addGate(L, mulGate(3.6f, 1.2f, 16.0f, 2, 1));
-    addGate(L, mulGate(0.4f, 1.5f, 23.0f, 4, 2));
-    addGate(L, mulGate(-0.3f, 1.6f, 30.0f, 3, 3));
-    addGate(L, mulGate(-3.6f, 1.2f, 30.0f, 2, 3));
+    addGate(L, mulGate(2.0f, 1.6f, 9.0f, 2, 0));
+    addGate(L, mulGate(1.7f, 1.6f, 16.0f, 3, 1));
+    addGate(L, mulGate(-2.6f, 1.4f, 16.0f, 2, 1));
+    addGate(L, mulGate(2.1f, 1.5f, 23.0f, 4, 2));
+    addGate(L, mulGate(1.8f, 1.6f, 30.0f, 3, 3));
+    addGate(L, mulGate(-2.6f, 1.4f, 30.0f, 2, 3));
     L.plan = kPlanFlank;
-    addEmitter(L, 0);
-    L.emitters[0].share = 0.6f;
-    addDoor(L, -1, 20.5f, 0.1f);
-    addDoor(L, 1, 20.5f, 0.1f);
-    addDoor(L, -1, 26.5f, 0.1f);
-    addDoor(L, 1, 32.0f, 0.1f);
+    addEmitter(L, -2.0f);
+    addEmitter(L, 2.0f);
+    L.emitters[0].share = L.emitters[1].share = 0.4f;
+    addDoor(L, -1, 21.0f, 0.1f);
+    addDoor(L, 1, 27.0f, 0.1f);
     addGeode(L, pieceDetour(L, r, true, 0.12f, kBoonHush, 1.5f));
     addGeode(L, pieceDetour(L, r, false, 0.35f, kBoonLantern, 2.0f));
     addGeode(L, pieceGeode(L, r, bestLineX(L), 0.56f, kBoonWard, 1.5f));

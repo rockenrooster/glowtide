@@ -93,6 +93,7 @@ void placeGeodes(LevelDef& L, Rng& r) {
     const int index = L.index;
     if (index < 6) return;
     int n = r.rangei(index <= 20 ? 1 : 2, index <= 20 ? 2 : index <= 60 ? 3 : 4);
+    if (signatureOf(L.world).geodes) n = minv(index <= 20 ? 2 : index <= 60 ? 3 : 4, n + 1);  // Gold Noon: one more
     if (L.boss) n = maxv(n, 2);
     const float budget = index <= 20 ? 2.0f : index <= 60 ? 2.5f : 3.0f;
     const float T = L.targetT, best = bestLineX(L);
@@ -189,13 +190,18 @@ void placeGeodes(LevelDef& L, Rng& r) {
 void placeFestivalGeodes(LevelDef& L, Rng& r) {
     const int n = r.rangei(10, 14);
     int lanterns = 1, quicken = 0, bright = 0, kindle = 0;
+    // Where most gates slide or breathe, a still stream up the middle is swept across the rain and opened as many geodes
+    // as greedy (V5's bake): there the rain falls further out and is tougher.
+    int sweeping = 0;
+    for (int i = 0; i < L.gateCount; ++i) sweeping += L.gates[i].slides == kGateSlide || L.gates[i].breath > 0 ? 1 : 0;
+    const bool swept = L.gateCount > 0 && 2 * sweeping >= L.gateCount;
     for (int k = 0; k < n && L.geodeCount < kMaxGeodes; ++k) {
         Geode g;
         g.t = 1.0f + 15.0f * float(k) / float(n) + r.range(0.0f, 0.6f);
-        g.x = (r.f01() < 0.5f ? -1.0f : 1.0f) * r.range(1.4f, 3.6f);  // off the middle: a stream that never moves catches few
+        g.x = (r.f01() < 0.5f ? -1.0f : 1.0f) * r.range(swept ? 2.2f : 1.4f, 3.6f);  // off the middle: a still stream catches few
         g.speed = r.range(1.8f, 2.6f);
         g.radius = 0.6f;
-        g.hpSeconds = r.range(0.5f, 0.9f);
+        g.hpSeconds = r.range(0.5f, 0.9f) * (swept ? 1.6f : 1.0f);
         int b = kBoonComet;
         const float roll = r.f01();
         if (roll < 0.25f && lanterns < int(tune.lanternMax)) b = kBoonLantern, ++lanterns;
@@ -266,6 +272,8 @@ void addTwistGeode(LevelDef& L, int twist, float x, float z0, float speed, float
 void addTwists(LevelDef& L, Rng& r) {
     if (!L.hasEnemy()) return;
     int count = L.index < 43 || L.kind == kBoss || L.kind == kFestival ? 0 : L.hardness < 0.4f ? 0 : L.hardness < 0.8f ? 1 : 2;
+    if (signatureOf(L.world).twists && L.index >= 43 && L.kind != kBoss && L.kind != kFestival)  // Storm Indigo: one more, from h 0.2
+        count = L.hardness < 0.2f ? 0 : L.hardness < 0.65f ? 1 : 2;
     if (L.twistCount > 0) count = 0;  // a set piece chose its own
     if (introTwist(L.index) >= 0 && L.kind != kBoss && L.kind != kFestival) count = maxv(count, 1);
     for (int n = 0; n < count && L.twistCount < kMaxTwists - 1; ++n) {
@@ -411,6 +419,11 @@ LevelDef generateWith(int index, u64 seed, int forced) {
     ctx.patternWeight = band.patternWeight;
     L.plan = 255;  // a recipe with an idea about the enemy sets it
     row.build(L, r, ctx);
+    if (recipe >= recipeCount()) {
+        // A set piece is laid out by hand; its seed gives the bake versions to balance: the enemy's share up to 15% lower
+        // (and the mirror, below).
+        L.fight *= r.range(0.85f, 1.0f);
+    }
     if (row.mirror && r.f01() < 0.5f) mirrorLayout(L);
     L.targetT = targetTime(index, L.lengthClass);  // a recipe may have lengthened the lane
 

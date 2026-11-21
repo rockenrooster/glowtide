@@ -213,15 +213,42 @@ int introTwist(int index) {
 
 // The recipe a generated level gets when no introduction forces one: any recipe that serves its kind and has come by
 // then, drawn by the seed (the bake's first pass tries seeds until the no-repeat rule holds: VARIETY_DESIGN 11).
+// The worlds' signatures (VARIETY_DESIGN 15), recipes by their number in the catalogue (recipe_book.cpp).
+const Signature& signatureOf(int world) {
+    static const Signature s[kWorldCount] = {
+        {"sliders", {6, 22, -1, -1}, -1, false, false},                         // Violet Dusk: Pendulum, Shifting window
+        {"hoppers", {14, -1, -1, -1}, kPlanPincer, false, false},               // Deep Teal: Hopscotch
+        {"geodes and caravans", {11, 12, 13, 4}, -1, false, false},             // Rose Dawn: Caravan, Crossroads, Treasure walls, The vault
+        {"twin rivers and islands", {2, 8, -1, -1}, -1, false, false},          // Emerald Aurora
+        {"walls and brutes", {5, 4, 15, -1}, kPlanBruteLine, false, false},     // Ember: Toll road, The vault, The narrows
+        {"breathing gates", {20, -1, -1, -1}, kPlanPulse, false, false},        // Frost Glass: Breathing ladder
+        {"twists", {-1, -1, -1, -1}, kPlanLateSurge, true, false},              // Storm Indigo
+        {"rich gates, many geodes", {23, 12, 19, -1}, -1, false, true},         // Gold Noon: Late bloom, Crossroads, Festival field
+        {"snuffers and narrows", {21, 15, -1, -1}, -1, false, false},           // Moonlit Jade: Gauntlet, The narrows
+        {"colossi and side doors", {9, 10, 17, 23}, kPlanFlank, false, false},  // Crimson Dusk: Crossfire, The breach, The long walk, Late bloom
+    };
+    return s[clampv(world, 1, kWorldCount) - 1];
+}
+
 // A recipe made for one kind (Dawn line, The long walk, Two towers, Festival field) is drawn three times as often on its
-// kind: those come six to ten times a hundred levels, and each of their recipes should show at least twice.
+// kind: those come six to ten times a hundred levels, and each of their recipes should show at least twice. A world's
+// signature doubles its recipes (VARIETY_DESIGN 15: a lean, not a wall).
+float recipeWeight(int index, int kind, int recipe) {
+    if (recipe < 0 || recipe >= recipeCount() || !(kRecipes[recipe].kinds >> kind & 1u) || index < kRecipes[recipe].from) return 0;
+    const u32 k = kRecipes[recipe].kinds;
+    float w = (k & (k - 1)) == 0 ? 3.0f : 1.0f;
+    for (int j : signatureOf(worldFor(index)).recipes) w *= j == recipe ? 2.0f : 1.0f;
+    return w;
+}
+
+bool forcedRecipe(int index) { return isHandMade(index) || introRecipe(index) >= 0 || setPieceAt(index) >= 0; }
+
 int pickRecipe(int index, int kind, Rng& r) {
     int allowed[32], n = 0;
     float weight[32], total = 0;
     for (int i = 0; i < recipeCount() && n < 32; ++i)
         if ((kRecipes[i].kinds >> kind & 1u) && index >= kRecipes[i].from) {
-            const u32 k = kRecipes[i].kinds;
-            weight[n] = (k & (k - 1)) == 0 ? 3.0f : 1.0f;
+            weight[n] = recipeWeight(index, kind, i);
             total += weight[n];
             allowed[n++] = i;
         }
@@ -242,8 +269,9 @@ int planFor(int index, Rng& r) {
     for (int p = 1; p < kPlanCount; ++p)
         if (index == planFrom(p)) return p;
     float wt[kPlanCount] = {}, total = 0;
+    const int lean = signatureOf(worldFor(index)).plan;  // a world's signature doubles its plan
     for (int p = 0; p < kPlanCount; ++p)
-        if (index >= planFrom(p)) total += wt[p] = p == kPlanSteady ? 1.5f : 1.0f;
+        if (index >= planFrom(p)) total += wt[p] = (p == kPlanSteady ? 1.5f : 1.0f) * (p == lean ? 2.0f : 1.0f);
     float pick = r.range(0, total);
     int p = 0;
     while (p < kPlanCount - 1 && pick >= wt[p]) pick -= wt[p++];

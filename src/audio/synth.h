@@ -27,18 +27,23 @@ public:
     // timbre: 0 kalimba, 1 glass, 2 bell (the ladder; GAME_DESIGN 12, P4 owner checkpoint).
     void build(int sampleRate, int timbre);
     const Sound& get(int id) const { return s_[id]; }
-    // The music's pad: a four-bar loop (76 bpm, C major ninth twice, A minor ninth twice), dark and bright.
-    const float* padDark() const { return padDark_.data(); }
-    const float* padBright() const { return padBright_.data(); }
-    int padLength() const { return int(padDark_.size()); }
     int rate() const { return rate_; }
 
 private:
     int rate_ = 48000;
     std::vector<float> store_[kSndCount];
     Sound s_[kSndCount];
-    std::vector<float> padDark_, padBright_;
 };
+
+// A world's music (VARIETY_DESIGN 15): two chords, each two bars of the four-bar loop, and a tempo of 70 to 84 beats a
+// minute. Every note is in C major pentatonic (the ladder's family), voiced from A3 up: a phone speaker has no bass.
+struct MusicStyle {
+    int chords[2][5];
+    float bpm;
+};
+const MusicStyle& worldMusic(int world);  // 1..10
+// A style's pad: the four-bar loop, dark and bright (the tide crossfades them); allocates, so not on the audio thread.
+void buildPad(int rate, const MusicStyle& m, std::vector<float>& dark, std::vector<float>& bright);
 
 float midiHz(float midi);
 extern const int kLadderMidi[11];

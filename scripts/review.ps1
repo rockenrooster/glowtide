@@ -1,5 +1,5 @@
 # Renders a phase's picture set into captures\<set>\ with small copies and a contact sheet (TECH_SPEC 8.1).
-#   scripts\review.ps1 -Set p1|p2|p3|p5|p6 [-Only a,b] [-Config dev|debug] [-NoBuild] [-Lint]
+#   scripts\review.ps1 -Set p1|p2|p3|p5|p6|v1|v2|v3|v5|recipes|levels [-Only a,b] [-Config dev|debug] [-NoBuild] [-Lint]
 #   scripts\review.ps1 -Set levels [-From N -Count M | -Levels a,b,c]   (levels from above; default every fifth to 300)
 # Each picture is one run of the desktop app (silent, off screen). Screens are also rendered across the aspect matrix
 # (TECH_SPEC 5.2) when the set asks for it. Exit 1 if any run failed (GL messages: exit 3; a lint: exit 7).
@@ -87,6 +87,28 @@ $sets = @{
         twist_golden_gate = '--picture twist_golden_gate'
         twist_ward_wall = '--picture twist_ward_wall'
         twist_cub = '--picture twist_cub'
+    }
+    v5 = [ordered]@{
+        world_1 = '--picture world_1'
+        world_2 = '--picture world_2'
+        world_3 = '--picture world_3'
+        world_4 = '--picture world_4'
+        world_5 = '--picture world_5'
+        world_6 = '--picture world_6'
+        world_6_b = '--picture world_6 --palette-alt 1'
+        world_6_c = '--picture world_6 --palette-alt 2'
+        world_7 = '--picture world_7'
+        world_7_b = '--picture world_7 --palette-alt 1'
+        world_7_c = '--picture world_7 --palette-alt 2'
+        world_8 = '--picture world_8'
+        world_8_b = '--picture world_8 --palette-alt 1'
+        world_8_c = '--picture world_8 --palette-alt 2'
+        world_9 = '--picture world_9'
+        world_9_b = '--picture world_9 --palette-alt 1'
+        world_9_c = '--picture world_9 --palette-alt 2'
+        world_10 = '--picture world_10'
+        world_10_b = '--picture world_10 --palette-alt 1'
+        world_10_c = '--picture world_10 --palette-alt 2'
     }
     p5 = [ordered]@{
         world_1 = '--picture world_1'

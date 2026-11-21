@@ -21,7 +21,7 @@ class View {
 public:
     void init(const ViewEnv& env);
     void resize(const ViewEnv& env);
-    void setLevel(const sim::LevelDef& def, int worldOverride = 0);
+    void setLevel(const sim::LevelDef& def, int worldOverride = 0, int paletteAlt = 0);
     // Events of the tick that just ran.
     void onTick(const sim::World& w);
     void update(float dt, const sim::World& w);
@@ -41,6 +41,7 @@ public:
 
     Camera cam;
     const WorldPalette* wp = nullptr;
+    int skyWorld = 1;  // the world whose sky feature and props the level shows
     const GamePalette* gp = nullptr;
     sim::LevelDef def;
     double time = 0;          // view time, seconds
@@ -63,7 +64,8 @@ public:
 private:
     void buildUnits(const sim::World& w);
     void addLight(float x, float z, float rx, float rz, V3 c, float a, int shape);
-    void label(const char* text, V3 at, float emMetres, V3 strokeColor, float punch, UiBatch& b, float alpha = 1.0f);
+    void label(const char* text, V3 at, float emMetres, V3 strokeColor, float punch, UiBatch& b, float alpha = 1.0f,
+               Align align = Align::Center);
 
     ViewEnv env_;
     float followX_ = 0, followV_ = 0;

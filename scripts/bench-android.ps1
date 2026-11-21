@@ -45,6 +45,8 @@ try {
         if (Get-GtPid $Serial) { Stop-GtApp $Serial; throw "the benchmark did not end in time" }
         $log = & $GT_ADB -s $Serial logcat -d --pid=$appPid -s GTBENCH:I GLOWTIDE:I GTLIFE:I
         $line = $log | Select-String 'GTBENCH' | Select-Object -Last 1
+        # The sound bank's and the world pads' build times (VARIETY_PLAN V5's exit checks).
+        $log | Select-String 'sound bank built|pad built' | ForEach-Object { Write-Host "[bench] $($_.Line -replace '^.*?GLOWTIDE\s*:\s*', '')" }
         if (-not $line) { $log | Select-Object -Last 30 | ForEach-Object { Write-Host $_ }; throw "no GTBENCH line" }
         $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $dst = Join-Path $outDir "${id}_${Scenario}_$stamp.json"

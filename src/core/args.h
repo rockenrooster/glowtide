@@ -10,7 +10,8 @@ struct Args {
     int level = 0;                 // 0: the saved level
     i64 seed = -1;                 // -1: the level's own
     int recipe = -1;               // the recipe_top picture: a recipe from the catalogue (-1: the calendar's)
-    int world = 0;                 // 0: the level's own (1..5)
+    int world = 0;                 // 0: the level's own (1..10)
+    int paletteAlt = 0;            // the review's palette alternatives for worlds 6-10 (1 or 2; 0: the world's own)
     char bot[12] = "";             // greedy | naive | sweep | idle
     char picture[40] = "";
     char screenshot[260] = "";
@@ -34,6 +35,7 @@ struct Args {
     bool flowTest = false;
     float fps = 0.0f;
     bool tone = false;
+    bool alternate = false;        // bench_play: alternate --level N and N + 1 (a world change when N ends a world)
     bool lint = false;             // layout lint on this run's screens (exit 7 on failure)
     bool fresh = false;            // ignore the save file (pictures and tests)
     int setCount = 0;

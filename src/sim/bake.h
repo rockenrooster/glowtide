@@ -55,8 +55,10 @@ int fluxFindings();
 // --bake-levels: VARIETY_DESIGN 12.2 for levels from..to; writes levels_baked.h and the report. Rows before `from`, and
 // past `to` up to `keepTo`, are copied from the table this program was built with (re-baking a few levels in place).
 // repairSeeds: the balanced seeds pass 3 gives a level (VARIETY_TECH 5 says eight); repairOnly: a table file whose levels
-// marked "(not accepted)" are repaired, every other row kept (this program must have been built with that table).
+// marked "(not accepted)" are repaired, every other row kept (this program must have been built with that table);
+// repairFrom: the seed number a repair's own-recipe seeds start from (0: the one after the row's), so a later round skips
+// the seeds an earlier one tried.
 int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds = 8,
-               const char* repairOnly = nullptr);
+               const char* repairOnly = nullptr, int repairFrom = 0);
 
 }  // namespace gt::sim

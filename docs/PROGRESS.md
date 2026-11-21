@@ -30,6 +30,7 @@ listed under "Choices" below; the owner can reverse any of them.
 | V2 Lane and enemy | Done 2026-11-20 (phones: below) | Hoppers, breathing gates, sliding walls, side doors, runners, eight plans, `KINDLE`, `COMET`, `HUSH`; levels 2-300 baked again and accepted; stretch items not built |
 | V3 Kinds, twists, bosses | Done on the PC 2026-11-20 (phones: in V4's runs) | Holdout, Colossus, Twins, Festival, four bosses, eight twists; every kind's lines pass in the bake; Siege unchanged |
 | V4 Recipes, calendar, no repeats | Code done 2026-11-20; its table is re-baked in V5 | 24 recipes, 12 set pieces, the calendar, the tuned rule, the bake's three passes, 600 levels, replays; 17 levels not accepted and the variety report failing on this table (below) |
+| V5 Worlds and dressing | Done 2026-11-21 (phones: the Moto; the tablet not reached, the 12R out for now) | Ten worlds (five palettes picked), signatures, two prop families, four sky features, the world's banner, music a world; the table names each level's recipe; generator 11; all 599 levels accepted and both contracts holding on the table; the Moto's frame time brought back to 0.8% late |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -464,6 +465,110 @@ arrive, so the PC drew its copy without them (mean difference 21 against a limit
 when the size or the safe area changes, and the check reads the last one. The 12R is not tested further for now (the
 owner, 2026-11-20).
 
+### V5: worlds and dressing — what was built and what changed from the design
+
+Built: five new palettes (Frost Glass, Storm Indigo, Gold Noon, Moonlit Jade, Crimson Dusk), each picked from three
+candidates on one sheet (`review.ps1 -Set v5`; the two not picked stay in `palette.cpp` for `--palette-alt 1|2`); each
+world's signature (`signatureOf` in `calendar.cpp`); two more prop families beside the islets (arches, lantern
+clusters); four sky features in `backdrop.frag` (aurora ribbons in the rail's colour, a low moon, falling motes, a far
+second spire with its tip lit); the world's number and name as the banner on its first level (`WORLD 11  VIOLET DUSK`:
+a world is ten levels, the palettes come round every hundred); music a world (a chord pair and a tempo each, all
+notes C, D, E, G or A); the bake's table names each level's recipe; `--world N` on the app and on `--render-audio
+music` (with `--boss`); `--palette-alt`.
+
+| Design said | Built | Why |
+|---|---|---|
+| A signature doubles its recipes' weights (VD 15) | x2 on the recipe's weight in the seed's draw and in pass 1's order (`recipeWeight`), x2 on the plan the world leans to; Storm Indigo ("twists", no recipe of its own) takes one twist from hardness 0.2 and two from 0.65 (other worlds: 0.4 and 0.8); Gold Noon ("many geodes") one geode more, within the level's cap | A world whose signature is not a recipe leans by the generator's own knobs; the rule still decides every level |
+| Props: one family a world; a sky feature a world | Neighbouring worlds share neither a sky feature nor a prop family, and no two worlds share both (a unit test holds the table to it) | A world is ten levels: a neighbour's dressing is what the player saw a minute before |
+| The sky feature chosen by a uniform the frame block has room for | `uBackdrop[0].w` (the first backdrop colour's spare component); `FrameUniforms` unchanged | No new member, so std140 and the size assert are untouched |
+| The pad built inside the level fade if under 150 ms on the Moto, else on a worker thread | Always on a worker thread; the old pad plays until the loop's seam takes the new one; a world's pad build time is logged (`audio: world N's pad built in M ms`) | One path instead of two, and the swap at the seam cannot click |
+| The music 9 dB under the flood (GD 12, P4: 10.5 dB) | The music's gain 0.54 to 0.62 | V1-V3's sounds raised the flood render by 0.9 dB, which left the ten loops 11.1-12.1 dB under it, outside 9 +- 2 |
+| The table row `{seed, spire, baseFlow, ref}` (V4) | `{seed, spire, baseFlow, ref, recipe}`; pass 1 chooses (recipe, seed) pairs, eight seeds a recipe, in its order of preference; pass 3 repairs a level with other seeds of the same recipe (24 balanced seeds, at most 64 x 24 looked at) and, when none is accepted, with the other recipes the level may take (six balanced seeds each), the rule deciding as in pass 1 | V4's repairs re-drew the recipe with the seed and broke the variety contract (V4: measured) |
+| Set pieces balanced on every line (V4) | Held to the outcome lines (a, b, c, d, e, i), not to the enemy's share (f) or the boons' worth (g, h), and never thrown away by line g's forecast or the bisection's cliff; a set piece greedy does not win nine runs of ten in gets a milder enemy (x0.85, twice at most); a seed draws the enemy's strength 0-15% lower | A set piece is a show piece laid out by hand: four of twelve met the contest's edge in V4, where a generated level would have tried another layout |
+| The long walk: four rows, the strongest gates lowest (VD 9.2) | Its column keeps off the middle, the gates' inner edges 0.2-1.0 m from it (generator 11) | Up the middle a still stream took every gate: naive beat the colossus on four of fifteen levels |
+| The festival's rain (V4: from 1.4 m to the side, 0.5-0.9 s of the stream) | Where most gates slide or breathe (Pendulum and Breathing ladder festivals), from 2.2 m and 60% tougher (generator 11) | The moving gates swept a still stream across the rain: on 13 of 18 such festivals naive opened as many geodes as greedy. Other festivals keep the same layouts |
+| Line f and the bisection's cliff on every kind but set pieces | Twins, colossi and bosses whose bisection meets the contest's edge before the target are sized at the strongest enemy greedy still beats, and held to the share they cancelled there (the report's Target column holds it; the bake log says `edge:`) | VARIETY_DESIGN 5.9's edge: one wave more and greedy is overrun; Two towers lost 7 of 15 levels to it in the first pass |
+| Line g on a recipe's introduction | Not applied (as on hand-made levels) | An introduction teaches its recipe; Crossfire's (28) found no seed in more than a hundred where its boons decided it |
+| A repair round's kept rows | Copied as the table stores them (`bakedRow`) | They were written back from the level's LevelDef, whose numbers `setGoals` has changed: every repair-only round (V4's two and V5's four) halved a twin's goal and set a festival's three stars to one geode. Found when the balance probe saw twins won in a third of `T`; V5's 90 such rows were restored from the rounds that baked them (all 599 spires now equal the bake report's) and a unit test holds every festival's stars to half its geodes or more. V4's committed table had the fault too |
+| A table row the bake left without numbers (spire 0) | Still the level's layout (its seed and recipe), with the first-guess numbers | It was read as unbaked (the calendar's seed and recipe), so a later round repaired another layout than the one baked |
+| Set pieces (V4's layouts) | The staircase: hoppers wider apart and lower (2.2 m steps, 0.9 m swing), the rain later (74% of T); The fortress: thin spans left, right, left, rich gates behind them; Siege of doors: the gates in a column off the middle, two emitters at the foot and one light side door on each rail (was four doors and one emitter); The treasury: its column to one side; The needle: its gaps 0.9 m off the middle; The last light: lower factors | Greedy won 0-6 of ten in V4's bake on 49, 249, 349 and 599 |
+
+### V5: measured
+
+**The palettes** (`captures/v5/contact.png`: the ten worlds and the two candidates not picked for each of 6-10;
+`captures/v5/worlds_final.png`: the ten as picked). All thirty pass the palette lint; the label check passes in each
+world's picture (`review.ps1 -Set v5 -Lint`). Mean backdrop luminance (the gradient's spans weighted): Violet Dusk 0.040,
+Deep Teal 0.058, Rose Dawn 0.140, Emerald Aurora 0.105, Ember 0.101, Frost Glass 0.134, Storm Indigo 0.033, Gold Noon
+0.135, Moonlit Jade 0.043, Crimson Dusk 0.044. The greyscale sheet of the three lightest (Rose Dawn, Frost Glass, Gold
+Noon, with Gold Noon's two candidates beside them: `captures/v5/greyscale_lightest.png`) loses nothing: the flood,
+the gate labels and the HUD sit on the dark lane or carry their outline.
+
+**The music** (`captures/v5/audio/`, `wav_metrics.py`; 60 s renders cross each loop's seam four or five times):
+
+| World | Chords (MIDI) | Notes | Tempo | Loudness | Under the flood | Largest jump |
+|---|---|---|---|---|---|---|
+| 1 Violet Dusk | 60 64 67 69 74 / 57 60 64 67 74 | C E G A D / A C E G D | 76 | -24.2 LUFS | 10.2 dB | 0.037 |
+| 2 Deep Teal | 57 60 64 67 74 / 55 60 62 64 69 | A C E G D / G C D E A | 72 | -24.3 | 10.3 | 0.033 |
+| 3 Rose Dawn | 60 64 67 69 74 / 62 64 67 69 72 | C E G A D / D E G A C | 80 | -23.9 | 9.9 | 0.036 |
+| 4 Emerald Aurora | 64 67 69 72 74 / 60 64 67 69 74 | E G A C D / C E G A D | 74 | -24.1 | 10.1 | 0.035 |
+| 5 Ember | 55 57 62 64 72 / 57 60 64 67 74 | G A D E C / A C E G D | 84 | -23.9 | 9.9 | 0.034 |
+| 6 Frost Glass | 62 64 69 72 76 / 57 60 64 69 72 | D E A C E / A C E A C | 70 | -24.5 | 10.5 | 0.034 |
+| 7 Storm Indigo | 57 60 64 67 74 / 62 67 69 72 74 | A C E G D / D G A C D | 78 | -24.4 | 10.4 | 0.039 |
+| 8 Gold Noon | 60 64 67 69 74 / 55 60 62 64 69 | C E G A D / G C D E A | 82 | -24.1 | 10.1 | 0.032 |
+| 9 Moonlit Jade | 64 67 69 74 76 / 57 60 64 67 72 | E G A D E / A C E G C | 70 | -24.9 | 10.9 | 0.034 |
+| 10 Crimson Dusk | 62 64 67 69 72 / 57 60 64 67 74 | D E G A C / A C E G D | 80 | -24.0 | 10.0 | 0.038 |
+
+Every note is C, D, E, G or A (the ladder's pentatonic family). The flood render is -14.0 LUFS (P4: -14.9). At the
+first gain (0.54) the loops sat 11.1-12.1 dB under it; at 0.62, 9.9-10.9. With the boss's pulse (world 7): -23.4
+LUFS. No loop jumps more than 0.039 of full scale (limit 0.2).
+
+**The bake** (generator 11, rules 5; levels 2-600; every level accepted, `--sim variety` exits 0 with no rule or contract
+line broken). The full bake (pass 3 with 24 balanced seeds a level, its recipe kept) took 89 min: pass 1 4.2 min (562
+candidates thrown away by line g's forecast), pass 2 11 min, pass 3 74 min, and left 53 levels not accepted (13
+festivals laid out by Pendulum or Breathing ladder, where a still stream opened as many geodes as greedy; 18 at the
+bisection's cliff, most of them twins, colossi and bosses at hardness 0.8; 9 on line g; 5 a, 3 n, 2 c, 2 f, 1 e).
+Seeds thrown away by line: g 4,792, x 1,257, a 375, n 361, c 308, f 116, h 93, e 88, i 15. Then repair rounds
+(`--repair-only`, each on the levels still marked): 40 fresh seeds of the level's recipe and then its other recipes where
+the contract allows (36 min, 12 left); generator 11 (The long walk off the middle, a swept festival's rain) with its 23
+changed rows and the edge rule for twins, colossi and bosses (16 min, 4 left: 318 and 518 held at the edge, 13% and 3%
+against 30% and 29%); 60 more seeds and line g off for introductions (4 min, 1 left); 40 more for level 419 (1 min, 0
+left). A first repair round (34 min) was thrown away: it had read the rows the bake left without numbers as unbaked
+levels, and its fallback had moved colossi and twins off their own recipes below the contract's two a hundred.
+
+**Other checks** (PC, on the final table): unit tests 177 checks, 0 failed (the palette lint on the ten worlds and the
+ten candidates not picked, the dressing table's rule, every recipe on 200 seeds, every table level's lints, every
+festival's stars, the replays: 149 and 213 within 1% of their mirrors, 101 within 11%: greedy breaks a tie between equal
+lines toward the left, and a lane of patrols sends it up another line on the mirror, both inside line c, so the check
+now allows 15%); the soak on 1-600 with greedy, hungry and sweep (1,800 runs, 0 failed); determinism on the 34 hash
+levels; `--sim variety` 0 lines broken; the band tables (every level accepted, every share within 5 points of its
+target, set pieces excepted as the bake excepts them); the flashing audit with every strip, with and without REDUCE
+EFFECTS (at most 2 swings of 10% in a second); the rebuild check (`--rebuild-gl-at`) on `geodes` and `kind_festival`:
+pixel-identical; the label check in all ten worlds.
+
+**On the Moto** (the dev build of this table): determinism 34 of 34 equal to the PC; the flow test 53 checks, 0 failed;
+the picture checks on `world_1`, `world_2`, `world_3` and `world_5` (the four sky features), `concept`, `geodes`,
+`kind_colossus` and `kind_festival` (mean difference 0.1 against a limit of 4 on every one); back key; save through a
+force-stop; cold start 417 ms; 20 lifecycle cycles; `bench_flood` 60 s after 60 s 1.15% late; refresh 60 Hz. A
+`bench_play` across a world's first level (`--level 10 --alternate`: 10 and 11 in turn for 90 s): 0.63% late, worst
+frame 33.9 ms (limit 50), each world's pad built in 95 ms on its worker thread; that change allocates six times (the
+thread and the pad's buffers): a level change, not the steady frame. `bench_play` on the heaviest level, 138 (twins at
+the unit cap, 3,336 units): 0.47% late, worst 34.2 ms, main thread CPU p95 5.18 ms (budget 6), tick p95 2.68 ms (PLAN
+5's first share of the budget was 2.5), 0 allocations. The tablet was not reached (Choices); the 12R is out for now
+(the owner).
+
+**The performance contract on the Moto** (`bench_flood`, 60 s after a three-minute soak; world 1, whose aurora was
+the costliest sky). V5 as first built: 12.0% late, display p95 33.5 ms, CPU p95 4.80 ms, the GPU the limit (the frame
+interval's median 18.4 ms). V4's 5.6% had been a real regression too, not the other app in front (its run was valid):
+V2's unit shader shaded every fragment of each unit's quad (runners' and comets' taller ones included), and the
+backdrop's four mist bands ran `exp`, `pow` and `sin` on every backdrop pixel. Changed, with every picture
+pixel-identical on the PC (the last change at most one step in a channel on a few pixels): the unit shader tests the
+shape first and discards fragments outside it before any shading (a runner's streak and a comet's tail skip the body's
+shading); the backdrop squares instead of `pow` (undefined for a negative base besides), draws the aurora only in the
+upper sky, and skips a band where it is under 1e-4. Runs in turn: 4.54%, 3.85%, then **0.79% late, worst frame 35.3
+ms, display p95 16.95 ms, CPU p95 4.02 ms, 0 allocations** (V1: 0.62%, P6: 0.90% and 4.26 ms). The ten minutes with
+sound (before the last two changes): 30,000 audio callbacks, none late, fill p99 0.91 ms of a 20 ms period. The sound
+bank with world 1's pad builds in 113-118 ms at start-up (limit 150).
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -502,6 +607,11 @@ owner, 2026-11-20).
 | V3's soft checkpoint and phone checks | Kinds, twists and bosses kept as built; the V3 phone runs were folded into V4's (the Moto was in use by another app and the tablet away for the whole V3 window) | The V4 build carries every V3 rule; its device checks cover them |
 | V4's owner checkpoint (the gate: play 1-30, 100-130, 300-330; six questions) | Answered here: the catalogue, the calendar, the set pieces and the tuned rule as built; V5 started | The owner asked for best judgment instead of questions; the variety contract and both balance lines hold on the table, and the four consecutive sheets were looked at (V4: measured). The questions stay open below |
 | Introductions of recipes (VARIETY_DESIGN 10.1: by hand) | Generated levels of the recipe, its name and sentence shown as the level's name and hint line | V4's table: the recipe is its own smallest lane, and the bake can still choose among its seeds |
+| V5's owner checkpoint (the sheet of fifteen palettes, a level of each world on a phone, the ten loops; four questions) | Answered here: Frost Glass B, Storm Indigo B, Gold Noon A, Moonlit Jade C, Crimson Dusk C; one loop a world, all ten kept; every sky feature kept; the signatures as built | Frost Glass B is the bluest of its three, so the spire's pink glow leaves it icy and unlike Storm Indigo beside it; Storm Indigo B is the darkest, its yellow rail reading as lightning; Gold Noon A is the design's "lightest backdrop the lint allows" and the greyscale sheet lost nothing on it; Moonlit Jade C is the deepest green, furthest from Emerald Aurora; Crimson Dusk C the darkest, furthest from Rose Dawn and Ember. The sky features sit above the lane and beside it, never on it. The questions stay open below |
+| Sky features and prop families | Reassigned so that neighbouring worlds share neither and no two worlds share both (a unit test holds the table to it) | A world is ten levels; in the first table Gold Noon and Moonlit Jade, side by side, both had the moon, and three pairs of worlds had the same dressing |
+| The music's level (V5) | Gain 0.54 to 0.62 | The flood render had grown 0.9 dB since P4, leaving the loops 11-12 dB under it (GD 12: 9 +- 2); now 9.9-10.9 |
+| The Moto's frame time (V5) | The unit and backdrop shaders made cheaper with the same pictures, not an effect dropped | `bench_flood` was 12% late with V5's skies, 5.6% already in V4; 0.79% after (V5: measured) |
+| The tablet in V5 | Not tested: its wireless debugging answers at its address but no longer trusts this PC (it needs pairing again, on the tablet) | The 12R is out for now (the owner, 2026-11-20); the Moto carried V5's device checks |
 
 ## Measured device facts
 
@@ -669,3 +779,9 @@ another level, every level has one goal and one enemy plan, and the greedy bot i
     The set pieces (49, 99, ...): worth having more? (Answered by best judgment for now: Choices.)
 8. **The lane and the enemy (V2):** ten levels between 16 and 60. Does any new gate annoy rather than interest (hoppers
    are the candidate)? Do side doors read as doors? Is `KINDLE` as good as it should be?
+11. **Worlds and dressing (V5):** `captures/v5/contact.png` (the fifteen palette candidates; worlds 6-10 picked: Frost
+    Glass B, Storm Indigo B, Gold Noon A, Moonlit Jade C, Crimson Dusk C) and `captures/v5/worlds_final.png`; the ten
+    loops in `captures/v5/audio/` (`music_w1.wav` to `music_w10.wav`, and `music_w7_boss.wav`). On the phone, a level of
+    each world: SETTINGS' level stepper at 1, 11, 21 ... 91. For each new world: which palette, or none? Do the worlds feel
+    different to play, or only to look at? The music: keep one loop a world, change or drop any? Does any sky feature
+    distract from the lane? (Answered by best judgment for now: Choices.)

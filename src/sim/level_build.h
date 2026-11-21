@@ -112,6 +112,17 @@ int introRecipe(int index);
 int introPlanFor(int index);
 int introTwist(int index);
 int pickRecipe(int index, int kind, Rng& r);
+// A world's signature (VARIETY_DESIGN 15): the recipes and plans it leans toward (their weights doubled; it forbids
+// nothing), and whether it leans toward twists (Storm Indigo) or geodes (Gold Noon).
+struct Signature {
+    const char* what;
+    int recipes[4];  // -1: none
+    int plan;        // -1: none
+    bool twists, geodes;
+};
+const Signature& signatureOf(int world);
+float recipeWeight(int index, int kind, int recipe);  // its weight in that draw (0: not allowed there)
+bool forcedRecipe(int index);  // a level whose recipe is not drawn: hand-made, an introduction, a set piece
 Band bandFor(int index);           // calendar.cpp
 void applyEnemyDefaults(LevelDef& L);  // calendar.cpp: the core
 int planFor(int index, Rng& r);        // calendar.cpp: the enemy's plan for a generated level

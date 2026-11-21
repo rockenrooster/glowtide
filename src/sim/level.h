@@ -10,10 +10,13 @@ namespace gt::sim {
 // Bump kGeneratorVersion when anything that changes a layout changes (a recipe, the calendar, a hand-made level), and
 // kRulesVersion when anything that changes a bot's run changes (a rule in world.cpp, a tuning default, a bot). The bake
 // writes both into levels_baked.h; a unit test fails while the table's differ from these (VARIETY_TECH 2).
-constexpr int kGeneratorVersion = 9;  // 9: the recipe catalogue, the calendar, set pieces
+constexpr int kGeneratorVersion = 11;  // 11: The long walk off the middle, a swept festival's rain; 10: ten worlds, the table's recipe
 constexpr int kRulesVersion = 5;      // 5: kinds (holdout, colossus, twins, festival, boss), twists, cubs
 int bakedGeneratorVersion();
 int bakedRulesVersion();
+// A row of the table this program was built with, as stored (false past its end). The bake copies kept rows from it:
+// a LevelDef's numbers are not the row's (setGoals splits a twin's goal and moves a festival's stars to goal2).
+bool bakedRow(int index, u64& seed, i32& spire, float& baseFlow, float& ref, int& recipe);
 
 constexpr float kHW = 5.0f;              // lane half-width (GAME_DESIGN 3)
 constexpr float kLauncherRange = 4.4f;   // the launcher's rail: x in [-4.4, 4.4]
@@ -134,7 +137,7 @@ struct LevelDef {
     u64 seed = 1;
     u8 kind = kSiege, recipe = 0, plan = 0, lengthClass = kStandard;
     float len = 36;
-    int world = 1;          // palette, 1..5
+    int world = 1;          // palette, 1..10
     float targetT = 24;     // seconds
     i32 spireHealth = 60;   // the goal: Siege and Boss the spire, Twins the left spire, Colossus its health
     i32 goal2 = 0;          // Twins: the right spire; Festival: the geodes opened for three stars
@@ -198,8 +201,9 @@ float boonGain(int boon, int lanterns, int quicken, int bright);
 
 // The level the game plays at `index` (1-based): hand-made, or generated from the baked seed.
 LevelDef levelFor(int index);
-// The layout alone (no baked numbers): hand-made or generated from (index, seed).
-LevelDef layoutFor(int index, u64 seed);
+// The layout alone (no baked numbers): hand-made, or generated from (index, seed) with the given recipe (-1: the one the
+// calendar draws from the seed).
+LevelDef layoutFor(int index, u64 seed, int recipe = -1);
 void setGoals(LevelDef& L);  // the baked goal number into each kind's goals (levels.cpp)
 LevelDef introLevel(int index);  // the hand-made levels
 LevelDef generate(int index, u64 seed);
@@ -215,7 +219,7 @@ u64 defaultSeed(int index);
 // After the last baked level (VARIETY_DESIGN 16): 601 plays 101 mirrored left to right in the world kReplayWorldShift
 // places on, and so on; the level number whose layout and numbers a play index uses, and whether it is mirrored.
 constexpr int kLastBaked = 600;
-constexpr int kWorldCount = 5;  // VARIETY_DESIGN 15 (phase V5) brings ten
+constexpr int kWorldCount = 10;  // VARIETY_DESIGN 15
 constexpr int kReplayWorldShift = kWorldCount >= 10 ? 5 : 2;
 int levelForPlay(int index);
 bool isReplay(int index);

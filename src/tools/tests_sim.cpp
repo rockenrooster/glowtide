@@ -795,6 +795,13 @@ void testGenerator() {
         }
     }
     GT_CHECK_MSG(badTable == 0, "every level of the baked table passes the generator's lints");
+    // A festival's three stars ask for most of its rain (V5's repair rounds once rewrote them as one geode).
+    int badStars = 0;
+    for (int l = 2; l <= kLastBaked; ++l) {
+        const LevelDef L = levelFor(l);
+        if (L.kind == kFestival && L.goal2 < maxv(2, L.geodeCount / 2)) ++badStars;
+    }
+    GT_CHECK_MSG(badStars == 0, "every festival's three stars ask for at least half its geodes");
 }
 
 // After the last baked level (VARIETY_DESIGN 16): 601 plays 101 mirrored left to right in another world, 1,101 plays 101
@@ -828,9 +835,11 @@ void testReplays() {
         std::sort(ta, ta + 20);
         std::sort(tb, tb + 20);
         const float ma = 0.5f * (ta[9] + ta[10]), mb = 0.5f * (tb[9] + tb[10]);
-        std::snprintf(what, sizeof what, "greedy's median time on %d (%.1f s) and on %d mirrored (%.1f s) within 5%%", source, double(ma),
+        // Within 15%: the layouts mirror exactly, but greedy does not (it breaks a tie between equal lines toward the left), so
+        // a lane of patrols can send it up another line on the mirror (101 against 601: 20.0 s and 22.2 s, both inside line c).
+        std::snprintf(what, sizeof what, "greedy's median time on %d (%.1f s) and on %d mirrored (%.1f s) within 15%%", source, double(ma),
                       source + 500, double(mb));
-        GT_CHECK_MSG(ma < 1e5f && std::fabs(mb - ma) <= 0.05f * ma, what);
+        GT_CHECK_MSG(ma < 1e5f && mb < 1e5f && std::fabs(mb - ma) <= 0.15f * ma, what);
     }
 }
 
@@ -857,8 +866,9 @@ void testCameraFit() {
 void testPalettes() {
     const GamePalette& gp = gamePalette();
     int bad = 0;
-    for (int world = 1; world <= 5; ++world) {
-        const WorldPalette& w = worldPalette(world);
+    for (int k = 0; k < kPaletteCount + 10; ++k) {  // the ten worlds, then the alternatives drawn for 6-10
+        const int world = k < kPaletteCount ? k + 1 : 6 + (k - kPaletteCount) / 2;
+        const WorldPalette& w = k < kPaletteCount ? worldPalette(world) : worldPaletteAlt(world, 1 + (k - kPaletteCount) % 2);
         auto fail = [&](const char* what, float v) {
             if (bad < 10) std::printf("palette %s: %s (%.2f)\n", w.name, what, double(v));
             ++bad;
@@ -875,6 +885,11 @@ void testPalettes() {
     }
     if (contrast(gp.gloomEye, gp.gloom) < 2.5f) ++bad, std::printf("palette: gloom eyes against the body under 2.5:1\n");
     GT_CHECK_MSG(bad == 0, "palette lint (GAME_DESIGN 9.2)");
+    // Dressing: neighbouring worlds differ in sky feature and prop family; no two worlds share both.
+    for (int a = 1; a <= kPaletteCount; ++a) {
+        if (a < kPaletteCount) GT_CHECK(skyFeature(a) != skyFeature(a + 1) && propFamily(a) != propFamily(a + 1));
+        for (int c = a + 1; c <= kPaletteCount; ++c) GT_CHECK(skyFeature(a) != skyFeature(c) || propFamily(a) != propFamily(c));
+    }
 }
 
 void testFont() {

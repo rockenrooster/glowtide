@@ -142,9 +142,11 @@ void Game::enterLevel(int index, bool fade) {
     level_ = maxv(1, index);
     // Level load time (P5: at most 50 ms on the Moto): generate, then the meshes.
     const double t0 = nowSeconds();
-    const sim::LevelDef def = sim::levelFor(level_);
+    sim::LevelDef def = sim::levelFor(level_);
+    if (args_.world > 0) def.world = args_.world;  // --world: the colours, the sky and the props of another world
     world_.init(def, args_.seed >= 0 ? u64(args_.seed) : 0u);
     view_.setLevel(def, args_.world);
+    mixer_.setWorld(def.world, def.kind == sim::kBoss);  // the world's music (VARIETY_DESIGN 15), a boss's pulse
     const double t1 = nowSeconds();
     if (graphicsReady_) renderer_.setLevel(def, *view_.wp, *view_.gp);
     GT_LOG("level %d loaded in %.1f ms (generate %.1f ms, meshes %.1f ms)", level_, (nowSeconds() - t0) * 1000.0, (t1 - t0) * 1000.0,
@@ -195,6 +197,11 @@ void Game::startPlaying() {
     coldStart_ = false;
     resumeRamp_ = 1;
     if (level_ == 1) showHint(0);
+    if (level_ > 1 && (level_ - 1) % 10 == 0) {  // a world's first level: its number and name (VARIETY_DESIGN 15)
+        char wb[48];
+        std::snprintf(wb, sizeof wb, "WORLD %d  %s", (level_ - 1) / 10 + 1, worldPalette(world_.def.world).name);
+        pushBanner(wb);
+    }
     if (const char* b = goalBanner(world_.def)) pushBanner(b);  // the goal, for the level's first second (VARIETY_DESIGN 14)
     // A set piece's name, or the recipe the level introduces, then its idea as the hint line (VARIETY_DESIGN 10.1, 10.3).
     char name[48];
@@ -596,9 +603,10 @@ void Game::update(float dt, float alpha) {
         view_.gloomCheer = minv(1.0f, resultTime_ / 0.5f);  // the glooms bounce
     }
     // bench_play keeps playing: 3 s after the result the same level starts again, so the measured window is play,
-    // win sequences and level loads rather than a still result screen.
+    // win sequences and level loads rather than a still result screen. With --alternate it plays --level N and N + 1 in
+    // turn: across a world's first level when N ends a world (the music's pad is built and swapped each time).
     if ((screen_ == Screen::Win || screen_ == Screen::Lose) && resultTime_ > 3.0f && !std::strcmp(args_.scenario, "bench_play")) {
-        enterLevel(level_, false);
+        enterLevel(args_.alternate && args_.level > 0 && level_ == args_.level ? args_.level + 1 : args_.level > 0 ? args_.level : level_, false);
         coldStart_ = false;
         bot_.init(sim::BotKind::Greedy, 1);
         startPlaying();

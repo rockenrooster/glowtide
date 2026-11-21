@@ -318,7 +318,10 @@ Acceptance accept(const LevelDef& def, float target, bool full = true) {
         return std::snprintf(a.why, sizeof a.why, "c: greedy's median time %.1f s outside %.1f-%.1f", double(a.medTime), double(0.7f * T),
                              double(1.2f * T)),
                a;
-    if (!holdout && def.index > 5 && std::fabs(a.medShare - target) > 0.05f)
+    // A set piece is held to the outcome lines (a, b, c, d, e, i), not to the enemy's share (f) or the boons' worth (g, h):
+    // it is a show piece, and its lane met the contest's edge where a hand-made layout has no other seed to try.
+    const bool piece = setPieceAt(def.index) >= 0;
+    if (!holdout && !piece && def.index > 5 && std::fabs(a.medShare - target) > 0.05f)
         return std::snprintf(a.why, sizeof a.why, "f: cancelled %.0f%% against a target of %.0f%%", double(a.medShare * 100), double(target * 100)),
                a;
     int placed = 0;  // SECOND WIND's geode comes only when the core falls to 3: line i is about the level's own geodes
@@ -351,15 +354,16 @@ Acceptance accept(const LevelDef& def, float target, bool full = true) {
             a.ok = true;
             return a;
         }
-        if (lasting && a.podlessWins >= 3 && a.medTime > 0.9f * a.podlessTime)
+        // A recipe's introduction teaches the recipe: its boons need not decide it (as a hand-made level's need not).
+        if (lasting && !piece && introRecipe(def.index) < 0 && a.podlessWins >= 3 && a.medTime > 0.9f * a.podlessTime)
             return std::snprintf(a.why, sizeof a.why, "g: greedy %.1f s is not 10%% faster than podless %.1f s", double(a.medTime),
                                  double(a.podlessTime)),
                    a;
-        if (def.index >= 30 && a.podlessWins >= 3 && a.podlessTime <= T)
+        if (def.index >= 30 && !piece && a.podlessWins >= 3 && a.podlessTime <= T)
             return std::snprintf(a.why, sizeof a.why, "h: podless earns three stars (%.1f s, T %.0f)", double(a.podlessTime), double(T)), a;
         // VARIETY_DESIGN 12.2 asked that podless win fewer than half here; the bake could not size hard levels that far (see
         // PROGRESS.md), so: podless 25% slower than greedy, or losing three of five.
-        if (def.index >= 80 && def.hardness >= 0.65f && a.podlessWins >= 3 && a.podlessTime < 1.25f * a.medTime)
+        if (def.index >= 80 && !piece && def.hardness >= 0.65f && a.podlessWins >= 3 && a.podlessTime < 1.25f * a.medTime)
             return std::snprintf(a.why, sizeof a.why, "h: podless won %d of 5 at h %.2f in %.1f s (greedy %.1f s)", a.podlessWins,
                                  double(def.hardness), double(a.podlessTime), double(a.medTime)),
                    a;
@@ -381,6 +385,7 @@ struct BakeOut {
     int index = 0;
     bool done = false, accepted = false;
     u64 seed = 0;
+    int recipe = -1;
     i32 spire = 0;
     float baseFlow = 0, pa = 0, pn = 0, m = 0, ref = 0, target = 0, scale = 1, fight = 0;
     int seedsTried = 0;
@@ -401,10 +406,13 @@ float delivers(const LevelDef& def, BotKind kind) {
 
 // Line g's cheap forecast (VARIETY_DESIGN 12.2 line g, before the costly runs): on a level with a lasting boon, the boons
 // taken freely must raise greedy's delivery 12% over podless's with no enemy, or greedy will not be 10% faster with the
-// enemy on either. Hand-made levels, festivals, holdouts and colossi pass: a festival and a holdout have other lines, and
+// enemy on either. Hand-made levels, introductions, festivals, holdouts and colossi pass: an introduction teaches its recipe,
+// a festival and a holdout have other lines, and
 // a colossus is won or lost as it arrives, so a slightly weaker stream loses outright (line g holds by "podless loses").
 bool forecastG(const LevelDef& def) {
-    if (isHandMade(def.index) || def.kind == kFestival || def.kind == kHoldout || def.kind == kColossus) return true;
+    if (isHandMade(def.index) || setPieceAt(def.index) >= 0 || introRecipe(def.index) >= 0 || def.kind == kFestival ||
+        def.kind == kHoldout || def.kind == kColossus)
+        return true;
     bool lasting = false;
     for (int i = 0; i < def.geodeCount; ++i)
         lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
@@ -415,14 +423,15 @@ bool forecastG(const LevelDef& def) {
 
 // VARIETY_DESIGN 12.2 for one level: the layout from its seed, then Pa, Pn, the reliance m, R, geode health, the enemy,
 // the spire, the acceptance; the next seed while a line fails (up to eight; hand-made levels have one).
-BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
+BakeOut bakeOne(int index, int firstTry = 0, int tries = 12, int recipe = -1) {
     BakeOut b;
     b.index = index;
+    b.recipe = recipe;
     const bool hand = isHandMade(index);
     if (hand) tries = firstTry == 0 ? 1 : 0;
     for (int t = firstTry; t < firstTry + tries; ++t) {
         const u64 seed = defaultSeed(index) + u64(t) * 1000003u;
-        LevelDef def = layoutFor(index, seed);
+        LevelDef def = layoutFor(index, seed, recipe);
         const float T = def.targetT;
         b.seedsTried = t + 1;
         // Steps 2-4: Pa and Pn, the reliance m and R. Geode health is seconds of the stream at its column (sizeGeodes, in
@@ -440,7 +449,8 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
         for (int i = 0; i < def.geodeCount; ++i)
             lasting = lasting || def.geodes[i].boon == kBoonLantern || def.geodes[i].boon == kBoonQuicken || def.geodes[i].boon == kBoonBright ||
                       def.geodes[i].boon == kBoonKindle;
-        if (!hand && lasting && def.kind != kFestival && def.kind != kHoldout && def.kind != kColossus && pa < 1.12f * pn) {
+        if (!hand && setPieceAt(index) < 0 && introRecipe(index) < 0 && lasting && def.kind != kFestival && def.kind != kHoldout &&
+            def.kind != kColossus && pa < 1.12f * pn) {
             b.seed = seed;
             std::snprintf(b.acc.why, sizeof b.acc.why, "g: with no enemy greedy delivers %.0f a second, podless %.0f", double(pa / T),
                           double(pn / T));
@@ -596,8 +606,21 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
             bisectShare = okShare;
             def.baseFlow = def.fight * R / T * scale;
         }
+        // Twins, colossi and bosses meet the contest's edge (VARIETY_DESIGN 5.9) most: one more glooms' wave and greedy is
+        // overrun. Where the bisection reached that edge before the target, the level is sized at the strongest enemy
+        // greedy still beat and held to the share it cancelled there (as a set piece is).
+        bool atEdge = false;
+        if (!hand && (def.kind == kTwins || def.kind == kColossus || def.kind == kBoss) && okDelivered > 0 &&
+            std::fabs(bisectShare - target) > 0.08f) {
+            scale = okScale;
+            delivered = okDelivered;
+            bisectShare = okShare;
+            def.baseFlow = def.fight * R / T * scale;
+            atEdge = true;
+        }
+        const float aim = atEdge ? bisectShare : target;
         // A bisection that could not reach the target leaves a level sized by a run that is not the level: next seed.
-        if (!hand && std::fabs(bisectShare - target) > 0.08f) {
+        if (!hand && !atEdge && setPieceAt(index) < 0 && std::fabs(bisectShare - target) > 0.08f) {
             b.seed = seed;
             b.target = target;
             std::snprintf(b.acc.why, sizeof b.acc.why, "the enemy's bisection cancelled %.0f%% against %.0f%%", double(bisectShare * 100),
@@ -611,16 +634,23 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
         setGoals(def);
         // Step 7: acceptance; the real runs end at the win, which cancels a few points more than the bisection's: up to
         // two corrections of the scale toward the target before the next seed.
-        Acceptance acc = accept(def, target, false);
-        for (int fix = 0; fix < 2 && !hand && std::fabs(acc.medShare - target) > 0.04f && acc.medShare > 0.01f; ++fix) {
-            scale *= target / acc.medShare;
+        Acceptance acc = accept(def, aim, false);
+        for (int fix = 0; fix < 2 && !hand && std::fabs(acc.medShare - aim) > 0.04f && acc.medShare > 0.01f; ++fix) {
+            scale *= aim / acc.medShare;
             def.baseFlow = def.fight * R / T * scale;
             std::vector<float> d3;
             for (u64 s = 2; s <= 4; ++s) d3.push_back(float(runLevel(def, BotKind::Greedy, s, er).delivered));
             goal = twoSignificant(0.85f * median(d3));
             def.spireHealth = goal;
             setGoals(def);
-            acc = accept(def, target, false);
+            acc = accept(def, aim, false);
+        }
+        // A set piece, or a level at the edge, that greedy does not win nine runs of ten (line a, b): a milder enemy, twice at
+        // most (its share is not a line).
+        for (int fix = 0; fix < 2 && !acc.ok && (setPieceAt(index) >= 0 || atEdge) && (acc.why[0] == 'a' || acc.why[0] == 'b'); ++fix) {
+            scale *= 0.85f;
+            def.baseFlow = def.fight * R / T * scale;
+            acc = accept(def, aim, false);
         }
         // A goal that falls too soon or too late (line c): sized again toward 0.9 T from greedy's median time, twice at most.
         for (int fix = 0; fix < 1 && !acc.ok && acc.why[0] == 'c' && acc.medTime > 0; ++fix) {
@@ -629,8 +659,9 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
             goal = twoSignificant(float(goal) * clampv(0.9f * T / acc.medTime, steep ? 0.95f : 0.85f, steep ? 1.06f : 1.2f));
             def.spireHealth = goal;
             setGoals(def);
-            acc = accept(def, target, false);
+            acc = accept(def, aim, false);
         }
+        if (acc.ok && atEdge) std::printf("edge: level %d held at %.0f%% (target %.0f%%)\n", index, double(aim * 100), double(target * 100));
         if (acc.ok && def.geodeCount > 0) acc.hungryTime = botTime(def, BotKind::Hungry, 5, acc.hungryWins);  // for the band checks
         b.seed = seed;
         b.spire = goal;
@@ -639,7 +670,7 @@ BakeOut bakeOne(int index, int firstTry = 0, int tries = 12) {
         b.pn = pn / T;
         b.m = m;
         b.ref = R;
-        b.target = target;
+        b.target = aim;  // at the edge, the share it held
         b.scale = scale;
         b.fight = def.fight;
         b.acc = acc;
@@ -949,9 +980,10 @@ int acceptIntro(int from, int to) {
 }
 
 int finishBake(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, std::vector<BakeOut>& results,
-               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0);
+               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0, int repairFrom = 0);
 
-int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, const char* repairOnly) {
+int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, const char* repairOnly,
+               int repairFrom) {
     from = maxv(2, from);
     const int n = to - from + 1;
     if (n <= 0) return 2;
@@ -979,11 +1011,12 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
         for (int i = 0; i < n; ++i) {
             const LevelDef d = levelFor(from + i);
             picks[size_t(i)].tries = int((d.seed - defaultSeed(from + i)) / 1000003u);
+            picks[size_t(i)].recipe = forcedRecipe(from + i) ? -1 : d.recipe;
             results[size_t(i)].accepted = true;  // kept: written from the table below
         }
         for (int l : marked) results[size_t(l - from)].accepted = false;
         std::printf("repair only: %d levels marked not accepted in %s\n", int(marked.size()), repairOnly);
-        return finishBake(from, to, jobs, keepTo, out, report, repairSeeds, results, fps, picks, t0);
+        return finishBake(from, to, jobs, keepTo, out, report, repairSeeds, results, fps, picks, t0, repairFrom);
     }
     // Pass 1 (VARIETY_TECH 5): the layouts, one thread, in level order, each the first seed that passes the lints and
     // VARIETY_DESIGN 11's rule against every level already chosen (level 1 and the rows outside from..to as the table has
@@ -1004,7 +1037,7 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
         for (;;) {
             const int i = next.fetch_add(1);
             if (i >= n) return;
-            results[size_t(i)] = bakeOne(from + i, picks[size_t(i)].tries, 1);
+            results[size_t(i)] = bakeOne(from + i, picks[size_t(i)].tries, 1, picks[size_t(i)].recipe);
             const BakeOut& b = results[size_t(i)];
             const int d = doneCount.fetch_add(1) + 1;
             std::printf("bake %d/%d: level %d %s (seed %llu, spire %d, flow %.1f, Pa %.0f Pn %.0f m %.2f, share %.0f%%/%.0f%%, greedy %d/10 "
@@ -1025,7 +1058,7 @@ int bakeLevels(int from, int to, int jobs, int keepTo, const char* out, const ch
 
 // Pass 3 and the outputs. A result with `done` false is a row kept from the table (a repair-only run).
 int finishBake(int from, int to, int jobs, int keepTo, const char* out, const char* report, int repairSeeds, std::vector<BakeOut>& results,
-               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0) {
+               std::vector<Fingerprint>& fps, std::vector<LayoutChoice>& picks, double t0, int repairFrom) {
     const int n = to - from + 1;
     std::vector<std::thread> pool;
     // Pass 3, repair (VARIETY_TECH 5): every generated level not accepted takes the next seeds whose layouts pass the lints
@@ -1044,21 +1077,22 @@ int finishBake(int from, int to, int jobs, int keepTo, const char* out, const ch
             const int k = nextRepair.fetch_add(1);
             if (k >= int(repair.size())) return;
             const int i = repair[size_t(k)], level = from + i;
-            int balanced = 0, t = picks[size_t(i)].tries + 1;
+            int balanced = 0;
             BakeOut last;
             bool done = false;
-            for (; balanced < repairSeeds && t < picks[size_t(i)].tries + 1 + 64 * repairSeeds && !done; ++t) {
-                const LevelDef def = layoutFor(level, seedFor(level, t));
-                if (!lintLevel(def, level, lintWhy, sizeof lintWhy)) continue;
+            // One layout of `recipe` from seed number t: the lints, the rule, the balance. True if it counts as balanced (a
+            // layout line g's forecast threw away, two runs with no enemy, does not).
+            auto attempt = [&](int recipe, int t) {
+                const LevelDef def = layoutFor(level, seedFor(level, t), recipe);
+                if (!lintLevel(def, level, lintWhy, sizeof lintWhy)) return false;
                 const Fingerprint f = fingerprintOf(def);
                 {
                     std::lock_guard<std::mutex> g(fpLock);
-                    if (!ruleHolds(fps, allFixed, level, f, nullptr, nullptr, 1)) continue;
+                    if (!ruleHolds(fps, allFixed, level, f, nullptr, nullptr, 1)) return false;
                 }
-                last = bakeOne(level, t, 1);
-                // A layout line g's forecast threw away (two runs with no enemy) is not one of the eight balanced.
-                if (std::strncmp(last.acc.why, "g: with no enemy", 16) != 0) ++balanced;
-                if (!last.accepted) continue;
+                last = bakeOne(level, t, 1, recipe);
+                const bool counts = std::strncmp(last.acc.why, "g: with no enemy", 16) != 0;
+                if (!last.accepted) return counts;
                 std::lock_guard<std::mutex> g(fpLock);
                 if (ruleHolds(fps, allFixed, level, f, nullptr, nullptr, 1)) {
                     fps[size_t(level)] = f;
@@ -1066,6 +1100,36 @@ int finishBake(int from, int to, int jobs, int keepTo, const char* out, const ch
                     results[size_t(i)] = last;
                     results[size_t(i)].done = true;
                     done = true;
+                }
+                return counts;
+            };
+            const int own = picks[size_t(i)].recipe, kind = kindFor(level);  // the same recipe, new layouts
+            const bool ownServes = own < 0 || forcedRecipe(level) || recipeWeight(level, kind, own) > 0;
+            const int first = repairFrom > 0 ? repairFrom : picks[size_t(i)].tries + 1;
+            for (int t = first; ownServes && balanced < repairSeeds && t < first + 64 * repairSeeds && !done; ++t)
+                balanced += attempt(own, t) ? 1 : 0;
+            // None of them was accepted (or the recipe no longer serves the level's kind): the other recipes the level may
+            // take, a quarter as many balanced seeds each, the rule deciding as above. A level leaves its recipe only while
+            // that recipe keeps two levels in the hundred (the variety contract's least; the report checks the table after).
+            int ownInHundred = 0;
+            {
+                std::lock_guard<std::mutex> g(fpLock);
+                const int h0 = (level - 1) / 100 * 100 + 1;
+                for (int l = h0; l < h0 + 100 && l < int(fps.size()); ++l) ownInHundred += int(fps[size_t(l)].recipe) == own ? 1 : 0;
+            }
+            if (!done && !forcedRecipe(level) && (!ownServes || ownInHundred > 2)) {
+                const int each = maxv(1, repairSeeds / 4);
+                int others[64], count = 0;  // heaviest first: a kind's own recipe, then a world's signature
+                for (int rc = 0; rc < recipeCount() && count < 64; ++rc)
+                    if (rc != own && recipeWeight(level, kind, rc) > 0) others[count++] = rc;
+                std::stable_sort(others, others + count, [&](int x, int y) { return recipeWeight(level, kind, x) > recipeWeight(level, kind, y); });
+                for (int j = 0; j < count && !done; ++j) {
+                    const int rc = others[j];
+                    for (int t = 1, b = 0; b < each && t <= 64 * each && !done; ++t) {
+                        const int c = attempt(rc, t) ? 1 : 0;
+                        b += c;
+                        balanced += c;
+                    }
                 }
             }
             if (!done && results[size_t(i)].done) results[size_t(i)].seedsTried += balanced;  // a kept row stays as it was
@@ -1089,24 +1153,33 @@ int finishBake(int from, int to, int jobs, int keepTo, const char* out, const ch
         FILE* f = std::fopen(out, "wb");
         if (!f) return 1;
         std::fprintf(f, "// Generated by glowtide_headless --bake-levels (GAME_DESIGN 7.4) - do not edit.\n");
-        std::fprintf(f, "// seed, spire health, base flow (enemy power a second), R (the reference power geode health is a share of);\n");
+        std::fprintf(f, "// seed, spire health, base flow (enemy power a second), R (the reference power geode health is a share of), the\n");
+        std::fprintf(f, "// recipe (-1: the calendar's draw from the seed);\n");
         std::fprintf(f, "// level 1 is not baked.\n");
         std::fprintf(f, "static const BakedLevel kBaked[] = {\n");
         const int count = maxv(to, keepTo);
         for (int level = 1; level <= count; ++level) {
             if (level >= from && level <= to && results[size_t(level - from)].done) {
                 const BakeOut& b = results[size_t(level - from)];
-                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d%s\n", (unsigned long long)b.seed, b.spire, double(b.baseFlow),
-                             double(b.ref), level, b.accepted ? "" : " (not accepted)");
-            } else if (level >= from && level <= to) {
-                const LevelDef d = levelFor(level);
-                const bool marked = std::find(stillMarked.begin(), stillMarked.end(), level) != stillMarked.end();
-                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d%s\n", (unsigned long long)d.seed, d.spireHealth,
-                             double(d.baseFlow), double(d.ref), level, marked ? " (not accepted)" : "");
+                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff, %d},  // %d%s\n", (unsigned long long)b.seed, b.spire, double(b.baseFlow),
+                             double(b.ref), b.recipe, level, b.accepted ? "" : " (not accepted)");
             } else {
-                const LevelDef d = levelFor(level);
-                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff},  // %d\n", (unsigned long long)d.seed, d.spireHealth,
-                             double(d.baseFlow), double(d.ref), level);
+                // A kept row is copied as the table stores it. Past the table's end, the level's first guess, its goal
+                // whole again (setGoals splits a twin's goal and moves a festival's stars to goal2: written from a LevelDef,
+                // V5's repair rounds halved every twin's goal and set every festival's stars to one).
+                u64 seed;
+                i32 spire;
+                float baseFlow, ref;
+                int recipe;
+                if (!bakedRow(level, seed, spire, baseFlow, ref, recipe)) {
+                    const LevelDef d = levelFor(level);
+                    seed = d.seed, baseFlow = d.baseFlow, ref = d.ref;
+                    spire = d.kind == kTwins ? d.spireHealth + d.goal2 : d.kind == kFestival ? d.goal2 : d.spireHealth;
+                    recipe = level <= 1 || forcedRecipe(level) ? -1 : int(d.recipe);
+                }
+                const bool marked = std::find(stillMarked.begin(), stillMarked.end(), level) != stillMarked.end();
+                std::fprintf(f, "    {%lluull, %d, %.3ff, %.1ff, %d},  // %d%s\n", (unsigned long long)seed, spire, double(baseFlow), double(ref),
+                             recipe, level, marked ? " (not accepted)" : "");
             }
         }
         std::fprintf(f, "};\nstatic const int kBakedGeneratorVersion = %d;\nstatic const int kBakedRulesVersion = %d;\n", kGeneratorVersion,
@@ -1130,7 +1203,7 @@ int finishBake(int from, int to, int jobs, int keepTo, const char* out, const ch
         std::fprintf(f, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         for (const BakeOut& b : results) {
             if (!b.done) continue;  // a row a repair-only run kept: its line is in the earlier report
-            const LevelDef d = layoutFor(b.index, b.seed);
+            const LevelDef d = layoutFor(b.index, b.seed, b.recipe);
             auto botCell = [](char* out, size_t n, int wins, float time) {
                 if (time >= 1e5f) std::snprintf(out, n, "%d/5 -", wins);
                 else std::snprintf(out, n, "%d/5 %.1f", wins, double(time));

@@ -508,10 +508,11 @@ bool Game::setupPicture(const char* name) {
         door.x = -(sim::kHW - 0.45f);
         def.emitters[def.emitterCount++] = door;
     }
+    if (world > 0) def.world = world;  // the props follow the world shown
     world_.init(def, 0);
     world_.launcherX = kLX;
     world_.core = 8;
-    view_.setLevel(def, world);
+    view_.setLevel(def, world, args_.paletteAlt);
     if (graphicsReady_) renderer_.setLevel(def, *view_.wp, *view_.gp);
     level_ = 12;
     setScreen(Screen::Play);

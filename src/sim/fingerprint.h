@@ -67,6 +67,7 @@ int varietyReportOn(const std::vector<Fingerprint>& fps, int from, int to, bool 
 // takes the seed that breaks the fewest pairs, and says so. fps[l] is level l's fingerprint (index 0 unused).
 struct LayoutChoice {
     int tries = 0;       // the seed's number: seed = defaultSeed(level) + tries * 1000003
+    int recipe = -1;     // the recipe (-1: the calendar's draw from the seed: a hand-made level, an introduction, a set piece)
     int looked = 0;      // seeds looked at
     int broken = 0;      // pairs the chosen layout breaks (0: the rule held)
     int lintFails = 0;   // seeds the lints threw away

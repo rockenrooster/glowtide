@@ -5,6 +5,14 @@ code to the executor. Where this text and a pinned header disagree, the header i
 way meets the same exit checks, take it and note it in `PROGRESS.md`. Section numbers are referred to
 from `PLAN.md`, `GAME_DESIGN.md` and the subplans: keep them stable.
 
+**Version 0.2's variety pass (`VARIETY_TECH.md`, "VT") replaces parts of this document; where the two
+differ, VT is right.** 4.7 levels and the generator: VT 2 (the level data, the recipe catalogue, the
+calendar, the table's row) and 3 (geodes, boons, the new lane elements, kinds, twists). 4.8 bots, the
+headless tool and the bake: VT 4 (new bots), 5 (the bake's three passes) and 6 (the variety report). 5.x
+renderer: VT 7 (geodes, the boon tray, ten palettes, sky features, prop families). 6 audio: VT 8 (new
+cues, a music loop a world). 7 game layer: VT 9. 8 verification: VT 10 (the device picture check,
+`--hash-levels`) and 11 (performance). 10 traps: VT 12 adds the ones found building 0.1.0.
+
 ---
 
 ## 1. Stack and dependencies
@@ -141,6 +149,7 @@ Arguments (desktop `argv`; on Android the `args` extra):
 |---|---|
 | `--scenario play\|touch_test\|bench_idle\|bench_flood\|bench_play` | What runs (8.1). Default `play` |
 | `--level N`, `--seed N`, `--world N` | Start at this level; override the seed or the palette |
+| `--alternate` | `bench_play` plays `--level N` and N + 1 in turn (a world change when N ends a world) |
 | `--bot greedy\|naive\|sweep\|idle` | A bot holds the thumb |
 | `--picture <name>` | A scripted still or moment (8.1); implies `--fixed-step` |
 | `--screenshot <png>`, `--frames N`, `--strip K`, `--strip-step F` | Capture frame N; with `--strip`, the K frames ending at N, F frames apart. On a device a picture holds frame N on screen until the app is stopped |

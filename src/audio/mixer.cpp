@@ -3,6 +3,9 @@
 #include <cmath>
 #include <cstring>
 
+#include "core/clock.h"
+#include "core/log.h"
+
 namespace gt::audio {
 
 namespace {
@@ -29,15 +32,54 @@ int categoryOf(int s) {
 bool isMusic(int s) { return s == kSndPulse || (s >= kSndPluck0 && s < kSndPluck0 + 11); }
 
 constexpr float kEffectsGain = 0.33f;  // the flood render lands near -17 LUFS (GAME_DESIGN 12: -20 to -14)
-constexpr float kBeat = 60.0f / 76.0f;
-constexpr float kStep = kBeat * 0.5f;  // eighth notes
 
 }  // namespace
 
-void Mixer::init(int sampleRate, int timbre) {
+Mixer::PadSet* Mixer::makePad(int rate, int world) {
+    PadSet* p = new PadSet;
+    const MusicStyle& m = worldMusic(world);
+    buildPad(rate, m, p->dark, p->bright);
+    p->world = world;
+    p->step = 30.0f / m.bpm;
+    for (int c = 0; c < 2; ++c)
+        for (int k = 0; k < 11 && p->noteCount[c] < 6; ++k)
+            for (int j = 0; j < 3; ++j)
+                if (kLadderMidi[k] % 12 == m.chords[c][j] % 12) {
+                    p->notes[c][p->noteCount[c]++] = k;
+                    break;
+                }
+    return p;
+}
+
+Mixer::~Mixer() {
+    if (worker_.joinable()) worker_.join();
+    delete pad_;
+    delete pending_.exchange(nullptr);
+    delete retired_.exchange(nullptr);
+}
+
+void Mixer::init(int sampleRate, int timbre, int world) {
     rate_ = sampleRate;
     bank_.build(sampleRate, timbre);
     for (Voice& v : voices_) v.sound = -1;
+    delete pad_;
+    pad_ = makePad(sampleRate, world);
+    wantWorld_ = world;
+}
+
+void Mixer::setWorld(int world, bool boss) {
+    boss_.store(boss);
+    delete retired_.exchange(nullptr);
+    if (world == wantWorld_) return;
+    wantWorld_ = world;
+    if (worker_.joinable()) worker_.join();
+    delete pending_.exchange(nullptr);  // a pad the seam has not taken yet: this one replaces it
+    const int rate = rate_;
+    worker_ = std::thread([this, rate, world] {
+        const double t0 = nowSeconds();
+        pending_.store(makePad(rate, world));
+        GT_LOG("audio: world %d's pad built in %.0f ms (a worker thread)", world, (nowSeconds() - t0) * 1000.0);
+    });
 }
 
 bool Mixer::push(const Command& c) {
@@ -131,11 +173,12 @@ void Mixer::musicStep(int frames) {
     duck_ += (duckTarget_ - duck_) * minv(1.0f, dt / 0.05f);
     if (!musicOn_) return;
     musicClock_ += double(dt);
-    // Eighth-note steps: the low pulse on beats one and three, sparse plucks from the chord's pentatonic notes.
+    // Eighth-note steps: the low pulse on beats one and three (a boss: every beat), sparse plucks from the chord's notes.
+    const float kStep = pad_->step;
     while (musicClock_ >= double(nextStep_) * double(kStep)) {
         const int step = nextStep_ % 32;
         const int bar = step / 8;
-        if (step % 4 == 0 && !padOnly) {
+        if (step % (boss_.load(std::memory_order_relaxed) ? 2 : 4) == 0 && !padOnly) {
             Command c;
             c.sound = kSndPulse;
             c.gain = 0.55f * duck_;
@@ -144,12 +187,11 @@ void Mixer::musicStep(int frames) {
         pluckRng_ = pluckRng_ * 1664525u + 1013904223u;
         const float roll = float(pluckRng_ >> 8) / 16777216.0f;
         if (!padOnly && roll < 0.10f + 0.45f * intensityNow_ && step % 2 == (bar & 1)) {
-            static const int cNotes[6] = {0, 2, 3, 5, 7, 8};   // C E G C' E' G'
-            static const int aNotes[6] = {4, 0, 2, 9, 5, 7};   // A C E A' C' E'
+            const int chord = bar < 2 ? 0 : 1;
             pluckRng_ = pluckRng_ * 1664525u + 1013904223u;
-            const int k = int((pluckRng_ >> 16) % 6u);
+            const int k = int((pluckRng_ >> 16) % u32(maxv(1, pad_->noteCount[chord])));
             Command c;
-            c.sound = u8(kSndPluck0 + (bar < 2 ? cNotes[k] : aNotes[k]));
+            c.sound = u8(kSndPluck0 + pad_->notes[chord][k]);
             c.gain = (0.35f + 0.25f * intensityNow_) * duck_;
             c.pan = (float(int((pluckRng_ >> 8) % 100u)) / 50.0f - 1.0f) * 0.6f;
             start(c);
@@ -231,18 +273,27 @@ void Mixer::mixChunk(float* out, int frames) {
     voicesInUse_.store(inUse);
     // The pad, crossfaded dark to bright with the tide; ducked under the win and lose.
     if (!musicSilent) {
-        const float* dark = bank_.padDark();
-        const float* bright = bank_.padBright();
-        const int n = bank_.padLength();
         const float g = musicGain_ * 0.55f * duck_;
         const float b = intensityNow_;
         for (int i = 0; i < frames; ++i) {
+            const float* dark = pad_->dark.data();
+            const float* bright = pad_->bright.data();
             const int k = int(padPos_);
             const float x = (dark[k] + (bright[k] - dark[k]) * b) * g * musicEnv_[i];
             out[i * 2] += x;
             out[i * 2 + 1] += x;
             padPos_ += 1.0;
-            if (padPos_ >= double(n)) padPos_ -= double(n);
+            if (padPos_ >= double(pad_->dark.size())) {
+                padPos_ = 0;
+                // The seam: a new world's pad comes in here, and its clock starts with it.
+                if (PadSet* p = pending_.exchange(nullptr)) {
+                    PadSet* old = retired_.exchange(pad_);
+                    (void)old;  // the game thread frees one at a time; a second swap before it does is not possible (one build at a time)
+                    pad_ = p;
+                    musicClock_ = 0;
+                    nextStep_ = 0;
+                }
+            }
         }
     }
     if (tone_.load()) {

@@ -64,8 +64,11 @@ bool parseArgs(int argc, char** argv, Args& a) {
             if (!need() || !toInt(v, iv) || iv < 0) return false;
             a.recipe = int(iv);
         } else if (!std::strcmp(k, "--world")) {
-            if (!need() || !toInt(v, iv) || iv < 1 || iv > 5) return false;
+            if (!need() || !toInt(v, iv) || iv < 1 || iv > 10) return false;
             a.world = int(iv);
+        } else if (!std::strcmp(k, "--palette-alt")) {
+            if (!need() || !toInt(v, iv) || iv < 0 || iv > 2) return false;
+            a.paletteAlt = int(iv);
         } else if (!std::strcmp(k, "--bot")) {
             if (!need() || !copyStr(a.bot, sizeof a.bot, v)) return false;
             if (std::strcmp(v, "greedy") && std::strcmp(v, "naive") && std::strcmp(v, "sweep") && std::strcmp(v, "idle")) {
@@ -140,6 +143,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.fps = fv;
         } else if (!std::strcmp(k, "--tone")) {
             a.tone = true;
+        } else if (!std::strcmp(k, "--alternate")) {
+            a.alternate = true;
         } else if (!std::strcmp(k, "--lint")) {
             a.lint = true;
         } else if (!std::strcmp(k, "--fresh")) {

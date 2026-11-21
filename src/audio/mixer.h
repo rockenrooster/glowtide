@@ -4,6 +4,8 @@
 // mixes. The callback never locks, allocates or logs.
 
 #include <atomic>
+#include <thread>
+#include <vector>
 
 #include "audio/synth.h"
 
@@ -19,7 +21,11 @@ struct Command {
 class Mixer {
 public:
     static constexpr int kVoices = 32;
-    void init(int sampleRate, int timbre);
+    ~Mixer();
+    void init(int sampleRate, int timbre, int world = 1);
+    // Game thread: the world whose music plays (VARIETY_DESIGN 15; its pad is built on a worker thread and comes in at
+    // the loop's seam, the old one playing until then) and whether a boss is on (the low pulse on every beat).
+    void setWorld(int world, bool boss);
     // Game thread.
     bool push(const Command& c);  // false if the ring is full (the command is dropped and counted)
     void play(int sound, float gain, float pan, float pitch = 1.0f, float delay = 0.0f);
@@ -45,9 +51,25 @@ private:
         int delay = 0;
         u32 age = 0;
     };
+    // A world's pad and what goes with it: the eighth note's length and, over each chord, the plucks (the ladder's notes
+    // of the chord's first three).
+    struct PadSet {
+        std::vector<float> dark, bright;
+        float step = 0.4f;
+        int notes[2][6] = {};
+        int noteCount[2] = {};
+        int world = 1;
+    };
+    static PadSet* makePad(int rate, int world);
     void start(const Command& c);
     void mixChunk(float* out, int frames);
     void musicStep(int frames);
+    PadSet* pad_ = nullptr;                    // the audio thread's
+    std::atomic<PadSet*> pending_{nullptr};    // built, waiting for the seam
+    std::atomic<PadSet*> retired_{nullptr};    // swapped out, for the game thread to free
+    std::thread worker_;
+    int wantWorld_ = 1;
+    std::atomic<bool> boss_{false};
 
     Bank bank_;
     int rate_ = 48000;
@@ -59,7 +81,7 @@ private:
     std::atomic<float> intensity_{0};
     std::atomic<bool> tone_{false};
     bool effectsOn_ = true, musicOn_ = true;
-    float musicGain_ = 0.54f;  // the music render sits 9 dB under the flood render (P4 measurements)
+    float musicGain_ = 0.62f;  // the music renders sit 10-11 dB under the flood render (V5: the flood grew 0.9 dB since P4)
     float duck_ = 1, duckTarget_ = 1, duckHold_ = 0;
     double padPos_ = 0;
     double musicClock_ = 0;  // seconds

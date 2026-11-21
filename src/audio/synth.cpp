@@ -272,15 +272,36 @@ void Bank::build(int rate, int timbre) {
         }
         make(kSndPulse, std::move(b), 0.8f);
     }
-    // The pad: four bars at 76 bpm; chords crossfade on their bar lines; soft detuned partials through a low-pass.
-    const float beat = 60.0f / 76.0f, loop = beat * 16.0f;
+}
+
+const MusicStyle& worldMusic(int world) {
+    // The chords as MIDI notes; every one is C, D, E, G or A. World 1 keeps the first loop's C and A, with A for its B.
+    static const MusicStyle m[10] = {
+        {{{60, 64, 67, 69, 74}, {57, 60, 64, 67, 74}}, 76},  // Violet Dusk: C6/9, Am7 add 11
+        {{{57, 60, 64, 67, 74}, {55, 60, 62, 64, 69}}, 72},  // Deep Teal: Am7 add 11, G6 sus 4
+        {{{60, 64, 67, 69, 74}, {62, 64, 67, 69, 72}}, 80},  // Rose Dawn: C6/9, D9 sus 4
+        {{{64, 67, 69, 72, 74}, {60, 64, 67, 69, 74}}, 74},  // Emerald Aurora: Am7/E, C6/9
+        {{{55, 57, 62, 64, 72}, {57, 60, 64, 67, 74}}, 84},  // Ember: G6/9 add 11, Am7 add 11
+        {{{62, 64, 69, 72, 76}, {57, 60, 64, 69, 72}}, 70},  // Frost Glass: D9 sus 4, Am
+        {{{57, 60, 64, 67, 74}, {62, 67, 69, 72, 74}}, 78},  // Storm Indigo: Am7 add 11, D7 sus 4
+        {{{60, 64, 67, 69, 74}, {55, 60, 62, 64, 69}}, 82},  // Gold Noon: C6/9, G6 sus 4
+        {{{64, 67, 69, 74, 76}, {57, 60, 64, 67, 72}}, 70},  // Moonlit Jade: Em7 sus 4, Am7
+        {{{62, 64, 67, 69, 72}, {57, 60, 64, 67, 74}}, 80},  // Crimson Dusk: D9 sus 4, Am7 add 11
+    };
+    return m[(world < 1 ? 0 : (world - 1) % 10)];
+}
+
+void buildPad(int rate, const MusicStyle& m, std::vector<float>& darkOut, std::vector<float>& brightOut) {
+    const float R = float(rate);
+    // Four bars; the chords crossfade on their bar lines; soft detuned partials through a low-pass.
+    const float beat = 60.0f / m.bpm, loop = beat * 16.0f;
     const int len = int(loop * R);
-    padDark_.assign(size_t(len), 0.0f);
-    padBright_.assign(size_t(len), 0.0f);
-    // C maj9 and A min9 voiced from C4 and A3: a phone speaker has no bass, so the pad lives above 200 Hz.
-    const int chords[2][5] = {{60, 64, 67, 71, 74}, {57, 60, 64, 67, 71}};
-    for (int bright = 0; bright < 2; ++bright) {
-        std::vector<float>& out = bright ? padBright_ : padDark_;
+    darkOut.assign(size_t(len), 0.0f);
+    brightOut.assign(size_t(len), 0.0f);
+    const auto& chords = m.chords;
+    for (int lit = 0; lit < 2; ++lit) {
+        std::vector<float>& out = lit ? brightOut : darkOut;
+        const bool bright = lit != 0;
         OnePole lp;
         const float a = 1.0f - std::exp(-kTwoPi * (bright ? 3000.0f : 900.0f) / R);
         const float half = loop * 0.5f;
