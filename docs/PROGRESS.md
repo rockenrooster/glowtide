@@ -697,6 +697,7 @@ RELEASE_PIPELINE.md, Signing.
 | The music's level (V5) | Gain 0.54 to 0.73 | The flood render had grown 2.1 dB since P4, leaving the loops 12-13 dB under it (GD 12: 9 +- 2); now 9.7-10.7 |
 | The Moto's frame time (V5) | The unit and backdrop shaders made cheaper with the same pictures, not an effect dropped | `bench_flood` was 12% late with V5's skies, 5.6% already in V4; 0.79% after (V5: measured) |
 | The tablet in V5 | Tested once the owner paired its wireless debugging again (it had stopped trusting this PC); every check passes | The 12R is out for now (the owner, 2026-11-20) |
+| The 12R for 0.2.0 | Not tested: left out by the owner ("Leave it out", 2026-11-21) | Out of testing since 2026-11-20 and offline; its last run (V4) passed every check, and no V5 or V6 shader indexes an array by a variable (VARIETY_TECH 12's 12R trap) |
 
 ## Measured device facts
 
