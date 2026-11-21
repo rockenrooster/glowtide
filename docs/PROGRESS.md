@@ -30,8 +30,8 @@ listed under "Choices" below; the owner can reverse any of them.
 | V2 Lane and enemy | Done 2026-11-20 (phones: below) | Hoppers, breathing gates, sliding walls, side doors, runners, eight plans, `KINDLE`, `COMET`, `HUSH`; levels 2-300 baked again and accepted; stretch items not built |
 | V3 Kinds, twists, bosses | Done on the PC 2026-11-20 (phones: in V4's runs) | Holdout, Colossus, Twins, Festival, four bosses, eight twists; every kind's lines pass in the bake; Siege unchanged |
 | V4 Recipes, calendar, no repeats | Code done 2026-11-20; its table is re-baked in V5 | 24 recipes, 12 set pieces, the calendar, the tuned rule, the bake's three passes, 600 levels, replays; 17 levels not accepted and the variety report failing on this table (below) |
-| V5 Worlds and dressing | Done 2026-11-21 (phones: the Moto; the tablet not reached, the 12R out for now) | Ten worlds (five palettes picked), signatures, two prop families, four sky features, the world's banner, music a world; the table names each level's recipe; generator 11; all 599 levels accepted and both contracts holding on the table; the Moto's frame time brought back to 0.8% late |
-| V6 Balance, polish, release | Done 2026-11-21: released as GitHub build 23 (0.2.0); the tablet's rows wait for its pairing | V5's table final; balance by boon and kind; P6's checks again (flash, rebuild, sanitizers, layout lint, greyscale); soaks on the heaviest level and a festival; the release build (3.60 MB) checked on the Moto; documents; cleanup; open items in "After 0.2" |
+| V5 Worlds and dressing | Done 2026-11-21 (phones: the Moto and the tablet; the 12R out for now) | Ten worlds (five palettes picked), signatures, two prop families, four sky features, the world's banner, music a world; the table names each level's recipe; generator 11; all 599 levels accepted and both contracts holding on the table; the Moto's frame time brought back to 0.8% late |
+| V6 Balance, polish, release | Done 2026-11-21: released as GitHub build 23 (0.2.0); the Moto and the tablet pass every check | V5's table final; balance by boon and kind; P6's checks again (flash, rebuild, sanitizers, layout lint, greyscale); soaks on the heaviest level and a festival; the release build (3.60 MB) checked on the Moto; documents; cleanup; open items in "After 0.2" |
 
 ### V0: the baseline (version 0.1.0's table, levels 6 to 300)
 
@@ -554,8 +554,15 @@ force-stop; cold start 417 ms; 20 lifecycle cycles; `bench_flood` 60 s after 60 
 frame 33.9 ms (limit 50), each world's pad built in 95 ms on its worker thread; that change allocates six times (the
 thread and the pad's buffers): a level change, not the steady frame. `bench_play` on the heaviest level, 138 (twins at
 the unit cap, 3,336 units): 0.47% late, worst 34.2 ms, main thread CPU p95 5.18 ms (budget 6), tick p95 2.68 ms (PLAN
-5's first share of the budget was 2.5), 0 allocations. The tablet was not reached (Choices); the 12R is out for now
-(the owner).
+5's first share of the budget was 2.5), 0 allocations. The 12R is out for now (the owner).
+
+**On the tablet** (Galaxy Tab A11+ `R5GL362BEHX`, the same build, after the owner paired its wireless debugging again):
+determinism 34 of 34 equal to the PC; the flow test 53 checks, 0 failed; the same eight picture checks (mean difference
+0.0-0.1); back key; save through a force-stop; cold start 495 ms (worst 508); 20 lifecycle cycles; `bench_flood` 0.00%
+late (worst 16.8 ms, CPU p95 5.37 ms); `bench_play` on 87 and on the heaviest level, 138: 0.00% late (138: worst 16.8
+ms, CPU p95 5.53 ms, tick p95 2.10 ms, 0 allocations); across a world's first level: 0.00% late, worst 16.7 ms, pads
+built in 68-70 ms, the bank in 104 ms. Its panel offers 60 and 90 Hz; the game runs at 60 while its Motion smoothness
+is Standard.
 
 **The performance contract on the Moto** (`bench_flood`, 60 s after a three-minute soak; world 1, whose aurora was
 the costliest sky). V5 as first built: 12.0% late, display p95 33.5 ms, CPU p95 4.80 ms, the GPU the limit (the frame
@@ -620,8 +627,9 @@ the last 60 s 0.42% late, worst 34.6 ms, CPU p95 5.20 ms; memory 2.1% from minut
 C. Twenty minutes of festival 595 looping: the last 60 s 0.53% late, worst 33.7 ms, CPU p95 3.92 ms; memory
 1.3%; battery 32.1 C throughout.
 
-**The device matrix:** the Moto, all ten checks with eight picture checks (V5: measured). The tablet was not reached (its
-wireless debugging no longer trusts this PC) and the 12R is out for now (the owner): their rows of PLAN 5 wait.
+**The device matrix:** the Moto and the tablet, all ten checks with eight picture checks each (V5: measured; the tablet
+once the owner paired it again). The 12R is out for now (the owner): its row of PLAN 5 waits, as do the 90 and 120 Hz
+rows (the tablet runs at 60 Hz under its Motion smoothness setting).
 
 **Sound** (`review.ps1 -Set p4` with the geodes scene, `captures/p4/metrics.md`): no clipped sample; the flood -12.8 LUFS,
 the geodes scene -16.5, the music 9.7-10.7 dB under the flood; the ladder within 0.07 cents; ten minutes of `bench_flood`
@@ -688,7 +696,7 @@ RELEASE_PIPELINE.md, Signing.
 | Sky features and prop families | Reassigned so that neighbouring worlds share neither and no two worlds share both (a unit test holds the table to it) | A world is ten levels; in the first table Gold Noon and Moonlit Jade, side by side, both had the moon, and three pairs of worlds had the same dressing |
 | The music's level (V5) | Gain 0.54 to 0.73 | The flood render had grown 2.1 dB since P4, leaving the loops 12-13 dB under it (GD 12: 9 +- 2); now 9.7-10.7 |
 | The Moto's frame time (V5) | The unit and backdrop shaders made cheaper with the same pictures, not an effect dropped | `bench_flood` was 12% late with V5's skies, 5.6% already in V4; 0.79% after (V5: measured) |
-| The tablet in V5 | Not tested: its wireless debugging answers at its address but no longer trusts this PC (it needs pairing again, on the tablet) | The 12R is out for now (the owner, 2026-11-20); the Moto carried V5's device checks |
+| The tablet in V5 | Tested once the owner paired its wireless debugging again (it had stopped trusting this PC); every check passes | The 12R is out for now (the owner, 2026-11-20) |
 
 ## Measured device facts
 
@@ -820,8 +828,8 @@ the rotation), `src/core/alloc_counter.cpp`, the activity's immersive mode, argu
    game is too gentle.
 2. **BRIGHT and LANTERN** are opened by greedy on 98% and 96% of the levels that offer them: nearly always worth it for
    the bot. A tougher shell or a smaller gain would make them a choice again (a new bake).
-3. **The tablet and the 12R:** the tablet's wireless debugging needs pairing again (on the tablet) and the 12R is out for
-   now; their matrix rows, and the 90 and 120 Hz rows of PLAN 5, wait.
+3. **The 12R and high refresh rates:** the 12R is out for now, and the tablet runs at 60 Hz while its Motion smoothness
+   is Standard; the 90 and 120 Hz rows of PLAN 5 wait for one of them at its high rate.
 4. **Mirrored replays:** greedy breaks a tie between equal lines toward the left, so on a lane of patrols its time on a
    replay can differ from the original's by about 11% (both inside the level's lines). A tie-break that mirrors would
    need a new bake.
