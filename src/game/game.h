@@ -28,7 +28,7 @@ struct GameEnv {
     float refreshHz = 60;
 };
 
-enum class Screen { Home, Play, Pause, Win, Lose, Settings };
+enum class Screen { Home, Play, Pause, Win, Lose, Settings, Levels };
 const char* screenName(Screen s);
 
 class Game {
@@ -77,6 +77,7 @@ private:
     void drawPause();
     void drawResult(bool won);
     void drawSettings(float dt);
+    void drawLevels();
     void drawHint();
     void showHint(int id);
     void showLine(const char* text);
@@ -126,6 +127,7 @@ private:
     enum class Mode { Debug, Play, Picture, BenchFlood } mode_ = Mode::Play;
     Screen screen_ = Screen::Home;
     Screen settingsReturn_ = Screen::Home;
+    int levelsFirst_ = 0;  // the level selector's first level on the page (0: the current level's page)
     float screenTime_ = 0;       // seconds in the current screen
     float resultTime_ = 0;       // seconds since the level ended
     bool worldTicks_ = false;

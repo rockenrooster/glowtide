@@ -201,14 +201,19 @@ bool Game::setupPicture(const char* name) {
     const struct {
         const char* name;
         int level;
-    } screens[] = {{"home", 3}, {"hud", 3}, {"pause", 3}, {"win", 3}, {"lose", 2}, {"settings", 3}, {"button_strip", 3}};
+    } screens[] = {{"home", 3}, {"hud", 3}, {"pause", 3}, {"win", 3}, {"lose", 2}, {"settings", 3}, {"levels", 68}, {"button_strip", 3}};
     for (const auto& sc : screens) {
         if (std::strcmp(name, sc.name)) continue;
         std::snprintf(pictureScreen_, sizeof pictureScreen_, "%s", name);
-        if (!std::strcmp(name, "home") || !std::strcmp(name, "settings")) {
+        if (!std::strcmp(name, "home") || !std::strcmp(name, "settings") || !std::strcmp(name, "levels")) {
             enterLevel(sc.level, false);
             coldStart_ = !std::strcmp(name, "home");
             if (!std::strcmp(name, "settings")) setScreen(Screen::Settings);
+            if (!std::strcmp(name, "levels")) {  // the selector on level 68's page, a few levels' stars won
+                for (int i = 0; i < 67; ++i) save_.stars[i] = u8(1 + (i * 7) % 3);
+                levelsFirst_ = 0;
+                setScreen(Screen::Levels);
+            }
             return true;
         }
         if (!std::strcmp(name, "hud") || !std::strcmp(name, "pause")) {

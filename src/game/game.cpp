@@ -177,7 +177,7 @@ void Game::enterLevel(int index, bool fade) {
 }
 
 const char* screenName(Screen s) {
-    static const char* const names[] = {"HOME", "PLAY", "PAUSE", "WIN", "LOSE", "SETTINGS"};
+    static const char* const names[] = {"HOME", "PLAY", "PAUSE", "WIN", "LOSE", "SETTINGS", "LEVELS"};
     return names[int(s)];
 }
 
@@ -375,6 +375,7 @@ void Game::key(Key k, bool down) {
                     resumeRamp_ = 0;
                     break;
                 case Screen::Settings: setScreen(settingsReturn_); break;
+                case Screen::Levels: setScreen(Screen::Home); break;
                 case Screen::Home: quit_ = true; break;
                 default: enterLevel(level_ + (screen_ == Screen::Win ? 1 : 0), true); break;
             }

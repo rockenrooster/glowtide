@@ -590,7 +590,8 @@ through its colour grade, 150 ms each way.
 ```
 launch ──▶ HOME ──touch──▶ PLAY ──spire 0──▶ WIN ──NEXT──▶ HOME (the next level, waiting)
              │              │  └──core 0──▶ LOSE ──RETRY──▶ HOME (the same level and seed, waiting)
-             └─cog─▶ SETTINGS   └─pause─▶ PAUSE ──▶ RESUME / RESTART (→ HOME, same level) / SETTINGS / HOME
+             ├─cog─▶ SETTINGS   └─pause─▶ PAUSE ──▶ RESUME / RESTART (→ HOME, same level) / SETTINGS / HOME
+             └─LEVEL chip─▶ LEVELS ──a level──▶ HOME (that level, waiting)
 ```
 
 HOME is not a menu: it is a level, waiting for a touch. Nothing in it ticks; its view animates. Sizes
@@ -598,12 +599,13 @@ are in dp; every touch target is at least 48 × 48 dp; everything sits inside th
 
 | Screen | Contents |
 |---|---|
-| HOME | The level's lane (lanterns flicker, the spire pulses). The game's name across the upper third (cold start only; it fades on first touch). A `LEVEL N` chip, the star total, a settings cog at the top right. A pulsing hint `HOLD AND DRAG` with a small arc that sweeps left and right in the lower third. Any touch that is not on the cog starts the level and already fires |
+| HOME | The level's lane (lanterns flicker, the spire pulses). The game's name across the upper third (cold start only; it fades on first touch). A `LEVEL N` chip (a button: LEVELS), the star total, a settings cog at the top right. A pulsing hint `HOLD AND DRAG` with a small arc that sweeps left and right in the lower third. Any touch that is not on the chip or the cog starts the level and already fires |
 | PLAY (HUD) | Top row: `LEVEL N` chip (left), the spire's health bar (centre), pause (right). Bottom right, above the gesture inset: the tide counter. In the world: the spire's number, the core's pips, the labels |
 | PAUSE | The picture dims to 40%. `RESUME` (primary), `RESTART`, `SETTINGS`, `HOME`. After `RESUME` time ramps back up over 0.5 s |
 | WIN | `CLEARED!`, one to three stars, a line with the time and the highest tide, `NEXT` (primary, large, bottom centre), `REPLAY` |
 | LOSE | `SNUFFED OUT`, one line of advice chosen by what happened (for example `KEEP THE STREAM ON THE BIGGEST GATES`), `RETRY` (primary), `HOME` |
 | SETTINGS | Switches: `SOUND`, `MUSIC`, `HAPTICS`, `AUTO-FIRE`, `REDUCE EFFECTS`. `RESET PROGRESS` (hold for one second, then confirm). The version. Three lines of credits (the font, SDL, the licence of each) |
+| LEVELS | The level selector (the owner, 2026-11-24): every level of the table, five a row and as many rows as fit (eight at most), each a button over its best stars, the current level gold. `-100`, `PREV`, `NEXT`, `+100`, `BACK` (primary). Every level is open |
 
 Hints (each shown once, remembered in the save): level 1 `HOLD AND DRAG`; first pass through a gate
 `EVERY WISP THAT PASSES IS DOUBLED`; level 2 `PICK THE BIGGER GATE`; level 4 `÷2 HALVES YOUR STREAM`;

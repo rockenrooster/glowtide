@@ -663,6 +663,18 @@ was installed from its verified download (SHA-256 equal to the release's) on eve
 three Tab A11+ (`R5GL362AKGK`, `R5GL362AGPA`, `R5GL362BEHX`) and the Fire 7 (`GN41WE044297000Q`), after removing their
 debug copies (the owner's word); the Moto was off the network.
 
+### After 0.2.0: a level selector (2026-11-24)
+
+The owner asked for a level selector. HOME's `LEVEL N` chip is a button now; it opens LEVELS (GAME_DESIGN
+11): every level of the table, five a row and as many rows as the screen holds (eight on tall phones: forty a page), each a button over its best
+stars, the current level gold; `-100`, `PREV`, `NEXT`, `+100`, `BACK`. Every level is open. The flow test has five more
+checks (58, all passing on the desktop), the layout lint passes at the matrix's eight resolutions (`review.ps1 -Set p3`
+now draws `levels`), and the UI holds 64 controls (the selector draws 47). Not tried on a phone: none was on the network.
+
+The owner's 10% margin (every level from 68 won by greedy with the enemy and each goal 10% stronger) was built the
+same day and held back by the owner ("hold off on the level balancing tweaks until I find an impossible level"): it
+waits on the local branch `margin-pass`, with its own section in this file there.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -707,6 +719,7 @@ debug copies (the owner's word); the Moto was off the network.
 | The Moto's frame time (V5) | The unit and backdrop shaders made cheaper with the same pictures, not an effect dropped | `bench_flood` was 12% late with V5's skies, 5.6% already in V4; 0.79% after (V5: measured) |
 | The tablet in V5 | Tested once the owner paired its wireless debugging again (it had stopped trusting this PC); every check passes | The 12R is out for now (the owner, 2026-11-20) |
 | The 12R for 0.2.0 | Not tested: left out by the owner ("Leave it out", 2026-11-21) | Out of testing since 2026-11-20 and offline; its last run (V4) passed every check, and no V5 or V6 shader indexes an array by a variable (VARIETY_TECH 12's 12R trap) |
+| The level selector (2026-11-24) | Opened from HOME's `LEVEL N` chip; every level open | The owner asked for it while stuck on a level: skipping is the point. Locking the levels not reached is one line |
 
 ## Measured device facts
 
@@ -847,7 +860,7 @@ the rotation), `src/core/alloc_counter.cpp`, the activity's immersive mode, argu
    frame drops there on the Moto. Preallocate the pads if one ever does.
 6. **Set pieces' colours:** the set pieces fall on places 9 of worlds 5 and 10 of each hundred, so all twelve wear
    Ember's or Crimson Dusk's reds.
-7. **The release key** (`scripts\release-key.ps1`), so GitHub builds update one another.
+7. **The release key:** set on 2026-11-21 (`scripts\release-key.ps1`); GitHub builds update one another in the game.
 
 ## After version 1 (ideas, not built)
 

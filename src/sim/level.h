@@ -17,6 +17,7 @@ int bakedRulesVersion();
 // A row of the table this program was built with, as stored (false past its end). The bake copies kept rows from it:
 // a LevelDef's numbers are not the row's (setGoals splits a twin's goal and moves a festival's stars to goal2).
 bool bakedRow(int index, u64& seed, i32& spire, float& baseFlow, float& ref, int& recipe);
+int bakedLevelCount();  // the table's rows: the levels the level selector offers
 
 constexpr float kHW = 5.0f;              // lane half-width (GAME_DESIGN 3)
 constexpr float kLauncherRange = 4.4f;   // the launcher's rail: x in [-4.4, 4.4]

@@ -17,7 +17,7 @@ struct UiControl {
 
 class Ui {
 public:
-    static constexpr int kMaxControls = 48;
+    static constexpr int kMaxControls = 64;  // the level selector draws 47
     void begin(UiBatch* batch, const Layout& L, float opacity = 1.0f);
     // Pointer events (frame pixels). Returns true if the UI takes this touch.
     bool pointerDown(i64 id, float x, float y);

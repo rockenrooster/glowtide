@@ -77,14 +77,18 @@ void Game::drawHome(float dt) {
         uiBatch_.text("GLOWTIDE", float(L.w) * 0.5f, float(L.h) * 0.30f, size, rgba(kGold, u8(255 * a)), rgba(0x5A2A08, u8(255 * a)),
                       L.px(5), Align::Center);
     }
-    // Level chip and the star total.
+    // The level chip, a button that opens the level selector (the owner, 2026-11-24), and the star total.
     char buf[48];
     std::snprintf(buf, sizeof buf, "LEVEL %d", level_);
     const float top = L.top() + L.px(8);
     const float chipW = UiBatch::textWidth(buf, L.px(19)) + L.px(30);
     const float chipX = L.safe.left + L.px(12);
-    uiBatch_.rect(chipX + chipW * 0.5f, top + L.px(24), chipW, L.px(40), L.px(20), rgba(kInk, 205), rgba(kWhite, 46), L.px(1));
-    uiBatch_.text(buf, chipX + chipW * 0.5f, top + L.px(24), L.px(19), rgba(kWhite), rgba(kInk, 0), 0, Align::Center);
+    if (ui_.button(buf, {chipX, top, chipW, L.px(48)})) {
+        feedback_.uiTap();
+        levelsFirst_ = 0;
+        setScreen(Screen::Levels);
+        return;
+    }
     char name[48];
     if (const char* kind = goalBanner(world_.def))  // the kind under the chip, for anything but a siege (VARIETY_TECH 9.1)
         uiBatch_.text(kind, chipX, top + L.px(62), L.px(15), rgba(kGold), rgba(kInk), L.px(2), Align::Left);
@@ -318,6 +322,57 @@ void Game::drawSettings(float dt) {
     }
 }
 
+// The level selector (the owner, 2026-11-24): every level of the table, five a row and as many rows as fit (eight at most),
+// each a button over its best stars, the current one gold; a level goes to its HOME.
+void Game::drawLevels() {
+    const Layout& L = layout_;
+    const float usable = L.bottom() - L.top();
+    uiBatch_.rect(float(L.w) * 0.5f, (L.top() + L.bottom()) * 0.5f, float(L.w) - L.safe.left - L.safe.right - L.px(16), usable - L.px(16),
+                  L.px(24), rgba(kInk, 236), rgba(kWhite, 40), L.px(1));
+    // Above the grid 84 dp (the title and the page's range), under it 134 (the page row and BACK); a row is 66 dp or more
+    // (a 48 dp button, its stars, the gap).
+    const int count = sim::bakedLevelCount();
+    const int rows = clampv(int((usable - L.px(218)) / L.px(66)), 3, 8), page = 5 * rows;
+    if (levelsFirst_ <= 0) levelsFirst_ = (minv(level_, count) - 1) / page * page + 1;
+    levelsFirst_ = clampv(levelsFirst_, 1, maxv(1, count - page + 1));
+    const int last = minv(count, levelsFirst_ + page - 1);
+    char buf[32];
+    ui_.text("LEVELS", float(L.w) * 0.5f, L.top() + L.px(36), 30, kWhite);
+    std::snprintf(buf, sizeof buf, "%d-%d OF %d", levelsFirst_, last, count);
+    ui_.text(buf, float(L.w) * 0.5f, L.top() + L.px(66), 15, 0xA0A0C8);
+    const float gap = L.px(8);
+    const float cellW = minv(L.px(76), (float(L.w) - L.safe.left - L.safe.right - L.px(48) - 4 * gap) / 5.0f);
+    const float gridW = 5 * cellW + 4 * gap, x0 = float(L.w) * 0.5f - gridW * 0.5f;
+    const float pitch = minv(L.px(84), (usable - L.px(218)) / float(rows));
+    for (int lv = levelsFirst_; lv <= last; ++lv) {
+        const int i = lv - levelsFirst_;
+        const Rect r{x0 + float(i % 5) * (cellW + gap), L.top() + L.px(84) + float(i / 5) * pitch, cellW, L.px(48)};
+        std::snprintf(buf, sizeof buf, "%d", lv);
+        const bool here = lv == level_;
+        if (ui_.button(buf, r, here ? Ui::kPrimary : Ui::kSecondary, here ? 19.0f / 24.0f : 1.0f)) {
+            feedback_.uiTap();
+            enterLevel(lv, true);
+            return;
+        }
+        const int got = lv <= int(sizeof save_.stars) ? save_.stars[lv - 1] : 0;
+        for (int k = 0; k < 3; ++k)
+            uiBatch_.star(r.cx() + float(k - 1) * L.px(13), r.y + r.h + L.px(9), L.px(5.5f), k < got ? rgba(kGold) : rgba(kWhite, 50));
+    }
+    // A hundred back, a page back, a page on, a hundred on; then BACK.
+    const float navW = (gridW - 3 * gap) / 4.0f;
+    const char* const nav[4] = {"-100", "PREV", "NEXT", "+100"};
+    const int step[4] = {-100, -page, page, 100};
+    for (int k = 0; k < 4; ++k)
+        if (ui_.button(nav[k], {x0 + float(k) * (navW + gap), L.bottom() - L.px(126), navW, L.px(48)})) {
+            feedback_.uiTap();
+            levelsFirst_ = clampv(levelsFirst_ + step[k], 1, maxv(1, count - page + 1));
+        }
+    if (ui_.button("BACK", centered(L, L.bottom() - L.px(40), 220, 56), Ui::kPrimary)) {
+        feedback_.uiTap();
+        setScreen(Screen::Home);
+    }
+}
+
 void Game::drawScreens(float dt) {
     if (mode_ == Mode::Picture && pictureScreen_[0] == 0) {
         // World pictures: the HUD as in play.
@@ -384,6 +439,7 @@ void Game::drawScreens(float dt) {
         case Screen::Win: drawResult(true); break;
         case Screen::Lose: drawResult(false); break;
         case Screen::Settings: drawSettings(dt); break;
+        case Screen::Levels: drawLevels(); break;
         default: break;
     }
 }
@@ -682,7 +738,39 @@ void Game::flowStep() {
             next();
             break;
         }
-        case 32: {
+        case 32:
+            // The level selector (the owner, 2026-11-24): HOME's level chip opens it, +100 turns the page, a level's button
+            // goes to that level's HOME.
+            enterLevel(2, false);
+            coldStart_ = false;
+            next();
+            break;
+        case 33:
+            if (flowWait_ > 2) {
+                check(tapLabel("LEVEL 2"), "HOME's level chip is a button");
+                next();
+            }
+            break;
+        case 34:
+            if (flowWait_ > 2) {
+                check(screen_ == Screen::Levels, "the level chip opens the level selector");
+                check(tapLabel("+100"), "the selector turns a hundred levels");
+                next();
+            }
+            break;
+        case 35:
+            if (flowWait_ > 2) {
+                check(tapLabel("105"), "+100 shows level 105");
+                next();
+            }
+            break;
+        case 36:
+            if (flowWait_ > 30) {
+                check(screen_ == Screen::Home && level_ == 105, "a level's button goes to HOME of that level");
+                next();
+            }
+            break;
+        case 37: {
             GT_TAG("FLOW", "done: %d checks, %d failed", flowChecks_, flowFailures_);
             std::remove(savePath_);
             quit_ = true;

@@ -120,7 +120,7 @@ $sets = @{
     }
 }
 $matrix = @('1080x2400', '540x1200', '1080x2640', '1080x1920', '600x1024', '1200x1920', '1080x1440', '1264x2780')
-$screens = @('home', 'hud', 'pause', 'win', 'lose', 'settings')
+$screens = @('home', 'hud', 'pause', 'win', 'lose', 'settings', 'levels')
 $list = [ordered]@{}
 if ($sets.ContainsKey($Set)) { foreach ($k in $sets[$Set].Keys) { $list[$k] = $sets[$Set][$k] } }
 if ($Set -eq 'p3') {

@@ -34,6 +34,7 @@ float estimateP0(const LevelDef& L) {
 }  // namespace
 
 int bakedGeneratorVersion() { return kBakedGeneratorVersion; }
+int bakedLevelCount() { return kBakedCount; }
 bool bakedRow(int index, u64& seed, i32& spire, float& baseFlow, float& ref, int& recipe) {
     if (index < 1 || index > kBakedCount) return false;
     const BakedLevel& b = kBaked[index - 1];
