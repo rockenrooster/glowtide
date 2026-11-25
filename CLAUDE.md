@@ -18,6 +18,9 @@ sections of `docs/VARIETY_DESIGN.md` and `docs/VARIETY_TECH.md` and the work ord
 | Run desktop (silent and off screen unless `-Sound` / `-Watch`) | `scripts\run-desktop.ps1 [-Config dev] [-NoBuild] [-AppArgs '...'] [-Screenshot x.png] [-Frames N] [-Res WxH] [-Small]` |
 | Tests (unit tests, PNG check, headless determinism; `-Quick` skips the long bot runs) | `scripts\test.ps1 [-Config dev] [-NoBuild] [-Quick]` |
 | Build the APK (`dev` is the benchmarked build; with `$env:GT_APP_ID_SUFFIX = '.dev'` the dev APK is `dev.glowtide.game.dev`, installs beside a GitHub build, and every device script drives it) | `scripts\build-android.ps1 [-Config dev\|debug\|release] [-Offline] [-Clean]` |
+| The browser build (Emscripten from the emsdk in `D:\Stuff\DevFolder\emsdk`, shared with RAVEFORM: only read it; WebAssembly + WebGL 2, one thread, the page from `web\shell.html`) -> `build\web\site\` | `scripts\build-web.ps1 [-Clean]` |
+| Serve it to phones on this PC's network (port 8091; RAVEFORM's uses 8080; Windows Firewall must let 8091 in, which takes an administrator: the command is in the script) | `scripts\serve-web.ps1 [-Build]` |
+| The browser build in a headless, muted Chrome at an iPhone's size and touch: the flow test, a level played by touch, the save across a reload, the notch's safe area | `node tools\web_check.mjs http://localhost:8091/ captures\web flow\|play\|reload` |
 | Install and launch on a device | `scripts\deploy-android.ps1 -Serial moto\|tablet\|op12r\|<serial> [-NoBuild] [-AppArgs '...']` |
 | Benchmark on a device (lock, foreground checks, pulls `captures\bench\*.json`, grades the contract) | `scripts\bench-android.ps1 -Serial moto -Scenario bench_idle\|bench_flood\|bench_play [-Seconds 60] [-Warmup 180] [-AppArgs '...'] [-Deploy]` |
 | Screenshot of a device's panel (GLOWTIDE in front only) | `scripts\capture-android.ps1 -Serial moto [-Out x.png] [-Small]` |

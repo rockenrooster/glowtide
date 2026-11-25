@@ -31,6 +31,7 @@ bool Game::init(const Args& args, const GameEnv& env) {
         SDL_free(pref);
     }
     if (saveEnabled_ && savePath_[0]) {
+        platform::restoreFile(savePath_);  // a browser: the save kept in localStorage
         if (!loadSave(savePath_, save_)) {
             GT_LOG("save: none or damaged at %s; defaults", savePath_);
         } else {
@@ -131,6 +132,7 @@ void Game::applySettings() {
 void Game::saveNow() {
     if (!saveEnabled_ || !savePath_[0]) return;
     if (!writeSave(savePath_, save_)) GT_WARN("save: could not write %s", savePath_);
+    else platform::persistFile(savePath_);
 }
 
 void Game::enterLevel(int index, bool fade) {

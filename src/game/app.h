@@ -14,9 +14,14 @@ namespace gt {
 
 class App {
 public:
+    // Desktop and Android: start, frames until quit, finish; the exit code. In a browser (Emscripten): start, then the
+    // browser calls frame() once a display frame (emscripten_set_main_loop) and run() returns 0 at once.
     int run(int argc, char** argv);
 
 private:
+    int start(int argc, char** argv);  // -1 when started, else the exit code
+    void frame();
+    int finish();
     bool initWindow();
     bool initGl();
     void readFrameGeometry();
@@ -49,6 +54,9 @@ private:
     double benchT0_ = 0;
     bool pictureHeld_ = false;
     float refreshHz_ = 60.0f;
+    double last_ = 0, acc_ = 0;  // the fixed tick's clock and backlog
+    bool benchScenario_ = false;
+    int shotFrame_ = 0, firstStripFrame_ = 0;
     i64 mouseDown_ = 0;
     float lastMouseX_ = 0, lastMouseY_ = 0;
 };

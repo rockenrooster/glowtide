@@ -32,6 +32,16 @@ void startUpdate();
 float updateProgress();
 constexpr const char* kReleasesUrl = "https://github.com/rockenrooster/glowtide/releases/latest";
 
+// A browser build (Emscripten, web/shell.html). webCanvas() sets the page canvas's drawing buffer to its CSS size times
+// devicePixelRatio and returns both sizes, the ratio and the safe area's insets (top, right, bottom, left; CSS pixels:
+// a phone's notch and home bar). webReady() hides the page's loading line. restoreFile() and persistFile() keep a small
+// file (the save) across visits in the browser's localStorage. Elsewhere isWeb() is false and the rest do nothing.
+bool isWeb();
+void webCanvas(int& pxW, int& pxH, int& cssW, int& cssH, float& ratio, float insets[4]);
+void webReady();
+void restoreFile(const char* path);
+void persistFile(const char* path);
+
 // A path for an output file: absolute paths stay; relative ones go to the app's external files directory on
 // Android and stay relative (to the working directory) on the desktop.
 void outputPath(const char* in, char* out, size_t n);

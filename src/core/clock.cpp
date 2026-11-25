@@ -17,7 +17,7 @@ double threadCpuSeconds() {
     const unsigned long long ut = (unsigned long long)u.dwHighDateTime << 32 | u.dwLowDateTime;
     return double(kt + ut) * 1e-7;
 #else
-    timespec ts;
+    timespec ts{};
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
     return double(ts.tv_sec) + double(ts.tv_nsec) * 1e-9;
 #endif

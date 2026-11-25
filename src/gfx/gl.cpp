@@ -4,7 +4,7 @@
 
 #include "core/log.h"
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #define GT_GL_DEFINE(type, name) type name = nullptr;
 GT_GL_FUNCS(GT_GL_DEFINE)
 #undef GT_GL_DEFINE
@@ -33,7 +33,7 @@ using DebugMessageCallback = void(GT_GL_CALLBACK*)(DebugProc, const void*);
 }  // namespace
 
 bool loadGl(void* (*getProc)(const char*)) {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
     (void)getProc;
     return true;
 #else

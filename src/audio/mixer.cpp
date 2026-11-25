@@ -75,11 +75,18 @@ void Mixer::setWorld(int world, bool boss) {
     if (worker_.joinable()) worker_.join();
     delete pending_.exchange(nullptr);  // a pad the seam has not taken yet: this one replaces it
     const int rate = rate_;
+#if defined(__EMSCRIPTEN__)
+    // A page served over plain HTTP has no threads (no SharedArrayBuffer): the pad is built here, at a world's first level.
+    const double t0 = nowSeconds();
+    pending_.store(makePad(rate, world));
+    GT_LOG("audio: world %d's pad built in %.0f ms", world, (nowSeconds() - t0) * 1000.0);
+#else
     worker_ = std::thread([this, rate, world] {
         const double t0 = nowSeconds();
         pending_.store(makePad(rate, world));
         GT_LOG("audio: world %d's pad built in %.0f ms (a worker thread)", world, (nowSeconds() - t0) * 1000.0);
     });
+#endif
 }
 
 bool Mixer::push(const Command& c) {

@@ -1,6 +1,7 @@
 # GLOWTIDE - one CMake tree for the Windows dev build and the Android libmain.so (TECH_SPEC 2.1).
 # Desktop: scripts/build-desktop.ps1 (native CMake 4.x, Ninja, llvm-mingw clang).
 # Android: android/ Gradle project points externalNativeBuild here (SDK CMake 3.22.1, NDK r29).
+# Browser: scripts/build-web.ps1 (Emscripten: WebAssembly and WebGL 2, the page from web/shell.html).
 
 cmake_minimum_required(VERSION 3.22)
 project(glowtide VERSION 0.2.0 LANGUAGES C CXX)  # (android/app/build.gradle versionName is kept the same)
@@ -135,6 +136,18 @@ if(ANDROID)
   target_compile_options(main PRIVATE ${GT_WARN})
   target_link_options(main PRIVATE -Wl,--no-undefined -Wl,-z,max-page-size=16384)
   add_dependencies(main gt_shaders)
+elseif(EMSCRIPTEN)
+  # One thread (a page served over plain HTTP has no SharedArrayBuffer), WebGL 2 for OpenGL ES 3.0, the canvas and the
+  # loading line from web/shell.html; index.html, index.js and index.wasm in the build directory.
+  add_executable(glowtide ${GT_APP_SRC})
+  set_target_properties(glowtide PROPERTIES OUTPUT_NAME index SUFFIX ".html")
+  target_link_libraries(glowtide PRIVATE gt_sim gt_audio gt_core SDL3::SDL3-static)
+  target_compile_options(glowtide PRIVATE ${GT_WARN})
+  target_link_options(glowtide PRIVATE -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1
+    -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=2MB -sENVIRONMENT=web
+    "SHELL:--shell-file ${GT_ROOT}/web/shell.html" $<$<CONFIG:Release>:-O3>)
+  set_property(TARGET glowtide APPEND PROPERTY LINK_DEPENDS ${GT_ROOT}/web/shell.html)
+  add_dependencies(glowtide gt_shaders)
 else()
   add_executable(glowtide ${GT_APP_SRC})
   target_include_directories(glowtide SYSTEM PRIVATE ${GT_TP}/khronos)

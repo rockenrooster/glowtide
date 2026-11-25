@@ -12,6 +12,10 @@
 #include "gfx/shader.h"
 #include "platform/platform.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 namespace gt {
 
 namespace {
@@ -31,6 +35,18 @@ void* getProc(const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcA
 }  // namespace
 
 int App::run(int argc, char** argv) {
+    const int failed = start(argc, argv);
+    if (failed >= 0) return failed;
+#if defined(__EMSCRIPTEN__)
+    emscripten_set_main_loop_arg([](void* app) { static_cast<App*>(app)->frame(); }, this, 0, false);
+    return 0;
+#else
+    while (running_) frame();
+    return finish();
+#endif
+}
+
+int App::start(int argc, char** argv) {
     if (!parseArgs(argc, argv, args_)) return 2;
     startTime_ = nowSeconds();
     GT_LOG("GLOWTIDE %s (%s, %s), scenario %s", GT_VERSION, GT_COMMIT, GT_BUILD_DATE, args_.scenario);
@@ -69,24 +85,33 @@ int App::run(int argc, char** argv) {
             this);
     }
     SDL_AddEventWatch(&App::eventWatch, this);
+    platform::webReady();
 
-    double last = nowSeconds();
-    double acc = 0;
-    const bool benchScenario = !std::strncmp(args_.scenario, "bench_", 6);
+    last_ = nowSeconds();
+    acc_ = 0;
+    benchScenario_ = !std::strncmp(args_.scenario, "bench_", 6);
     // Captures: the last frame is args_.frames; a strip adds K-1 earlier frames, stripStep apart.
-    const int shotFrame = args_.frames;
-    const int firstStripFrame = args_.strip > 1 ? shotFrame - (args_.strip - 1) * args_.stripStep : shotFrame;
+    shotFrame_ = args_.frames;
+    firstStripFrame_ = args_.strip > 1 ? shotFrame_ - (args_.strip - 1) * args_.stripStep : shotFrame_;
+    return -1;
+}
 
-    while (running_) {
+void App::frame() {
+    if (!running_) return;
+    {
+        double& last = last_;
+        double& acc = acc_;
+        const bool benchScenario = benchScenario_;
+        const int shotFrame = shotFrame_, firstStripFrame = firstStripFrame_;
         BenchFrame bf;
         const double t0 = nowSeconds();
         const double c0 = threadCpuSeconds();
         pumpEvents();
-        if (!running_) break;
+        if (!running_) return;
         if (background_) {
-            SDL_Delay(10);
+            if (!platform::isWeb()) SDL_Delay(10);  // a browser stops calling frame() for a hidden page itself
             last = nowSeconds();
-            continue;
+            return;
         }
         const double t1 = nowSeconds();
         bf.phase[kPhaseEvents] = float(t1 - t0);
@@ -96,7 +121,8 @@ int App::run(int argc, char** argv) {
             game_.destroyGraphics();
             if (!game_.initGraphics()) {
                 exitCode_ = 1;
-                break;
+                running_ = false;
+                return;
             }
         }
 
@@ -194,12 +220,14 @@ int App::run(int argc, char** argv) {
                 }
             }
         }
-        if (game_.quitRequested()) {
+        if (game_.quitRequested() && !platform::isWeb()) {  // a page is closed by the browser, not by the game
             running_ = false;
             if (game_.exitCode()) exitCode_ = game_.exitCode();
         }
     }
+}
 
+int App::finish() {
     SDL_RemoveEventWatch(&App::eventWatch, this);
     audio_.close();
     GT_LOG("haptics: %d sent, at most %d in one second", game_.hapticsSent(), game_.hapticPeakPerSecond());
@@ -238,6 +266,10 @@ bool App::initWindow() {
     if (platform::isAndroid()) {
         window_ = SDL_CreateWindow("GLOWTIDE", 1080, 2400, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
         std::snprintf(device_, sizeof device_, "android");
+    } else if (platform::isWeb()) {
+        // The page's canvas (web/shell.html sizes it with CSS); its drawing buffer follows (readFrameGeometry).
+        window_ = SDL_CreateWindow("GLOWTIDE", 432, 960, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        std::snprintf(device_, sizeof device_, "web");
     } else {
         // The frame (--res) is rendered into a framebuffer object; the window only shows it, scaled to fit.
         int ww = args_.resW, wh = args_.resH;
@@ -332,6 +364,16 @@ void App::readFrameGeometry() {
                    mode->w, mode->h);
         }
         useTarget_ = false;
+    } else if (platform::isWeb()) {
+        // The canvas's drawing buffer is its CSS size times devicePixelRatio, which is the dp scale (a CSS pixel is about
+        // a dp); the safe area is the page's env(safe-area-inset-*): a phone's notch and home bar.
+        float insets[4];  // top, right, bottom, left: CSS pixels
+        platform::webCanvas(frameW_, frameH_, winW_, winH_, dpScale_, insets);
+        safe_.top = insets[0] * dpScale_;
+        safe_.right = insets[1] * dpScale_;
+        safe_.bottom = insets[2] * dpScale_;
+        safe_.left = insets[3] * dpScale_;
+        useTarget_ = false;
     } else {
         frameW_ = args_.resW;
         frameH_ = args_.resH;
@@ -402,11 +444,14 @@ void App::handleEvent(const SDL_Event& e) {
                 GT_WARN("bench: focus lost; the run is invalid");
             }
             break;
+        case SDL_EVENT_WINDOW_RESIZED:  // a page: the browser's window, a phone turned, Safari's bars shown or hidden
+            if (!platform::isWeb()) break;
+            [[fallthrough]];
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
-            if (platform::isAndroid()) {
+            if (platform::isAndroid() || platform::isWeb()) {
                 readFrameGeometry();
-                game_.resize({frameW_, frameH_, dpScale_, safe_, true, refreshHz_});
+                game_.resize({frameW_, frameH_, dpScale_, safe_, platform::isAndroid(), refreshHz_});
                 // Again, with the insets the window has now: the device picture check reads the last such line.
                 GT_LOG("frame %dx%d px, dp scale %.3f, safe top %.0f bottom %.0f px, refresh %.1f Hz", frameW_, frameH_, dpScale_,
                        safe_.top, safe_.bottom, refreshHz_);

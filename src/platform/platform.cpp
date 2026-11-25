@@ -19,7 +19,102 @@
 #include <unistd.h>
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#include <cstdlib>
+
+#include <emscripten.h>
+#include <emscripten/html5.h>
+
+EM_JS_DEPS(gt_web, "$UTF8ToString,$stringToNewUTF8");
+// The page puts env(safe-area-inset-*) in CSS variables (--sat, --sar, --sab, --sal: web/shell.html).
+EM_JS(double, gt_web_inset, (int side), {
+    var v = ['--sat', '--sar', '--sab', '--sal'][side];
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)) || 0;
+});
+EM_JS(void, gt_web_ready, (), {
+    if (typeof window['gtReady'] === 'function') window['gtReady']();
+});
+EM_JS(void, gt_web_store, (const char* key, const char* value), {
+    try { localStorage.setItem(UTF8ToString(key), UTF8ToString(value)); } catch (e) {}
+});
+EM_JS(char*, gt_web_load, (const char* key), {
+    try {
+        var v = localStorage.getItem(UTF8ToString(key));
+        return v === null ? 0 : stringToNewUTF8(v);
+    } catch (e) {
+        return 0;
+    }
+});
+#endif
+
 namespace gt::platform {
+
+#if defined(__EMSCRIPTEN__)
+
+bool isWeb() { return true; }
+
+void webCanvas(int& pxW, int& pxH, int& cssW, int& cssH, float& ratio, float insets[4]) {
+    double w = 0, h = 0;
+    emscripten_get_element_css_size("#canvas", &w, &h);  // 0 x 0 while the page has no layout yet: a resize follows
+    ratio = float(emscripten_get_device_pixel_ratio());
+    if (!(ratio > 0)) ratio = 1;
+    cssW = int(w + 0.5);
+    cssH = int(h + 0.5);
+    pxW = int(SDL_lroundf(float(w) * ratio));
+    pxH = int(SDL_lroundf(float(h) * ratio));
+    if (pxW < 1) pxW = 1;
+    if (pxH < 1) pxH = 1;
+    emscripten_set_canvas_element_size("#canvas", pxW, pxH);
+    for (int i = 0; i < 4; ++i) insets[i] = float(gt_web_inset(i));
+}
+
+void webReady() { gt_web_ready(); }
+
+namespace {
+// localStorage's key for a file: its name ("glowtide:save.txt").
+void storageKey(const char* path, char* key, size_t n) {
+    const char* name = std::strrchr(path, '/');
+    std::snprintf(key, n, "glowtide:%s", name ? name + 1 : path);
+}
+}  // namespace
+
+void restoreFile(const char* path) {
+    if (FILE* f = std::fopen(path, "rb")) {  // already in the page's memory file system
+        std::fclose(f);
+        return;
+    }
+    char key[96];
+    storageKey(path, key, sizeof key);
+    char* text = gt_web_load(key);
+    if (!text) return;
+    if (FILE* f = std::fopen(path, "wb")) {
+        std::fwrite(text, 1, std::strlen(text), f);
+        std::fclose(f);
+    }
+    std::free(text);
+}
+
+void persistFile(const char* path) {
+    static char text[65536];
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return;
+    const size_t n = std::fread(text, 1, sizeof text - 1, f);
+    std::fclose(f);
+    text[n] = 0;
+    char key[96];
+    storageKey(path, key, sizeof key);
+    gt_web_store(key, text);
+}
+
+#else
+
+bool isWeb() { return false; }
+void webCanvas(int&, int&, int&, int&, float&, float*) {}
+void webReady() {}
+void restoreFile(const char*) {}
+void persistFile(const char*) {}
+
+#endif
 
 #if defined(__ANDROID__)
 

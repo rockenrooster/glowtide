@@ -675,6 +675,35 @@ The owner's 10% margin (every level from 68 won by greedy with the enemy and eac
 same day and held back by the owner ("hold off on the level balancing tweaks until I find an impossible level"): it
 waits on the local branch `margin-pass`, with its own section in this file there.
 
+### After 0.2.0: GLOWTIDE in a browser, for iPhones (2026-11-24)
+
+The owner asked for the game "as a HTML web page on my computer so iPhone users can play". The same C++ builds with
+Emscripten 7.0.1 (the emsdk in `D:\Stuff\DevFolder\emsdk`, installed by the RAVEFORM session the same hour and shared:
+this project only reads it) for WebAssembly and WebGL 2. `scripts\build-web.ps1` writes `build\web\site\` (index.wasm
+1.2 MB, index.js 172 KB, the page from `web\shell.html`, a manifest and icons); `scripts\serve-web.ps1` serves it on
+port 8091 (`tools\serve_web.py`, every answer no-cache) and prints the address a phone on the same network opens.
+
+**What changed for it.** The frame loop is `App::frame()`: the desktop and Android loop call it as before, a browser
+once a display frame (`emscripten_set_main_loop`). A page served over plain HTTP has no SharedArrayBuffer, so no threads:
+a world's music pad is built on the main thread there (33-40 ms on this PC). GL is linked directly, as on Android. The
+canvas fills an upright phone, notch and home bar included, with the safe area from `env(safe-area-inset-*)`; anything
+wider gets a column no wider than 3:4. The drawing buffer is the CSS size times devicePixelRatio, which is the dp scale;
+a resize (Safari's bars, a turned phone) lays the screens out again. The save is mirrored to localStorage. Every touch,
+click or key resumes the audio (iOS starts it only inside a gesture) and asks to keep the screen on. A phone held
+sideways is asked to turn upright; Add to Home Screen gives the game the whole screen. Quitting is the browser's: HOME's
+back key does nothing there. `?args=...` passes the game its command line (tests use `--no-audio`).
+
+**Checked** in a headless, muted Chrome at an iPhone's 390 x 844 CSS px, 3x, with touch (`tools\web_check.mjs`): the
+game's flow test, 57 checks, none failed (the 58th, the music's level, needs an audio device); level 5 picked in the
+selector and played by touch at 56 frames a second at 1170 x 2532; the save read back after a reload; an iPhone's notch
+and home bar (59 and 34 CSS px) keeping the HUD clear; no console errors. In the app's browser pane at 1024 x 768 the
+3:4 column. The desktop after the change: unit tests, determinism, the variety contract, the flow test (57 here: this
+PC had no audio device); the Android dev APK builds. Not tried on an iPhone (none here): Safari's WebGL 2 and its audio
+are the parts to watch.
+
+**The network.** Windows Firewall lets TCP 8091 in on private networks (rule "GLOWTIDE web server (8091)", added on the
+owner's word, 2026-11-24); this PC does not ask when a program starts listening.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -720,6 +749,8 @@ waits on the local branch `margin-pass`, with its own section in this file there
 | The tablet in V5 | Tested once the owner paired its wireless debugging again (it had stopped trusting this PC); every check passes | The 12R is out for now (the owner, 2026-11-20) |
 | The 12R for 0.2.0 | Not tested: left out by the owner ("Leave it out", 2026-11-21) | Out of testing since 2026-11-20 and offline; its last run (V4) passed every check, and no V5 or V6 shader indexes an array by a variable (VARIETY_TECH 12's 12R trap) |
 | The level selector (2026-11-24) | Opened from HOME's `LEVEL N` chip; every level open | The owner asked for it while stuck on a level: skipping is the point. Locking the levels not reached is one line |
+| The browser build (2026-11-24) | Emscripten (WebAssembly, WebGL 2), one thread, served from this PC on port 8091 over plain HTTP | The same code as the APK; plain HTTP on a home network rules out threads, and the only one the game had (the music pad's) is cheap on the main thread; RAVEFORM's web build serves on 8080 |
+| Where it is hosted | This PC (the owner's words), not GitHub Pages | Pages would reach iPhones anywhere over HTTPS, but it publishes the game: the owner's call |
 
 ## Measured device facts
 

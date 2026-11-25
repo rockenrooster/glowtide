@@ -1,6 +1,7 @@
 // Scripted pictures and the bench rig (TECH_SPEC 8.1). The crowd script places units without simulating them, to
 // reproduce the concept frame's layout and to hold crowds at given counts.
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 

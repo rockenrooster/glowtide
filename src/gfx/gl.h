@@ -1,8 +1,9 @@
 #pragma once
-// OpenGL ES 3.0 core (TECH_SPEC 5.1). Android links GLESv3 directly. The desktop resolves the same entry points at
-// start-up with SDL_GL_GetProcAddress (an ES 3.0 context through WGL, or an OpenGL 3.3 core context as fallback).
+// OpenGL ES 3.0 core (TECH_SPEC 5.1). Android links GLESv3 directly, a browser build Emscripten's WebGL 2. The desktop
+// resolves the same entry points at start-up with SDL_GL_GetProcAddress (an ES 3.0 context through WGL, or an OpenGL 3.3
+// core context as fallback).
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 #include <GLES3/gl3.h>
 #else
 #define GL_GLES_PROTOTYPES 0
@@ -98,7 +99,7 @@
     X(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer)                                                     \
     X(PFNGLVIEWPORTPROC, glViewport)
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #define GT_GL_DECLARE(type, name) extern type name;
 GT_GL_FUNCS(GT_GL_DECLARE)
 #undef GT_GL_DECLARE

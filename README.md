@@ -16,6 +16,10 @@ music, the meshes and the font atlas are made in code.
 installs from the browser. Every push to `main` builds a new release ([all builds](https://github.com/rockenrooster/glowtide/releases)),
 and the game shows an UPDATE button on its home screen when a newer one is out.
 
+**In a browser (iPhone, iPad, a PC):** the same game built with Emscripten for WebAssembly and WebGL 2. On the PC that
+hosts it, `scripts\build-web.ps1` then `scripts\serve-web.ps1`; a phone on the same network opens the address it prints
+in Safari (Share, then Add to Home Screen, gives it the whole screen). Progress is kept in the browser.
+
 ## Building
 
 C++20, SDL 3, OpenGL ES 3.0. Windows with PowerShell 7 is the development host (the scripts in `scripts\`); GitHub's Linux
@@ -26,6 +30,7 @@ runner builds the releases (`.github/workflows/release.yml`).
 | Third-party sources (SDL, pinned) | `scripts\fetch-deps.ps1` (Linux: `scripts/fetch-deps.sh`) |
 | Desktop build and tests | `scripts\build-desktop.ps1`, `scripts\test.ps1` |
 | The APK | `scripts\build-android.ps1 -Config dev\|release` |
+| The browser build, and serving it to phones on this network | `scripts\build-web.ps1`, `scripts\serve-web.ps1` |
 
 `CLAUDE.md` lists every command; `docs/PLAN.md`, `docs/GAME_DESIGN.md` and `docs/TECH_SPEC.md` are the design;
 `docs/PROGRESS.md` records what was built, measured and decided; `docs/RELEASE_PIPELINE.md` the releases and the updater.
