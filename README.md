@@ -16,9 +16,10 @@ music, the meshes and the font atlas are made in code.
 installs from the browser. Every push to `main` builds a new release ([all builds](https://github.com/rockenrooster/glowtide/releases)),
 and the game shows an UPDATE button on its home screen when a newer one is out.
 
-**In a browser (iPhone, iPad, a PC):** the same game built with Emscripten for WebAssembly and WebGL 2. On the PC that
-hosts it, `scripts\build-web.ps1` then `scripts\serve-web.ps1`; a phone on the same network opens the address it prints
-in Safari (Share, then Add to Home Screen, gives it the whole screen). Progress is kept in the browser.
+**In a browser (iPhone, iPad, a PC):** play it at https://glowtide.netlify.app: the same game built with Emscripten for
+WebAssembly and WebGL 2. In Safari, Share, then Add to Home Screen, gives it the whole screen. Progress is kept in the
+browser. To serve it from a PC instead, `scripts\build-web.ps1` then `scripts\serve-web.ps1`; a phone on the same network
+opens the address it prints.
 
 ## Building
 

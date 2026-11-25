@@ -77,6 +77,23 @@
 <div id="status"><div class="name">GLOWTIDE</div><div id="msg">Loading&hellip;</div></div>
 <div id="turn">Turn your phone upright to play</div>
 <script>
+  // Saves brought from the game's earlier address (localStorage is per address): tools\serve_web.py --move-to sends its
+  // players here with their glowtide:* keys as JSON in the fragment, #import=... A save replaces the one kept here only
+  // if it has more stars; the fragment then leaves the address bar.
+  if (location.hash.indexOf('#import=') === 0) {
+    try {
+      var moved = JSON.parse(decodeURIComponent(location.hash.slice(8)));
+      var stars = function (save) {
+        var m = /^stars=([0-3]*)$/m.exec(save || '');
+        return m ? m[1].split('').reduce(function (n, c) { return n + Number(c); }, 0) : -1;
+      };
+      Object.keys(moved).forEach(function (key) {
+        var kept = localStorage.getItem(key);
+        if (key.indexOf('glowtide:') === 0 && (kept === null || stars(moved[key]) > stars(kept))) localStorage.setItem(key, moved[key]);
+      });
+    } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
   // ?args=--level%2068 passes the game its command line (TECH_SPEC 2.5): tests on a PC use ?args=--no-audio.
   var params = new URLSearchParams(location.search);
   function show(text) {

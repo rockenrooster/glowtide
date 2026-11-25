@@ -704,6 +704,23 @@ are the parts to watch.
 **The network.** Windows Firewall lets TCP 8091 in on private networks (rule "GLOWTIDE web server (8091)", added on the
 owner's word, 2026-11-24); this PC does not ask when a program starts listening.
 
+**On Netlify (2026-11-25).** The owner asked for it on their free Netlify account: https://glowtide.netlify.app (the
+project `glowtide`). Netlify's CLI (netlify-cli 27.20.1 through npx, 277 MB in the npm cache, its telemetry off; the owner
+authorized it once, and it keeps the sign-in in Windows Credential Manager) uploads `build\web\site` as it is, with no
+build on Netlify. Checked on the live site: every file equal to the local build; the wasm served as `application/wasm`;
+every answer `max-age=0, must-revalidate`, so a redeploy shows at the next load; in the headless Chrome at an iPhone's
+size, a level played by touch at 56 frames a second with the save kept, and the 34 determinism hashes equal to the PC's
+(the same 34 as on the PC's own address).
+
+**The saves move with the players.** A browser keeps a page's localStorage per address, so the progress made on this
+PC's address would not have been on Netlify. Two phones had played there (the server's log). `serve-web.ps1 -MoveTo
+https://glowtide.netlify.app/` now answers every visit to the old address with a page that sends the player to Netlify
+with that address's `glowtide:*` keys in the fragment (`#import=...`, which never reaches a server); `web\shell.html`
+takes a save in when this address has none or has fewer stars, then drops the fragment from the address bar. Checked in
+the headless Chrome, locally and against the live site: a first visit takes the old save (the game reads level 7, 14
+stars), a worse save leaves the better one kept, a better one replaces it. Not tried on an iPhone: iOS keeps a Home Screen
+web app's storage apart from Safari's, so a save moved from a Home Screen icon may land in Safari's.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |
@@ -750,7 +767,7 @@ owner's word, 2026-11-24); this PC does not ask when a program starts listening.
 | The 12R for 0.2.0 | Not tested: left out by the owner ("Leave it out", 2026-11-21) | Out of testing since 2026-11-20 and offline; its last run (V4) passed every check, and no V5 or V6 shader indexes an array by a variable (VARIETY_TECH 12's 12R trap) |
 | The level selector (2026-11-24) | Opened from HOME's `LEVEL N` chip; every level open | The owner asked for it while stuck on a level: skipping is the point. Locking the levels not reached is one line |
 | The browser build (2026-11-24) | Emscripten (WebAssembly, WebGL 2), one thread, served from this PC on port 8091 over plain HTTP | The same code as the APK; plain HTTP on a home network rules out threads, and the only one the game had (the music pad's) is cheap on the main thread; RAVEFORM's web build serves on 8080 |
-| Where it is hosted | This PC (the owner's words), not GitHub Pages | Pages would reach iPhones anywhere over HTTPS, but it publishes the game: the owner's call |
+| Where it is hosted | First this PC (the owner's words), since 2026-11-25 Netlify (https://glowtide.netlify.app, the owner's account and their call); the PC's old address forwards there with its saves | HTTPS from anywhere, no build there (the CLI uploads `build\web\site`); saves moved, not lost |
 
 ## Measured device facts
 
