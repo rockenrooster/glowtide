@@ -721,6 +721,14 @@ the headless Chrome, locally and against the live site: a first visit takes the 
 stars), a worse save leaves the better one kept, a better one replaces it. Not tried on an iPhone: iOS keeps a Home Screen
 web app's storage apart from Safari's, so a save moved from a Home Screen icon may land in Safari's.
 
+**On GitHub without a release (2026-11-25).** The owner asked whether the browser port needed a new Android release: it
+does not. Its changes to the shared source build only into the browser version (`__EMSCRIPTEN__`, or calls that do
+nothing elsewhere), and the main loop split into start, frame and finish runs the same steps in the same order on
+Android, so a build 30 would only have shown every player an UPDATE button for the same game. The commits went up with
+`[skip ci]` in the last one's message, and the release workflow now also ignores the browser build's own files
+(`docs/RELEASE_PIPELINE.md`). The next push that changes the Android game makes the next build and lists these commits in
+its notes.
+
 ## Choices made for the owner (the owner asked for best judgment instead of questions)
 
 | Question | Choice | Why |

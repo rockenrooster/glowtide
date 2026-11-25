@@ -87,4 +87,5 @@ external files directory on Android), `GTSIM`, `GTLIFE`, `FLOW`.
 - No heap allocation in the steady-state frame (global `operator new` is counted; benchmarks report `heap_allocs`).
 - Git: commit at working checkpoints. `origin` is the public GitHub repository `rockenrooster/glowtide` (since
   2026-11-20): the owner allows pushes without asking (2026-11-21); every push to `main` builds and publishes a release APK
+  unless it changes only documentation or the browser build's own files, or its last commit's message holds `[skip ci]`
   (`docs/RELEASE_PIPELINE.md`). `keys/` holds the release key: gitignored; never commit it, copy it or print it.

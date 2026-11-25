@@ -12,6 +12,11 @@ on:
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
+      # The browser build's own files (Netlify serves it; the APK has none of them).
+      - 'web/**'
+      - 'scripts/*-web.ps1'
+      - 'tools/serve_web.py'
+      - 'tools/web_check.mjs'
   workflow_dispatch:
 
 # One build at a time per branch; a newer push replaces a waiting or running one (its commit is in the newer build).

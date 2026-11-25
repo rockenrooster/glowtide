@@ -11,7 +11,11 @@ RAVEFORM's pipeline (`Raveform/docs/RELEASE_PIPELINE.md`) point for point.
 
 ## What runs, and when
 
-- Every push to `main`, unless everything it changes is documentation (`docs/**`, any `*.md`).
+- Every push to `main`, unless everything it changes is documentation (`docs/**`, any `*.md`) or the browser build's own
+  files (`web/**`, `scripts/*-web.ps1`, `tools/serve_web.py`, `tools/web_check.mjs`: Netlify serves that build, the APK
+  has none of them). A push whose last commit's message holds `[skip ci]` runs nothing (GitHub's rule): the browser port
+  went up that way on 2026-11-25, since its changes to the shared source build only into the browser version and the
+  Android game stayed as build 29 has it.
 - By hand: `gh workflow run release.yml -R rockenrooster/glowtide`, or the repository's Actions tab, "Release APK", "Run
   workflow". Run from another branch, the APK stays with the run (Actions, the run's page) for 7 days and no release is made.
 - One build at a time: a newer push cancels a build still running (the newer build has its commits too).
